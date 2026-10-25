@@ -3,9 +3,11 @@
 Covers:
 - Threading ``old_start_iso`` through ``enqueue_series_update`` ->
   ``send_series_update`` -> ``send_series_update_to_subscribers``.
-- ``_render_series_email`` for ``series_update`` with a changed occurrence +
-  old start: the changed line shows old -> new, unchanged lines show a single
-  time, the lead names the changed ``event_title``.
+- ``build_series_template_context`` for ``series_update`` with a changed
+  occurrence + old start: the changed line shows old -> new, unchanged lines
+  show a single time, and ``event_title`` names the changed occurrence.
+- ``_render_series_email`` forwards the native context to Relay and returns
+  the remote preview response.
 - No-old-start (auto-enroll addition) keeps the whole-series framing.
 - A subscriber whose accessible list does not include the changed occurrence
   falls back to whole-series framing with no dangling before/after.
@@ -17,7 +19,7 @@ Covers:
 
 import email as email_lib
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -37,6 +39,7 @@ from events.models import (
     EventSeries,
     SeriesRegistration,
 )
+from events.services.series_email_context import build_series_template_context
 from events.services.series_invite import (
     _render_series_email,
     send_series_update_to_subscribers,
@@ -154,7 +157,7 @@ class GlobalDisplayFormatStaysWeekdayFreeTest(TestCase):
 
 @tag('core')
 class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
-    """_render_series_email branches on the changed occurrence + old start."""
+    """Series Relay context branches on the changed occurrence + old start."""
 
     @classmethod
     def setUpTestData(cls):
@@ -176,119 +179,84 @@ class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
         # Old start = one day before the changed occurrence's new start.
         self.old_start = self.changed.start_datetime - timedelta(days=1)
 
-    def test_registration_and_cancellation_emails_carry_weekday(self):
-        # series_registration / series_cancellation reuse _render_series_email,
-        # so their session times must also gain the weekday (issue #1071).
+    def _context(self, events, *, changed_event=None, old_start=None):
+        return build_series_template_context(
+            self.user,
+            self.series,
+            events,
+            changed_event=changed_event,
+            old_start=old_start,
+        )
+
+    def test_series_context_carries_weekday(self):
         expected_weekday = self.changed.start_datetime.astimezone(
             ZoneInfo('Europe/Berlin'),
         ).strftime('%A')
-        _, reg_html = _render_series_email(
-            'series_registration', self.user, self.series,
-            [self.changed, self.other], 'series_registration',
-        )
-        self.assertIn(f'{expected_weekday}, ', reg_html)
-        _, cancel_html = _render_series_email(
-            'series_cancellation', self.user, self.series,
-            [self.changed], 'series_cancellation',
-        )
-        self.assertIn(f'{expected_weekday}, ', cancel_html)
+        context = self._context([self.changed, self.other])
 
-    def test_series_lifecycle_copy_matches_calendar_invitation_envelope(self):
-        rendered = {
-            'registration': _render_series_email(
-                'series_registration', self.user, self.series,
-                [self.changed, self.other], 'series_registration',
-            )[1],
-            'update': _render_series_email(
+        self.assertIn(f'{expected_weekday}, ', context['occurrences_list'])
+
+    def test_render_series_email_uses_relay_preview_result_and_context(self):
+        relay = Mock()
+        relay.preview.return_value = {
+            'subject': 'Relay series update subject',
+            'text_body': 'Relay series update text',
+            'html_body': '<p>Relay series update HTML</p>',
+        }
+        with patch(
+            'events.services.series_email_context.configured_template_client',
+            return_value=relay,
+        ):
+            subject, html = _render_series_email(
                 'series_update', self.user, self.series,
                 [self.changed, self.other], 'series_update',
                 changed_event=self.changed, old_start=self.old_start,
-            )[1],
-            'cancellation': _render_series_email(
-                'series_cancellation', self.user, self.series,
-                [self.changed], 'series_cancellation',
-            )[1],
-        }
+            )
 
-        self.assertIn(
-            'This email includes a calendar invitation',
-            rendered['registration'],
-        )
-        self.assertIn('if prompted', rendered['registration'])
-        self.assertIn(
-            'this email includes an updated calendar invitation',
-            rendered['update'],
-        )
-        self.assertIn('same calendar identity', rendered['update'])
-        self.assertIn('supported calendar apps can apply', rendered['update'])
-        self.assertIn('If prompted', rendered['update'])
-        self.assertIn(
-            'This email includes a calendar cancellation update',
-            rendered['cancellation'],
-        )
-        self.assertIn('Supported calendar apps can use it', rendered['cancellation'])
-        self.assertIn('If prompted', rendered['cancellation'])
-        self.assertIn('The rest of the series is unaffected', rendered['cancellation'])
-
-        forbidden_claims = (
-            'attached to this email',
-            'download',
-            'automatically',
-            'rather than create duplicates',
-            'will update the existing',
-        )
-        for lifecycle, body in rendered.items():
-            for claim in forbidden_claims:
-                self.assertNotIn(claim, body.lower(), lifecycle)
+        self.assertEqual(subject, 'Relay series update subject')
+        self.assertEqual(html, '<p>Relay series update HTML</p>')
+        preview_context = relay.preview.call_args.args[1]
+        self.assertTrue(preview_context['changed_occurrence'])
+        self.assertEqual(preview_context['event_title'], 'Office hours')
 
     def test_changed_occurrence_framing(self):
-        subject, html = _render_series_email(
-            'series_update', self.user, self.series,
-            [self.changed, self.other], 'series_update',
+        context = self._context(
+            [self.changed, self.other],
             changed_event=self.changed, old_start=self.old_start,
         )
-        # Subject names the moved session, not just the series.
-        self.assertIn('Office hours', subject)
-        self.assertIn('LLM Zoomcamp 2026 office hours', subject)
-        # Lead copy names the changed session.
-        self.assertIn('The time for', html)
+        self.assertTrue(context['changed_occurrence'])
+        self.assertEqual(context['event_title'], 'Office hours')
         # Changed line shows old -> new ("was ..."); unchanged line does not.
         old_str = format_user_datetime(
             self.old_start, self.user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
         )
-        self.assertIn(f'(was {old_str})', html)
+        self.assertIn(f'(was {old_str})', context['occurrences_list'])
         # Exactly one "(was " annotation — the unchanged occurrence has none.
-        self.assertEqual(html.count('(was '), 1)
+        self.assertEqual(context['occurrences_list'].count('(was '), 1)
         # Weekday present on session times.
         weekday = self.changed.start_datetime.astimezone(
             ZoneInfo('Europe/Berlin'),
         ).strftime('%A')
-        self.assertIn(f'{weekday}, ', html)
+        self.assertIn(f'{weekday}, ', context['occurrences_list'])
 
     def test_no_old_start_keeps_whole_series_framing(self):
-        subject, html = _render_series_email(
-            'series_update', self.user, self.series,
-            [self.changed, self.other], 'series_update',
+        context = self._context(
+            [self.changed, self.other],
             changed_event=self.changed, old_start=None,
         )
-        self.assertEqual(
-            subject, 'Your LLM Zoomcamp 2026 office hours calendar '
-            'invite has been updated',
-        )
-        self.assertIn("There's been a change to the", html)
-        self.assertNotIn('(was ', html)
+        self.assertFalse(context['changed_occurrence'])
+        self.assertEqual(context['event_title'], '')
+        self.assertNotIn('(was ', context['occurrences_list'])
 
     def test_changed_occurrence_not_in_subscriber_list_falls_back(self):
         # Subscriber's accessible list excludes the changed occurrence.
-        subject, html = _render_series_email(
-            'series_update', self.user, self.series,
-            [self.other], 'series_update',
+        context = self._context(
+            [self.other],
             changed_event=self.changed, old_start=self.old_start,
         )
-        # Whole-series framing, no dangling before/after.
-        self.assertIn("There's been a change to the", html)
-        self.assertNotIn('(was ', html)
-        self.assertNotIn('Updated time for', subject)
+        self.assertFalse(context['changed_occurrence'])
+        self.assertEqual(context['event_title'], '')
+        self.assertNotIn('(was ', context['occurrences_list'])
 
 
 @tag('core')
@@ -348,30 +316,18 @@ class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class SeriesUpdatePreviewContextTest(TestCase):
-    """The Studio preview context renders the template with no missing vars."""
+    """The Studio preview supplies the changed-occurrence Relay context."""
 
-    def test_series_update_preview_renders_with_before_after_and_weekday(self):
-        # Mirror the Studio preview path (_render_preview_html), which fills
-        # the file template body with the placeholder context.
+    def test_series_update_preview_has_before_after_and_weekday_context(self):
         from email_app.services.preview_contexts import get_preview_context
-        from studio.views.email_templates import (
-            _read_file_template,
-            _render_preview_html,
-        )
 
-        ctx = get_preview_context('series_update')
-        self.assertTrue(ctx, 'series_update preview context must exist')
-        subject, body_markdown = _read_file_template('series_update')
-        html = _render_preview_html(
-            'series_update', subject, body_markdown, footer_note='',
-        )
-        # No unresolved template variables left as literal placeholders.
-        self.assertNotIn('{{', html)
-        self.assertNotIn('{%', html)
-        # Names the changed session, shows a before/after, has a weekday.
-        self.assertIn('Office hours', html)
-        self.assertIn('(was ', html)
-        self.assertIn('Thursday, ', html)
+        context = get_preview_context('series_update')
+
+        self.assertEqual(context['event_title'], 'Office hours')
+        self.assertTrue(context['changed_occurrence'])
+        self.assertEqual(context['registered_count'], 2)
+        self.assertIn('(was Wednesday, ', context['occurrences_list'])
+        self.assertIn('Thursday, ', context['occurrences_list'])
 
 
 @tag('core')

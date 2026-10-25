@@ -14,6 +14,7 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
 )
+from email_app.testing import StubRelayTemplateClient
 from events.models import Event, EventHost, Host
 from events.services.recording_ready_notification import (
     EMAIL_TYPE,
@@ -239,6 +240,17 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         event.refresh_from_db()
         return event
 
+    def _notify_with_preview_subject(self, event, subject):
+        relay = StubRelayTemplateClient()
+        template = relay.template(EMAIL_TYPE)
+        template['subject'] = subject
+        relay.save_draft(EMAIL_TYPE, template)
+        with patch(
+            'email_app.services.relay_templates.configured_template_client',
+            return_value=relay,
+        ):
+            return notify_recording_ready(event)
+
     @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_published_workshop_email_says_available_to_watch_with_video_link(
         self, mock_send,
@@ -246,15 +258,15 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         mock_send.return_value = relay_result('relay-watch')
         event = self._make_workshop_event(published=True)
         workshop_slug = event.workshop.slug
+        expected_subject = 'Relay recording available audit subject'
 
-        result = notify_recording_ready(event)
+        result = self._notify_with_preview_subject(event, expected_subject)
 
         self.assertEqual(result['status'], 'sent')
         subject = EmailLog.objects.get().subject
         context = mock_send.call_args.args[2]
 
-        # Copy leads with "available to watch".
-        self.assertIn('available to watch', subject.lower())
+        self.assertEqual(subject, expected_subject)
         self.assertIn('available to watch', context['publish_copy'].lower())
 
         # The watch link points at the workshop /video page (the surface that
@@ -277,11 +289,14 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         mock_send.return_value = relay_result('relay-review')
         event = self._make_workshop_event(published=False)
 
-        notify_recording_ready(event)
+        self._notify_with_preview_subject(
+            event,
+            'Relay recording review audit subject',
+        )
 
         subject = EmailLog.objects.get().subject
         context = mock_send.call_args.args[2]
-        self.assertIn('ready for review', subject.lower())
+        self.assertEqual(subject, 'Relay recording review audit subject')
         self.assertEqual(context['publish_state'], 'Ready for review/publishing')
         self.assertNotIn('available to watch', context['publish_copy'].lower())
         # Falls back to the Studio review link, not a watch link.

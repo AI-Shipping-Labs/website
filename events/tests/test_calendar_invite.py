@@ -9,6 +9,7 @@ from django.utils import timezone
 from icalendar import Calendar
 
 from accounts.models import User
+from email_app.testing import StubRelayTemplateClient
 from events.models import Event, EventRegistration
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
@@ -157,10 +158,9 @@ class GenerateIcsTest(TestCase):
         self.assertNotIn('AI Shipping Labs <', str(organizer))
 
     @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='')
-    def test_missing_sender_uses_existing_transactional_default(self):
-        organizer = self._vevent(generate_ics(self.event)).get('organizer')
-
-        self.assertEqual(str(organizer), 'mailto:noreply@aishippinglabs.com')
+    def test_missing_sender_fails_closed(self):
+        with self.assertRaises(InvalidCalendarOrganizerError):
+            generate_ics(self.event)
 
     @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='not-an-email')
     def test_invalid_resolved_sender_prevents_calendar_generation(self):
@@ -554,15 +554,24 @@ class SendRegistrationConfirmationTest(TestCase):
     )
     def test_send_email_subject_contains_event_title(self, mock_send):
         mock_send.return_value = 'relay-789'
+        relay = StubRelayTemplateClient()
+        template = relay.template('event_registration')
+        template['subject'] = 'Relay registration audit subject'
+        relay.save_draft('event_registration', template)
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
-        email_log = send_registration_confirmation(registration)
+        with patch(
+            'email_app.services.relay_templates.configured_template_client',
+            return_value=relay,
+        ):
+            email_log = send_registration_confirmation(registration)
 
-        # Issue #484: confirmation subject was rewritten to confirm
-        # registration up-front rather than just naming the event.
-        self.assertEqual(email_log.subject, "You're registered: Test Event")
+        self.assertEqual(email_log.subject, 'Relay registration audit subject')
+        preview_call = relay.calls[-1]
+        self.assertEqual(preview_call['template_key'], 'event_registration')
+        self.assertEqual(preview_call['context']['event_title'], 'Test Event')
 
     @patch(
         'events.services.registration_email._send_calendar_email',

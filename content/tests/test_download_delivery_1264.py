@@ -1,5 +1,4 @@
 import json
-import re
 from io import StringIO
 from unittest.mock import patch
 from urllib.parse import parse_qs, unquote, urlparse
@@ -45,18 +44,11 @@ def deliver_and_capture():
     return stub
 
 
-def sent_html(stub):
-    """The provider-visible HTML of the single drained send."""
+def delivery_url(stub):
+    """Return the one-time URL resolved at the Relay transport boundary."""
 
-    assert len(stub.calls) == 1, f'expected one SES send, got {len(stub.calls)}'
-    simple = stub.calls[0]['Content']['Simple']
-    return simple['Body']['Html']['Data']
-
-
-def href_with_suffix(html, suffix):
-    match = re.search(rf'href="([^"]*{re.escape(suffix)}[^"]*)"', html)
-    assert match, f'no href containing {suffix} in sent email'
-    return match.group(1)
+    assert len(stub.calls) == 1, f'expected one Relay send, got {len(stub.calls)}'
+    return stub.calls[0]['context']['delivery_url']
 
 
 def make_download(**overrides):
@@ -419,9 +411,7 @@ class DownloadDelivery1264Test(TestCase):
         )
         self.assertTrue(delivery.context_data['newsletter_opt_in'])
         stub = deliver_and_capture()
-        grant_url = href_with_suffix(
-            sent_html(stub), f'/api/downloads/{download.slug}/file?grant=',
-        )
+        grant_url = delivery_url(stub)
         grant_token = unquote(parse_qs(urlparse(grant_url).query)['grant'][0])
 
         first = self.client.get(
@@ -470,10 +460,7 @@ class DownloadDelivery1264Test(TestCase):
             purpose='download_delivery', recipient_user=user,
         )
         self.assertFalse(delivery.context_data['newsletter_opt_in'])
-        grant_url = href_with_suffix(
-            sent_html(deliver_and_capture()),
-            f'/api/downloads/{download.slug}/file?grant=',
-        )
+        grant_url = delivery_url(deliver_and_capture())
         grant_token = unquote(parse_qs(urlparse(grant_url).query)['grant'][0])
         response = self.client.get(
             f'/api/downloads/{download.slug}/file',
@@ -522,9 +509,7 @@ class DownloadDelivery1264Test(TestCase):
             data=json.dumps({'email': 'verify-download@example.com'}),
             content_type='application/json',
         )
-        verify_url = href_with_suffix(
-            sent_html(deliver_and_capture()), '/api/verify-email?token=',
-        )
+        verify_url = delivery_url(deliver_and_capture())
         response = self.client.get(urlparse(verify_url).path + '?' + urlparse(verify_url).query)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
@@ -562,10 +547,7 @@ class DownloadDelivery1264Test(TestCase):
             content_type='application/json',
         )
         self.assertEqual(request_response.status_code, 202)
-        grant_url = href_with_suffix(
-            sent_html(deliver_and_capture()),
-            f'/api/downloads/{download.slug}/file?grant=',
-        )
+        grant_url = delivery_url(deliver_and_capture())
         redemption = self.client.get(
             urlparse(grant_url).path + '?' + urlparse(grant_url).query,
         )

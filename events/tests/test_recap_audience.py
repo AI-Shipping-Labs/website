@@ -196,14 +196,14 @@ class RecapAudienceTest(TestCase):
         self.assertEqual(preview['reason_code'], 'missing_recap')
         self.assertEqual(preview['eligible'], 7)
 
-    def _rendered_html(self):
+    def _resolved_contexts(self):
         stub = StubRelayClient()
         with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
-        return [call['Content']['Simple']['Body']['Html']['Data'] for call in stub.calls]
+        return [call['context'] for call in stub.calls]
 
     def test_email_links_recording_when_the_event_has_one(self):
         Event.objects.filter(pk=self.event.pk).update(
@@ -212,15 +212,15 @@ class RecapAudienceTest(TestCase):
         self.event.refresh_from_db()
         notify_recap_ready(self.event)
 
-        html = self._rendered_html()[0]
+        context = self._resolved_contexts()[0]
         event_url = f'https://aishippinglabs.com{self.event.get_absolute_url()}'
-        self.assertIn(f'href="{event_url}">Watch the recording', html)
+        self.assertEqual(context['recording_url'], event_url)
 
     def test_email_omits_recording_link_without_a_recording(self):
         notify_recap_ready(self.event)
 
-        html = self._rendered_html()[0]
-        self.assertNotIn('Watch the recording', html)
+        context = self._resolved_contexts()[0]
+        self.assertEqual(context['recording_url'], '')
 
 
 @tag('core')
@@ -259,28 +259,26 @@ class RecapEmailLinkByAudienceTest(TestCase):
         CohortEnrollment.objects.create(cohort=cohort, user=cls.cohort_member)
         EventRegistration.objects.create(event=cls.event, user=cls.registrant)
 
-    def _html_by_recipient(self):
+    def _contexts_by_recipient(self):
         stub = StubRelayClient()
         with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
-        return {
-            call['Destination']['ToAddresses'][0]: call['Content']['Simple']['Body']['Html']['Data']
-            for call in stub.calls
-        }
+        contexts = {}
+        for call in stub.calls:
+            contexts[call['delivery'].recipient_email] = call['context']
+        return contexts
 
     def test_cohort_member_gets_the_session_unit_and_registrant_the_event_recap(self):
         notify_recap_ready(self.event)
 
-        html = self._html_by_recipient()
+        contexts = self._contexts_by_recipient()
         unit_url = f'https://aishippinglabs.com{self.unit.get_absolute_url()}?cohort=4'
         recap_url = f'https://aishippinglabs.com{self.event.get_recap_url()}'
-        self.assertIn(f'href="{unit_url}">Read the event recap', html['cohort-link@test.com'])
-        self.assertNotIn(recap_url, html['cohort-link@test.com'])
-        self.assertIn(f'href="{recap_url}">Read the event recap', html['registrant-link@test.com'])
-        self.assertNotIn(self.unit.get_absolute_url(), html['registrant-link@test.com'])
+        self.assertEqual(contexts['cohort-link@test.com']['recap_url'], unit_url)
+        self.assertEqual(contexts['registrant-link@test.com']['recap_url'], recap_url)
 
 
 @tag('core')

@@ -19,8 +19,8 @@ Coverage:
   ``transactional``.
 
 Since A1.2 slice 3 the send records a durable ``EmailDelivery`` and the
-provider send happens from the delivery worker, so content assertions
-drain pending deliveries through a stub SES client.
+provider send happens from the delivery worker, so context assertions
+drain pending deliveries through a stub Relay client.
 """
 
 from datetime import UTC, datetime
@@ -48,8 +48,8 @@ from notifications.models import EventReminderLog
 User = get_user_model()
 
 
-def _drain_and_get_sent_html():
-    """Drain pending deliveries through a stub SES and return the HTML."""
+def _drain_and_get_context():
+    """Drain pending deliveries and return Relay's resolved context."""
     stub = StubRelayClient()
     with patch(
         'community_base.mail.backends.relay.configured_client',
@@ -57,7 +57,7 @@ def _drain_and_get_sent_html():
     ):
         deliver_pending_mail()
     assert len(stub.calls) == 1, stub.calls
-    return stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+    return stub.calls[0]['context']
 
 
 class EnqueuePostEventFollowupTest(TestCase):
@@ -199,15 +199,17 @@ class SendPostEventFollowupOneTest(TestCase):
     def test_render_includes_summary_and_recording_and_notes(self):
         send_post_event_followup_one(self.event.pk, self.user.pk)
 
-        sent_html = _drain_and_get_sent_html()
-        self.assertIn('Thanks for joining the recap test session.', sent_html)
-        self.assertIn('https://youtube.com/watch?v=recap-one', sent_html)
-        self.assertIn(
-            "Workshop notes are still being put together",
-            sent_html,
+        context = _drain_and_get_context()
+        self.assertEqual(
+            context['event_summary'],
+            'Thanks for joining the recap test session.',
         )
-        # CTA absent by default (issue #679 not shipped).
-        self.assertNotIn('Leave feedback', sent_html)
+        self.assertEqual(
+            context['recording_url'],
+            'https://youtube.com/watch?v=recap-one',
+        )
+        self.assertTrue(context['notes_placeholder'])
+        self.assertNotIn('feedback_url', context)
 
     def test_published_recap_replaces_the_notes_placeholder(self):
         # Issue #1458: the placeholder used to be unconditional, so every
@@ -218,20 +220,23 @@ class SendPostEventFollowupOneTest(TestCase):
         )
         send_post_event_followup_one(self.event.pk, self.user.pk)
 
-        sent_html = _drain_and_get_sent_html()
+        context = _drain_and_get_context()
         self.event.refresh_from_db()
-        self.assertIn(self.event.get_recap_url(), sent_html)
-        self.assertIn('Read the recap', sent_html)
-        self.assertNotIn(
-            'Workshop notes are still being put together', sent_html,
+        self.assertEqual(
+            context['recap_url'],
+            f'https://aishippinglabs.com{self.event.get_recap_url()}',
         )
+        self.assertNotIn('notes_placeholder', context)
 
     def test_blank_summary_uses_generic_fallback(self):
         Event.objects.filter(pk=self.event.pk).update(post_event_summary='')
         send_post_event_followup_one(self.event.pk, self.user.pk)
 
-        sent_html = _drain_and_get_sent_html()
-        self.assertIn('Thanks for joining us at Recap one-shot', sent_html)
+        context = _drain_and_get_context()
+        self.assertEqual(
+            context['event_summary'],
+            'Thanks for joining us at Recap one-shot. The recording is now available below.',
+        )
 
     def test_local_refusal_logs_and_does_not_raise(self):
         with patch(
@@ -309,8 +314,8 @@ class FeedbackUrlWiringTest(TestCase):
         """When EventFeedback import fails OR the URL doesn't resolve,
         the CTA block is empty."""
         send_post_event_followup_one(self.event.pk, self.user.pk)
-        sent_html = _drain_and_get_sent_html()
-        self.assertNotIn('Leave feedback', sent_html)
+        context = _drain_and_get_context()
+        self.assertNotIn('feedback_url', context)
 
     def test_feedback_url_present_when_dependency_satisfied(self):
         """Issue #680 / #679 wiring: when the import succeeds AND the
@@ -324,11 +329,10 @@ class FeedbackUrlWiringTest(TestCase):
             send_post_event_followup_one(self.event.pk, self.user.pk)
             # The worker mints the context at drain time (issue #1613),
             # so the probe stays patched through the drain.
-            sent_html = _drain_and_get_sent_html()
-        self.assertIn('Leave feedback', sent_html)
-        self.assertIn(
+            context = _drain_and_get_context()
+        self.assertEqual(
+            context['feedback_url'],
             'https://example.test/events/recap-feedback/feedback',
-            sent_html,
         )
 
 

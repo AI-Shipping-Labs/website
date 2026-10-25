@@ -232,6 +232,9 @@ class NotifySlackJoinHelperTest(TestCase):
             "community.services.staff_notifications.site_base_url",
             return_value="https://example.test",
         ), patch(
+            "integrations.config.site_base_url",
+            return_value="https://example.test",
+        ), patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

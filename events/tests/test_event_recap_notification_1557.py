@@ -156,9 +156,10 @@ class EventRecapNotificationServiceTest(TestCase):
         recap_url = absolute_recap_url(self.event)
         event_url = f'https://aishippinglabs.com{self.event.get_absolute_url()}'
         for call in stub.calls:
-            html = call['Content']['Simple']['Body']['Html']['Data']
-            self.assertIn(f'href="{recap_url}"', html)
-            self.assertIn(event_url, html)
+            context = call['context']
+            self.assertEqual(context['recap_url'], recap_url)
+            self.assertEqual(context['event_url'], event_url)
+            self.assertEqual(context['recording_url'], '')
 
     def test_complaint_suppresses_email_but_not_in_app(self):
         complaint_user = User.objects.create_user(

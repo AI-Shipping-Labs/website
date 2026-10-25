@@ -436,6 +436,12 @@ class WorkerDeliveryContextTest(SummaryNotificationsFixture):
     def _published_deliveries(self, purpose):
         return EmailDelivery.objects.filter(purpose=purpose)
 
+    def _calls_by_recipient(self, stub):
+        calls = {}
+        for call in stub.calls:
+            calls[call['delivery'].recipient_email] = call
+        return calls
+
     def test_chapter_summary_email_context_is_rebuilt_by_the_worker(self):
         self.ch0.summary = 'A tight recap of chapter zero.'
         self.ch0.save(update_fields=['summary'])
@@ -457,21 +463,14 @@ class WorkerDeliveryContextTest(SummaryNotificationsFixture):
 
         stub = self._drain()
         self.assertEqual(len(stub.calls), 2)
-        by_recipient = {
-            call['Destination']['ToAddresses'][0]: call for call in stub.calls
-        }
-        call = by_recipient['main@test.com']
-        self.assertIn(
-            'New chapter summary in Inference Engineering',
-            call['Content']['Simple']['Subject']['Data'],
-        )
-        html = call['Content']['Simple']['Body']['Html']['Data']
-        self.assertIn('Inference Engineering', html)
-        self.assertIn('Chapter 0', html)
-        self.assertIn('A tight recap of chapter zero.', html)
-        self.assertIn(
-            f'/books/inference-engineering/chapters/{self.ch0.number}#summary',
-            html,
+        context = self._calls_by_recipient(stub)['main@test.com']['context']
+        self.assertEqual(context['book_title'], 'Inference Engineering')
+        self.assertEqual(context['chapter_number'], self.ch0.number)
+        self.assertEqual(context['chapter_title'], self.ch0.title)
+        self.assertEqual(context['summary_line'], 'A tight recap of chapter zero.')
+        self.assertEqual(
+            context['summary_url'],
+            f'https://aishippinglabs.com/books/inference-engineering/chapters/{self.ch0.number}#summary',
         )
 
     def test_book_summary_email_context_is_rebuilt_by_the_worker(self):
@@ -493,16 +492,15 @@ class WorkerDeliveryContextTest(SummaryNotificationsFixture):
 
         stub = self._drain()
         self.assertEqual(len(stub.calls), 2)
-        by_recipient = {
-            call['Destination']['ToAddresses'][0]: call for call in stub.calls
-        }
-        html = by_recipient['main@test.com'][
-            'Content']['Simple']['Body']['Html']['Data']
-        self.assertIn('Inference Engineering', html)
-        self.assertIn('The whole-book takeaway, in one paragraph.', html)
+        context = self._calls_by_recipient(stub)['main@test.com']['context']
+        self.assertEqual(context['book_title'], 'Inference Engineering')
+        self.assertEqual(
+            context['summary_line'],
+            'The whole-book takeaway, in one paragraph.',
+        )
         # The book summary page is itself the summary — no #summary anchor
         # exists on it, so the link carries no fragment (unlike chapters).
-        self.assertIn(
+        self.assertEqual(
+            context['summary_url'],
             'https://aishippinglabs.com/books/inference-engineering/summary',
-            html,
         )

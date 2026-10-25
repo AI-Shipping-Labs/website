@@ -101,7 +101,7 @@ Toggle it on and save. No redeploy needed.
 
 Prereqs:
 - `AWS_S3_CONTENT_BUCKET` must be configured (uploads need a target).
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (Email/SES group) must
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (S3 Content Images group) must
   have `s3:PutObject` / `s3:ListBucket` on the bucket.
 - `CONTENT_CDN_BASE` must point at a CDN fronting the bucket so the
   rewritten URLs resolve.

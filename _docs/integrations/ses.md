@@ -32,7 +32,7 @@ secret and rotate the pair together.
 ## SES_WEBHOOK_VALIDATION_ENABLED
 
 Purpose: verify the SNS signing certificate and signature on SES bounce and
-complaint notifications received at `/api/webhooks/ses`.
+complaint notifications received at `/api/ses-events`.
 
 Without it: the endpoint still applies the optional shared-secret check, but
 does not verify the SNS signature. Keep validation enabled in production.
@@ -51,8 +51,15 @@ Without it: no shared-secret header is required. This is convenient for local
 replay; production should configure a secret on both the event forwarder and
 the website.
 
-Rotate both sides in one release window. Never print the value in logs or
-issue comments.
+Relay's production `aisl-ses-ingress` service reads the value from Secrets
+Manager and sends it with the unchanged SNS envelope. Rotate both sides in one
+release window. Never print the value in logs or issue comments.
+
+SES publishes the provider events to SNS, which fans them into the dedicated
+`aisl-ses-webhooks` SQS queue. Relay drains that queue and POSTs to the website.
+The website remains the sole owner of `SesEvent` and recipient mutations. Relay
+deletes a queue message only after the website returns HTTP 200 with `ok` or
+`duplicate`; failures retry through SQS and its DLQ.
 
 ## Historical correlation fields
 

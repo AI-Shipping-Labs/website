@@ -92,14 +92,20 @@ class LegacyEmailRemovalMigrationTest(TransactionTestCase):
                 "email_app", "EmailTemplateOverride"
             )
             FailedOverride.objects.all().delete()
+            FailedOverride.objects.create(template_name="compatibility-empty")
             MigrationExecutor(connection).migrate(self.migrate_to)
 
             migrated_apps = MigrationExecutor(connection).loader.project_state(
                 self.migrate_to
             ).apps
             MigratedSetting = migrated_apps.get_model("cb_config", "Setting")
-            self.assertFalse(
-                MigratedSetting.objects.filter(key__startswith="SES_").exists()
+            self.assertEqual(
+                MigratedSetting.objects.get(key="SES_FROM_EMAIL").value,
+                "general@example.com",
+            )
+            self.assertEqual(
+                Donor.objects.get(key="SES_TRANSACTIONAL_FROM_EMAIL").value,
+                "transactions@example.com",
             )
             self.assertEqual(
                 MigratedSetting.objects.get(key="RELAY_WELCOME_FROM_EMAIL").value,
@@ -107,5 +113,10 @@ class LegacyEmailRemovalMigrationTest(TransactionTestCase):
             )
             with self.assertRaises(LookupError):
                 migrated_apps.get_model("email_app", "EmailTemplateOverride")
+            self.assertIn(
+                "email_app_emailtemplateoverride",
+                connection.introspection.table_names(),
+            )
+            self.assertEqual(FailedOverride.objects.count(), 0)
         finally:
             MigrationExecutor(connection).migrate(latest_targets)

@@ -196,10 +196,10 @@ Test: visit `{SITE_BASE_URL}/membership`, click a paid tier, complete checkout i
 Studio paths: `Studio > Settings > Email (Relay)` for sending and
 `Studio > Settings > SES event ingest` for inbound provider events.
 
-Provider consoles:
+Provider surfaces:
 
-- IAM (for credentials): `https://console.aws.amazon.com/iam/`
-- SES (for verified senders + sandbox status): `https://console.aws.amazon.com/ses/`
+- Studio `Email (Relay)` settings hold this site's sender choices.
+- Relay owns sender registration, provider verification, and provider account readiness.
 
 Production deploys MUST set `RELAY_BASE_URL` and `RELAY_API_KEY` so mail delivers through Relay. There is no SES send path left in the repo and no kill-switch: without Relay credentials the sends fail loudly instead of silently no-oping.
 
@@ -219,36 +219,37 @@ Keys to set in Studio:
 |-----|--------|-------|
 | `AWS_ACCESS_KEY_ID` | secret | IAM user with S3 upload permissions (content + recordings). No SES send permission is needed — Relay sends with its own credentials. |
 | `AWS_SECRET_ACCESS_KEY` | secret | Paired with the access key ID. |
-| `RELAY_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
-| `RELAY_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; must be a verified sender (or be on a verified domain) in SES. |
+| `RELAY_TRANSACTIONAL_FROM_EMAIL` | non-secret | Sender for required account/service email. Defaults to `noreply@aishippinglabs.com`; register it with Relay before use. |
+| `RELAY_PROMOTIONAL_FROM_EMAIL` | non-secret | Sender for campaigns/newsletters/marketing email. Defaults to `content@aishippinglabs.com`; register it with Relay before use. |
 | `SES_WEBHOOK_VALIDATION_ENABLED` | non-secret | `true` in prod to validate incoming SNS webhook signatures. |
-| `SES_WEBHOOK_SHARED_SECRET` | secret | Optional shared secret enforced by the `/api/ses-events` webhook (`X-SES-Webhook-Secret` header). When set, requests missing the header or carrying the wrong value return 403 *before* SNS signature validation runs. Leave blank locally to keep `manage.py runserver` replay workflows working; set in prod and inject from the infra-side Lambda forwarder. |
+| `SES_WEBHOOK_SHARED_SECRET` | secret | Optional shared secret enforced by the `/api/ses-events` webhook (`X-SES-Webhook-Secret` header). When set, requests missing the header or carrying the wrong value return 403 before SNS signature validation runs. Leave blank locally for replay; in production Relay's `aisl-ses-ingress` reads the same value from Secrets Manager. |
 
-Webhook endpoint (for SES bounce/complaint/open/click notifications via SNS): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids the trailing-slash redirect that strips POST bodies). Configure in your SNS topic subscription.
+Webhook endpoint (for SES bounce/complaint/open/click notifications): `{SITE_BASE_URL}/api/ses-events` (no trailing slash; the slashless form avoids a redirect that strips POST bodies). Configure this as Relay's `AISL_SES_WEBHOOK_URL`; SNS publishes to the dedicated SQS queue rather than directly to the website.
 
 SES bounce / complaint webhook setup (issue #453):
 
-The AWS-side wiring (SES configuration set, SNS topics, CloudWatch alarms, subscriptions) is managed by Terraform in the [DataTalksClub/aws-infra](https://github.com/DataTalksClub/aws-infra) repo (AISL resources under `main/aisl/`) — primarily `main/aisl/email.tf` for SES + SNS resources and `main/aisl/docs/email-best-practices.md` for the operator notes. Anything that touches AWS for email (SES domain, SNS topics, configuration sets, MX/DKIM/SPF/DMARC DNS, the inbound `email-forwarder.py` Lambda) lives there. Anything that touches our Django code (the `/api/ses-events` webhook, the `SesEvent` audit model, the bounce/complaint handlers, the User mutations) lives in this repo (`api/views/ses_events.py`, `email_app/models/ses_event.py`).
+The AWS-side wiring (SES configuration set, SNS topics, the dedicated `aisl-ses-webhooks` SQS queue and DLQ, CloudWatch alarms, and subscriptions) is managed by Terraform in the [DataTalksClub/aws-infra](https://github.com/DataTalksClub/aws-infra) repo. Relay owns the production queue consumer. This repo owns the `/api/ses-events` webhook, `SesEvent` audit rows, bounce/complaint handlers, and User mutations (`api/views/ses_events.py`, `email_app/models/ses_event.py`).
 
 End-to-end pipeline (when wired correctly):
 
 1. Relay sends the email through SES (the site itself holds no SES send path). Relay's sends carry the event publishing configuration, so SES emits delivery/bounce/complaint events to the SNS topics.
 2. SES delivers the email or detects a bounce / complaint.
-3. SES publishes a notification to the SNS topic configured on the configuration set (`aws_ses_event_destination.bounces` / `.complaints` in `email.tf`).
-4. SNS fans out the notification to every subscriber on the topic.
-5. Each topic is subscribed by a Lambda forwarder (`ses_webhook.tf`) that POSTs the SNS payload to `{SITE_BASE_URL}/api/ses-events` with an `X-SES-Webhook-Secret` header. Our Django webhook validates the SNS signature, dedupes by `MessageId`, and runs `_handle_bounce` / `_handle_complaint` to mutate the User row + audit `SesEvent`. There is intentionally no direct HTTPS SNS subscription.
+3. SES publishes a notification to the SNS topic configured on its configuration set.
+4. SNS fans the original signed envelope into the dedicated `aisl-ses-webhooks` SQS queue.
+5. Relay's production `aisl-ses-ingress` service drains that queue and POSTs the unchanged envelope to `{SITE_BASE_URL}/api/ses-events` with the shared-secret header. It deletes the SQS message only after HTTP 200 with `status=ok` or `duplicate`; failures retry and eventually redrive to the DLQ.
+6. Django validates the shared secret and SNS signature, dedupes atomically by `MessageId`, and applies the bounce or complaint mutation while writing `SesEvent`. Relay does not mutate website recipients or email audit state.
 
 Required state in the infra repo:
 
-- SNS topics `ses-bounces` and `ses-complaints` exist (already in `email.tf`).
-- SES configuration set `aishippinglabs` exists and is wired to both SNS topics via `aws_ses_event_destination.bounces` / `.complaints` (already in `email.tf`).
-- A Lambda forwarder (`ses_webhook.tf`) is subscribed to each of the two topics and POSTs the payload to `https://aishippinglabs.com/api/ses-events` with an `X-SES-Webhook-Secret` header. There is intentionally no direct `protocol = "https"` SNS subscription, so do not expect (or file an issue about) a `Confirmed` HTTPS subscriber — a topic showing only the Lambda and the operator-email subscribers is correct. To verify wiring, confirm the Lambda exists and is subscribed to both topics.
-- The Lambda forwarder is the required bridge (not optional defence-in-depth): it injects the `X-SES-Webhook-Secret` header from an AWS Secrets Manager value matched against `SES_WEBHOOK_SHARED_SECRET` on the Django side. The shared secret is a second auth layer on top of SNS signature verification, blocking anyone from POSTing arbitrary `Bounce` JSON to `/api/ses-events` from outside AWS.
+- SNS topics `ses-bounces` and `ses-complaints` exist and publish to the dedicated `aisl-ses-webhooks` SQS queue.
+- The queue has a DLQ and one active consumer: Relay production's `aisl-ses-ingress` service (`drain_sqs_ingress aisl-ses-webhooks`). Do not point Relay development or its standard `ses-ingress` service at this queue.
+- Relay is configured with the queue URL, the HTTPS website endpoint, the allowed topic ARNs, and the secret ARN. Its IAM policy can receive/delete from this queue and read only that secret.
+- The website secret matches the Secrets Manager value Relay reads. This second auth layer blocks arbitrary bounce JSON before SNS signature validation.
 
 Required state in this repo:
 
 - `SES_WEBHOOK_VALIDATION_ENABLED=true` in prod (default everywhere except `DEBUG=True`).
-- `SES_WEBHOOK_SHARED_SECRET` set to the same value Secrets Manager hands the required Lambda — this is the second auth layer paired with the Lambda forwarder, so set it in prod. The webhook then 403s any request missing or with a wrong header (`hmac.compare_digest`, constant-time). The check runs *before* SNS signature validation so an attacker without the secret never reaches the signature path, and rejected requests do not pollute the `SesEvent` audit log. Leave blank locally to keep `manage.py runserver` replay workflows working.
+- `SES_WEBHOOK_SHARED_SECRET` set to the value Relay reads from Secrets Manager. The webhook then 403s any request missing or carrying a wrong header (`hmac.compare_digest`, constant-time). The check runs before SNS signature validation, so rejected requests do not pollute `SesEvent`. Leave it blank only for local replay.
 
 Verify the pipeline is live:
 
@@ -256,28 +257,31 @@ Verify the pipeline is live:
 2. Wait ~30 seconds.
 3. Studio > Users > search `bounce@simulator.amazonses.com`. The row should show `unsubscribed=True` and a `bounced` tag.
 4. Studio `/studio/ses-events/?type=bounce_permanent&q=bounce%40simulator.amazonses.com` should show the correlated permanent-bounce row. The staff-token `GET /api/ses-events?type=bounce_permanent&recipient=bounce%40simulator.amazonses.com` endpoint provides the same operator check for automation.
-5. If neither shows, the Lambda forwarder (`ses_webhook.tf`) is the failure point — check that it is subscribed to both topics, is not erroring, and is returning a 2xx from `/api/ses-events` (non-2xx and errors show up in the Lambda's CloudWatch logs, in the Django-side logs, and on the SNS topic's delivery-status metric).
+5. If neither shows, inspect the SNS-to-SQS subscription, the `aisl-ses-webhooks` queue and DLQ, Relay's `aisl-ses-ingress` logs, and the Django webhook logs. Confirm Relay receives HTTP 200 with `ok` or `duplicate` before expecting the queue message to disappear.
 
-The MAILER-DAEMON email an operator receives at `alexey@aishippinglabs.com` is sent by the SNS `email` subscriber, not by the Lambda forwarder. Receiving that email proves SES->SNS works but does NOT prove SNS->Lambda->Django works. Always cross-check with the SesEvent row.
+The MAILER-DAEMON email an operator receives at `alexey@aishippinglabs.com` is sent by the SNS `email` subscriber. Receiving it proves SES-to-SNS works, but does not prove SNS-to-SQS-to-Relay-to-Django works. Always cross-check the queue and the `SesEvent` row.
 
-SES engagement tracking setup (issue #454):
-
-1. SES console -> Configuration Sets -> create a configuration set, e.g. `ais-engagement-prod`.
-2. Add an event destination that publishes to the SNS topic subscribed to `{SITE_BASE_URL}/api/ses-events`.
-3. Tick `Open`, `Click`, `Bounce`, `Complaint`, and `Delivery`.
-4. Confirm the matching `EmailLog` row records `opened_at` / `clicked_at` after the engagement events arrive (Relay's SES sends carry the event publishing configuration).
+SES engagement events (issue #454): Relay operations own the provider
+configuration that publishes `Open`, `Click`, `Bounce`, `Complaint`, and
+`Delivery` events into the AISL SNS-to-SQS ingress path. Website operators
+verify that `SesEvent` records arrive. Historical direct-SES `EmailLog` rows
+can correlate by provider ID; the current Relay ID gap described below prevents
+that promise for new Relay-backed rows.
 
 Soft-bounce policy: a `Transient` (soft) bounce increments `User.soft_bounce_count`. The third soft bounce in a row flips `unsubscribed=True`, appends the `bounced` tag, and resets the counter. A single `Complaint` (Gmail "Report spam" etc.) unsubscribes immediately and tags `complained`.
 
 Workshop announcement emails (issue #655) honour two opt-outs in sequence: the global `User.unsubscribed` flag (set by the newsletter toggle or the unsubscribe footer in any promotional email) and the per-content-type `email_preferences.workshop_emails` flag controlled by the `Workshop announcements` toggle on `/account/`. Either flag flipping to opt-out removes the user from the email audience without affecting the bell notification or the Slack announcement.
 
-Bounce / complaint correlation (issue #495): the webhook looks up the originating `EmailLog` by inner SES `mail.messageId` and stamps `bounced_at`, `bounce_type`, `bounce_subtype`, and `bounce_diagnostic` on that row (and `complained_at` for complaints). The `SesEvent` audit row also gets a direct `email_log` FK plus normalized bounce-classification columns. This lets staff answer "did this bounce come from a campaign, signup verification, verification reminder, or lead-magnet email?" by reading the `EmailLog`, browsing `/studio/ses-events/`, or querying the staff-token SES API. Hard bounces with sub-type `NoEmail` (the SES "mailbox does not exist" classification) carry the receiver's diagnostic in `bounce_diagnostic` for triage. Events whose `mail.messageId` does not match any `EmailLog` are still logged for audit and return 200, so SNS does not retry forever and we do not create a feedback loop on spam-trap traffic.
+Bounce / complaint correlation (issue #495): historical direct-SES `EmailLog` rows store the inner SES `mail.messageId`, so the webhook can stamp their bounce, complaint, open, and click fields and attach the matching `SesEvent`. The current Relay recorder writes Relay's own message ID into the legacy `ses_message_id` field because the transactional response does not expose the provider's SES ID. Provider events cannot match that value, so new Relay-backed rows do not receive correlation stamps. Bounce and complaint events still create `SesEvent` rows and apply address-based recipient safety mutations; open and click events remain event-log-only. A future Relay-to-provider identifier contract must correct the field semantics and correlation behavior separately.
 
 Payload-shape support: the webhook accepts both the SES identity-notification shape (`notificationType`) and the configuration-set event-publishing shape (`eventType`) for `Bounce`, `Complaint`, `Delivery`, `Open`, and `Click`. Do not enable BOTH identity notifications AND a configuration-set destination for the same event type unless you understand the deduplication implications — SES will emit one of each, both will hit `/api/ses-events`, and although our SNS-`MessageId` dedup catches identical replays, two distinct AWS-side notifications carry distinct `MessageId`s and will both be processed. Pick one publishing path per event type.
 
-Foot-gun: SES is in sandbox mode by default. Sandbox accounts can only send to verified addresses. Request production access via the AWS console BEFORE the launch — approval can take 24+ hours.
+Relay operations own provider production access and sender verification. The
+website release gate must confirm the configured sender is registered and that
+Relay permits the explicitly approved test recipient.
 
-Test: in `Studio > Campaigns`, create a test campaign and send to a verified address; confirm delivery.
+Test: in `Studio > Campaigns`, create a test campaign and send only to the
+operator-approved Relay test recipient; confirm delivery.
 
 ## 6. Slack (community bot)
 
@@ -540,7 +544,7 @@ Run this checklist after configuring everything. Each item is one click, end to 
 - [ ] Complete the Zoom guide's disposable lifecycle and recording smoke in an isolated non-production workspace; confirm create/read/update/repeat/delete and `recording.completed` download-to-S3 behavior using only redacted evidence.
 - [ ] Upload a workshop recording to S3 via `/studio/recordings/<id>/edit`; confirm it plays in the in-app player on the recording surface.
 - [ ] Trigger a Slack announcement from `/studio/articles/<id>/announce-slack`; the bot posts to the configured channel.
-- [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery to a verified SES recipient.
+- [ ] Send a test email campaign in `/studio/campaigns/`; confirm delivery only to the operator-approved Relay test recipient.
 
 ## 11.1. Signup attribution and the anonymous_id join key
 

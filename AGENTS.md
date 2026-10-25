@@ -34,7 +34,7 @@ AI Shipping Labs community platform — a Django-based website replacing the ear
 The Django app lives here. AWS infrastructure lives in a separate repo. Knowing the split prevents agents from searching for SES/RDS/Lambda config in this repo when it's not here.
 
 - `AI-Shipping-Labs/website` — this repo. Django app, templates, tests, GitHub Actions for build/deploy. All product code.
-- `DataTalksClub/aws-infra` — Terraform for AWS (AISL resources under `main/aisl/`). SES (domain identity, DKIM/SPF/DMARC, configuration sets), SNS topics (`ses-bounces`, `ses-complaints`), RDS, ECS clusters/services, S3 buckets, Route53 DNS, IAM users/roles (including the `ECS-deploy` user used by CI), the inbound `email-forwarder.py` Lambda for `@aishippinglabs.com` mail forwarding. Key files: `main/aisl/email.tf`, `main/aisl/db.tf`, `main/aisl/ecs.tf`, `main/aisl/dns.tf`, `main/aisl/iam_certificates.tf`, `main/aisl/iam_ecs_deploy.tf` (the `ECS-deploy` user lives in `iam_ecs_deploy.tf`). Operator notes in `main/aisl/docs/email-best-practices.md`.
+- `DataTalksClub/aws-infra` — Terraform for AWS (AISL resources under `main/aisl/`). SES (domain identity, DKIM/SPF/DMARC, configuration sets), SNS topics (`ses-bounces`, `ses-complaints`), Relay's dedicated AISL SES-event SQS queue, RDS, ECS clusters/services, S3 buckets, Route53 DNS, and IAM users/roles (including the `ECS-deploy` user used by CI). Key files: `main/aisl/email.tf`, `main/aisl/db.tf`, `main/aisl/ecs.tf`, `main/aisl/dns.tf`, `main/aisl/iam_certificates.tf`, `main/aisl/iam_ecs_deploy.tf` (the `ECS-deploy` user lives in `iam_ecs_deploy.tf`). Operator notes in `main/aisl/docs/email-best-practices.md`.
 - Content repositories — markdown + YAML synced into the Django DB by the content-sync pipeline. The Django repo never edits content there directly. The registered sources are declared in `integrations/management/commands/seed_content_sources.py`: `AI-Shipping-Labs/content` (articles, projects, recordings, curated links, interview questions, tier data), `AI-Shipping-Labs/workshops-content` (workshops), `AI-Shipping-Labs/python-course` and `AI-Shipping-Labs/ai-buildcamp-course` (courses), and `AI-Shipping-Labs/wiki` (member wiki).
 - `DataTalksClub/community-base` — shared Django apps used by this site and by `DataTalksClub/website`. Local checkout at `~/git/community-base`. Its own process lives in its `AGENTS.md` and `docs/PROCESS.md`; work there is plan-driven via `docs/plan/`.
 - `DataTalksClub/website` — the DataTalks.Club site. The other consumer of `community-base`. Local checkout at `~/git/dtc-website`.
@@ -59,7 +59,7 @@ When the user asks about Django code, templates, or the test suite, it's always 
 - Testing: Playwright for E2E, Django TestCase for unit/integration
 - Payments: Stripe
 - Community: Slack
-- Email: Amazon SES
+- Email: Relay for outbound delivery; Amazon SES events ingested through Relay
 - Video: YouTube / Loom embeds
 - Live events: Zoom API
 - Content source: GitHub repos (markdown + YAML)

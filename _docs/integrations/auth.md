@@ -221,8 +221,8 @@ their current window; only new increments use a newly saved limit.
 Where to find it: This is operator intent — a positive integer (e.g.
 `3`, `8`, `20`). There is no external dashboard.
 
-Lower the limit during signup or inbox-harassment waves to cap SES
-spend and unverified user creation. Raise it if a workshop or office
+Lower the limit during signup or inbox-harassment waves to cap Relay delivery
+attempts and unverified user creation. Raise it if a workshop or office
 NAT is hitting false positives.
 
 Prereqs:
@@ -283,7 +283,7 @@ of seconds (e.g. `600`, `3600`, `7200`). There is no external
 dashboard.
 
 Shorten the window so a blocked workshop NAT recovers sooner. Lengthen
-it to keep a slow SES-burning loop from resetting every few minutes.
+it to keep a slow Relay-delivery loop from resetting every few minutes.
 
 Prereqs:
 - None. Counters live in the shared `django_q` cache.

@@ -568,7 +568,7 @@ def test_registration_sends_confirmation(self):
     self.assertIn('foo', mail.outbox[0].subject)
 ```
 
-Use mocks when the real call would hit a network (Stripe, Slack, SES API,
+Use mocks when the real call would hit a network (Stripe, Slack, Relay API,
 GitHub). Even then, pin the arg shape that proves the call was correct.
 
 ---

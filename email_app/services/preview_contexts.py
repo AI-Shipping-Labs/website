@@ -4,10 +4,9 @@ The Studio template editor renders the same code path as a real send, but
 substitutes these fake values for ``{{ user_name }}``, ``{{ verify_url }}``
 etc. The operator never sees real user data leaked into the preview.
 
-Keep one entry per template name listed in
-``EmailService.TRANSACTIONAL_TYPES``. Missing entries fall back to an empty
-dict, which is also fine -- previews simply leave the variables as the
-literal placeholder strings.
+Keep one entry per website template registered with Relay. Missing entries fall
+back to an empty dict, which is also fine -- Relay reports any missing context
+needed by the selected template version.
 """
 
 from accounts.utils.display import GREETING_FALLBACK
@@ -439,8 +438,8 @@ PREVIEW_CONTEXTS = {
         'purchase_label': 'Premium membership',
         'retry_url': 'https://aishippinglabs.com/membership',
     },
-    # Issue #847: tier-specific paid-signup welcomes. The real send
-    # passes ``user_first_name`` and EmailService auto-injects
+    # Issue #847: tier-specific paid-signup welcomes. The real package send
+    # passes ``user_first_name`` and the website context resolver injects
     # ``site_url``; mirror both so the Studio preview resolves the
     # greeting and the ``/onboarding/`` link instead of leaving them
     # blank.
@@ -459,9 +458,9 @@ PREVIEW_CONTEXTS = {
         'user_first_name': 'Ada',
         'site_url': 'https://aishippinglabs.com',
     },
-    # Issue #1133: one-week onboarding reminder. The real send passes no
-    # extra context; EmailService auto-injects ``user_name`` and
-    # ``site_url``. Mirror both so the Studio preview renders the greeting
+    # Issue #1133: one-week onboarding reminder. The website context resolver
+    # injects ``user_name`` and ``site_url`` at delivery time. Mirror both so
+    # the Studio preview renders the greeting
     # and the ``/onboarding/`` link instead of leaving them blank.
     'onboarding_reminder': {
         'user_name': 'Ada',

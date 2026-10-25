@@ -274,11 +274,9 @@ ops/notifications mailbox (`ops@<your-domain>`,
 `payments@<your-domain>`) so the alert is not tied to one human.
 
 Prereqs:
-- The platform must have SES configured (see `ses.md`) — internal
-  notifications use the same `RELAY_TRANSACTIONAL_FROM_EMAIL` sender
-  as account email.
-- The recipient address need not be SES-verified (SES only requires
-  the sender to be verified, not the recipient, once out of sandbox).
+- Relay outbound delivery must be configured — internal notifications use
+  the same `RELAY_TRANSACTIONAL_FROM_EMAIL` sender as account email.
+- The sender and any restricted test recipient must be approved in Relay.
 
 Rotation: Safe to change at any time. The next checkout-complete
 event uses the new value.
@@ -436,8 +434,8 @@ Without it: Defaults on; switchable without a redeploy.
 
 Where to find it: Studio integration settings (Site group). Boolean toggle.
 
-Prereqs: The daily reminder job must be scheduled; SES must be configured to
-send the reminder email.
+Prereqs: The daily reminder job must be scheduled; Relay outbound delivery
+must be configured.
 
 Rotation: Safe to flip at any time.
 

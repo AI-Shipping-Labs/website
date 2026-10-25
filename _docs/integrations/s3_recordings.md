@@ -63,7 +63,8 @@ Prereqs:
 - Lifecycle rules are optional: the platform serves recordings straight
   from this bucket, so keep objects available for as long as members
   should be able to watch. The platform does not delete its own objects.
-- IAM policy on the SES user must include:
+- The shared S3 credential identity has no mail-send role. Its IAM policy must
+  include:
 
   ```
   s3:GetObject

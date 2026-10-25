@@ -20,7 +20,7 @@ DEFAULT_USER_DATETIME_FORMAT = "%B %d, %Y, %H:%M"
 # ``format_user_datetime``. The global ``DEFAULT_USER_DATETIME_FORMAT``
 # above is deliberately left weekday-free because it also drives public
 # event pages, the homepage/dashboard widgets, Studio event display, the
-# ``{% user_event_datetime %}`` tag, and ``EmailService`` auto-formatting —
+# ``{% user_event_datetime %}`` tag, and package delivery-time resolvers —
 # adding a weekday there is a broader visual change that needs its own pass.
 CALENDAR_INVITE_DATETIME_FORMAT = "%A, %B %d, %Y, %H:%M"
 

@@ -440,7 +440,7 @@ Safe test procedure:
    signup notification.
 3. Deliver the signed paid async-success fixture and confirm the same Session is
    fulfilled exactly once. Separately test async failure and confirm one retry
-   email and no access change. Mock Stripe and SES in automated tests.
+   email and no access change. Mock Stripe and Relay in automated tests.
 4. For an incident, filter Studio's `All handled events` history or
    `GET /api/payments/stripe-webhooks/deliveries?event_type=...` by either async
    event. Fix the configuration/identity cause, then use Stripe Dashboard

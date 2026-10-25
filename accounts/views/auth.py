@@ -662,8 +662,8 @@ def password_reset_request_api(request):
 
     # Always return success to not reveal whether user exists. Resolve the
     # typed email to the CANONICAL account (#845): an alias email resolves to
-    # canonical and the reset is sent to canonical's PRIMARY verified email
-    # (EmailService.send targets user.email), never the typed alias address.
+    # canonical and the reset delivery targets canonical's PRIMARY verified
+    # email, never the typed alias address.
     user = resolve_user_by_email(email)
     if user is not None:
         _send_password_reset_email(user)

@@ -1,15 +1,11 @@
-"""Remove local template overrides after a safe, key-only preflight."""
+"""Remove local template overrides from state after a key-only preflight.
+
+The physical table and legacy sender rows remain for the previous application
+revision during rolling deployment and rollback. A later contract release can
+remove them after the old web and worker tasks have drained.
+"""
 
 from django.db import migrations
-
-LEGACY_SENDER_KEYS = (
-    "SES_FROM_EMAIL",
-    "SES_TRANSACTIONAL_FROM_EMAIL",
-    "SES_PROMOTIONAL_FROM_EMAIL",
-    "SES_WELCOME_FROM_EMAIL",
-    "SES_WELCOME_REPLY_TO_EMAIL",
-    "SES_UNSUBSCRIBE_EMAIL",
-)
 
 
 def reject_nonempty_overrides(apps, schema_editor):
@@ -25,13 +21,7 @@ def reject_nonempty_overrides(apps, schema_editor):
             "Local email template overrides must be published in Relay before removal. "
             f"Affected template keys: {joined}"
         )
-
-
-def remove_legacy_sender_settings(apps, schema_editor):
-    IntegrationSetting = apps.get_model("integrations", "IntegrationSetting")
-    Setting = apps.get_model("cb_config", "Setting")
-    IntegrationSetting.objects.filter(key__in=LEGACY_SENDER_KEYS).delete()
-    Setting.objects.filter(key__in=LEGACY_SENDER_KEYS).delete()
+    Override.objects.all().delete()
 
 
 class Migration(migrations.Migration):
@@ -43,6 +33,10 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(reject_nonempty_overrides, migrations.RunPython.noop),
-        migrations.RunPython(remove_legacy_sender_settings, migrations.RunPython.noop),
-        migrations.DeleteModel(name="EmailTemplateOverride"),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.DeleteModel(name="EmailTemplateOverride"),
+            ],
+        ),
     ]

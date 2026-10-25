@@ -56,6 +56,57 @@ SITE_OPTIONAL_ADDITIONS = frozenset({
     "STRIPE_DASHBOARD_ACCOUNT_ID",
 })
 
+RELAY_KEY_RENAMES = {
+    "SES_TRANSACTIONAL_FROM_EMAIL": "RELAY_TRANSACTIONAL_FROM_EMAIL",
+    "SES_PROMOTIONAL_FROM_EMAIL": "RELAY_PROMOTIONAL_FROM_EMAIL",
+    "SES_WELCOME_FROM_EMAIL": "RELAY_WELCOME_FROM_EMAIL",
+    "SES_WELCOME_REPLY_TO_EMAIL": "RELAY_WELCOME_REPLY_TO_EMAIL",
+}
+
+
+def _project_email_cleanup(groups):
+    """Apply the approved email-key delta to the immutable donor snapshot."""
+    for group in groups:
+        if group["name"] == "relay":
+            _project_relay_group(group)
+        _project_email_descriptions(group)
+    return groups
+
+
+def _project_relay_group(group):
+    for key_def in group["keys"]:
+        old_key = key_def["key"]
+        key_def["key"] = RELAY_KEY_RENAMES.get(old_key, old_key)
+        key_def["docs_url"] = f"_docs/integrations/relay.md#{key_def['key'].lower()}"
+        if key_def["key"] == "RELAY_WELCOME_REPLY_TO_EMAIL":
+            key_def["description"] = "Reply-To address for welcome emails. Leave blank to omit Reply-To."
+    group["keys"].insert(4, {
+        "key": "RELAY_UNSUBSCRIBE_EMAIL",
+        "is_secret": False,
+        "description": "Optional mailto address included with one-click unsubscribe headers.",
+        "docs_url": "_docs/integrations/relay.md#relay_unsubscribe_email",
+        "optional": True,
+        "is_email": True,
+    })
+
+
+def _project_email_descriptions(group):
+    replacements = {
+        "SES_WEBHOOK_SHARED_SECRET": (
+            "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. "
+            "In production, Relay's aisl-ses-ingress reads it from Secrets Manager. Leave blank locally to allow "
+            "runserver replay."
+        ),
+        "STAFF_SIGNUP_NOTIFY_EMAIL": (
+            "Single staff mailbox used for paid-signup BCC and internal notices. Replies still route only via "
+            "RELAY_WELCOME_REPLY_TO_EMAIL."
+        ),
+    }
+    for key_def in group["keys"]:
+        description = replacements.get(key_def["key"])
+        if description is not None:
+            key_def["description"] = description
+
 
 def _normalize(groups):
     """Annotate donor value types and drop empty-string defaults.
@@ -85,11 +136,11 @@ def _normalize(groups):
 class DonorInventoryEquivalenceTest(SimpleTestCase):
     def test_derived_registry_matches_donor_inventory(self):
         donor = json.loads(FIXTURE.read_text())
-        self.assertEqual(_normalize(INTEGRATION_GROUPS), _normalize(donor))
+        self.assertEqual(_normalize(INTEGRATION_GROUPS), _normalize(_project_email_cleanup(donor)))
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 21)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 174)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 175)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

@@ -29,7 +29,7 @@ def _save_welcome_draft(page):
         "Hello {{ user_name }} from the saved Relay draft."
     )
     form.locator('[name="text_body"]').fill("Plain Relay alternative")
-    form.get_by_role("button", name="Save Relay draft").click()
+    form.get_by_role("button", name="Save draft").click()
     page.wait_for_load_state("domcontentloaded")
 
 
@@ -49,7 +49,13 @@ def _assert_draft_preview(page, relay):
 
 
 def _publish_and_assert_pin(page, relay):
-    page.get_by_role("button", name="Publish current draft").click()
+    page.locator('[name="subject"]').fill("Unsaved subject must not publish")
+    expect(page.get_by_text(
+        "Publishes the last saved draft as a new immutable version. "
+        "Unsaved edits are not included.",
+        exact=True,
+    )).to_be_visible()
+    page.get_by_role("button", name="Publish saved draft").click()
     page.wait_for_load_state("domcontentloaded")
     expect(page.get_by_text(
         'Published "welcome" as Relay version 2. Website sends remain pinned '
@@ -57,6 +63,10 @@ def _publish_and_assert_pin(page, relay):
         exact=True,
     )).to_be_visible()
     assert relay.template("welcome")["latest_version"] == 2
+    assert relay.template("welcome")["subject"] == "Welcome from a Relay draft"
+    expect(page.locator('[name="subject"]')).to_have_value(
+        "Welcome from a Relay draft"
+    )
     expect(page.get_by_test_id("active-send-version")).to_contain_text(
         "Website sends currently use immutable Relay v1"
     )

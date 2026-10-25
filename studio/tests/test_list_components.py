@@ -417,8 +417,7 @@ class StudioListRowActionPillStyleTest(TestCase):
             "studio_list_action download.get_absolute_url 'View on site' 'secondary' True 'noopener noreferrer'",
         ]),
         ('templates/studio/email_templates/list.html', [
-            "studio_action_class 'destructive'",
-            "studio_action_class 'secondary'",
+            "studio_list_action edit_url 'Edit' 'secondary'",
         ]),
         ('templates/studio/crm/list.html', [
             "studio_action_class 'secondary'",
@@ -548,6 +547,9 @@ class StudioListRowActionPillStyleTest(TestCase):
                 "studio_action_class 'primary'",
                 # Course enrollment row "Change cohort" button (POST mutation).
                 "templates/studio/courses/enrollments_list.html:"
+                "studio_action_class 'primary'",
+                # Relay draft save is the editor's primary mutation.
+                "templates/studio/email_templates/edit.html:"
                 "studio_action_class 'primary'",
                 "templates/studio/events/form.html:"
                 "studio_action_class 'primary'",

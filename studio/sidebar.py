@@ -451,8 +451,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_email_template_list',
         'studio_email_template_edit',
         'studio_email_template_preview',
-        'studio_email_template_reset',
-        'studio_email_template_send_test',
+        'studio_email_template_publish',
     )),
     ('communication', 'announcement', ('studio_announcement_banner',)),
 

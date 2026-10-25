@@ -23,6 +23,7 @@ from unittest.mock import Mock, patch
 
 from community_base.config.service import set as package_set
 from community_base.mail.models import EmailDelivery
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -81,7 +82,7 @@ class GraceBase(TestCase):
         cls.main.stripe_price_id_yearly = "price_main_yearly"
         cls.main.save(update_fields=["stripe_price_id_monthly", "stripe_price_id_yearly"])
 
-    def _drain_and_collect(self):
+    def _drain_and_collect(self, subject="Relay preview subject"):
         """Drain pending deliveries with a local stub.
 
         Returns ``{recipient_email: resolved_context}`` — delivery ids
@@ -92,6 +93,11 @@ class GraceBase(TestCase):
         from email_app.testing import StubRelayClient
 
         stub = StubRelayClient()
+        stub.preview_template = Mock(return_value={
+            "subject": subject,
+            "html_body": "<p>Relay preview</p>",
+            "text_body": "Relay preview",
+        })
         with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
@@ -646,9 +652,11 @@ class ConfigurationAndCopyTest(GraceBase):
         self.assertEqual(delivery.status, Delivery.STATUS_SENT)
         self.assertEqual(delivery.attempt_count, 1)
         self.assertIsNotNone(delivery.email_delivery)
-        self._drain_and_collect()
+        self._drain_and_collect("Relay payment grace reminder subject")
         log = EmailLog.objects.get(email_type="payment_grace_reminder_member")
-        self.assertEqual(log.subject, "Payment needed to keep your paid membership")
+        self.assertEqual(log.recipient_email, delivery.recipient)
+        self.assertEqual(log.dedupe_key, delivery.email_delivery.idempotency_key)
+        self.assertEqual(log.subject, "Relay payment grace reminder subject")
 
 
 class DiscoveryAndAuditTest(GraceBase):
@@ -1288,7 +1296,11 @@ class SuppressedDeliveryTest(GraceBase):
         def suppress(**kwargs):
             return "unsubscribed_at_send"
 
-        with patch("community_base.mail.service.get", return_value=suppress):
+        package_config = {
+            **settings.COMMUNITY_BASE,
+            "MAIL_PREFERENCE_RESOLVER": suppress,
+        }
+        with self.settings(COMMUNITY_BASE=package_config):
             service.process_due_deliveries()
         delivery.refresh_from_db()
         self.assertEqual(delivery.status, Delivery.STATUS_SUPPRESSED)
@@ -1313,9 +1325,12 @@ class SuppressedDeliveryTest(GraceBase):
         def suppress(**kwargs):
             return "unsubscribed_at_send"
 
-        with (
-            patch.object(service, "_audit"),
-            patch("community_base.mail.service.get", return_value=suppress),
+        package_config = {
+            **settings.COMMUNITY_BASE,
+            "MAIL_PREFERENCE_RESOLVER": suppress,
+        }
+        with patch.object(service, "_audit"), self.settings(
+            COMMUNITY_BASE=package_config,
         ):
             grace, qualification = service.start_grace_from_failure(
                 invoice=invoice(), subscription=subscription(),

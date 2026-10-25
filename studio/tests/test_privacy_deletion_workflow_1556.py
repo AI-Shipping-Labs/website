@@ -21,6 +21,7 @@ from email_app.relay_transactional import (
     RelayTransactionalError,
     RelayTransactionalResult,
 )
+from email_app.testing import StubRelayTemplateClient
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
@@ -95,6 +96,18 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             data,
         )
 
+    def assert_completion_delivery(self, request_log, subject):
+        delivery = request_log.completion_delivery
+        self.assertEqual(delivery.status, PrivacyCompletionDelivery.STATUS_SENT)
+        self.assertEqual(delivery.attempt_count, 1)
+        self.assertEqual(delivery.recipient_ciphertext, "")
+        self.assertEqual(delivery.email_log.recipient_email, "[deleted-account]")
+        self.assertEqual(delivery.email_log.subject, subject)
+        self.assertEqual(
+            delivery.email_log.dedupe_key,
+            f"account-deletion-completed:{request_log.pk}",
+        )
+
     def test_user_callout_requires_an_accepted_request(self):
         pending = self.accepted_request(
             status=PrivacyRequestLog.STATUS_PENDING_DELIVERY,
@@ -162,7 +175,17 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         "accounts.services.privacy_delivery.send_relay_transactional",
         return_value=RelayTransactionalResult("relay-completed-1556", "queued", False),
     )
-    def test_canonical_success_links_audit_and_sends_one_scrubbed_confirmation(self, send_relay):
+    @patch(
+        "email_app.services.relay_templates.configured_template_client",
+    )
+    def test_canonical_success_links_audit_and_sends_one_scrubbed_confirmation(
+        self,
+        template_client,
+        send_relay,
+    ):
+        template_client.return_value.preview.return_value = {
+            "subject": "Relay account deletion subject",
+        }
         request_log = self.accepted_request()
         old_user_id = self.member.pk
         with patch(
@@ -188,24 +211,16 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         self.assertEqual(audit.old_user_id, old_user_id)
         self.assertNotIn("privacy-member", json.dumps(audit.row_count_summary))
 
-        delivery = request_log.completion_delivery
-        self.assertEqual(delivery.status, PrivacyCompletionDelivery.STATUS_SENT)
-        self.assertEqual(delivery.attempt_count, 1)
-        self.assertEqual(delivery.recipient_ciphertext, "")
-        self.assertEqual(delivery.email_log.recipient_email, "[deleted-account]")
-        self.assertEqual(
-            delivery.email_log.subject,
-            "Your AI Shipping Labs account has been deleted",
-        )
-        self.assertEqual(
-            delivery.email_log.dedupe_key,
-            f"account-deletion-completed:{request_log.pk}",
+        self.assert_completion_delivery(
+            request_log,
+            "Relay account deletion subject",
         )
         args, kwargs = send_relay.call_args
         self.assertEqual(args[0], "privacy-member@test.com")
         self.assertEqual(args[1], "account_deletion_completed")
         self.assertEqual(kwargs["cc"], ["team@aishippinglabs.com"])
         self.assertEqual(args[2]["support_id"], old_user_id)
+        template_client.return_value.preview.assert_called_once()
 
     @patch("email_app.relay_transactional.is_enabled", return_value=False)
     @patch("email_app.relay_transactional.get_config", side_effect=relay_config)
@@ -606,24 +621,30 @@ class PrivacyCompletionTemplateTest(TestCase):
             password="testpass",
         )
         self.client.force_login(superuser)
-        edit = self.client.get(
-            "/studio/email-templates/account_deletion_completed/edit/",
-        )
-        self.assertContains(edit, "Your AI Shipping Labs account has been deleted")
-        preview = self.client.post(
-            "/studio/email-templates/account_deletion_completed/preview/",
-            {
-                "subject": "Your AI Shipping Labs account has been deleted",
-                "body_markdown": (
-                    "Deleted at {{ completed_at_utc }}. "
-                    "Support ID {{ support_id }}. {{ privacy_email }}"
-                ),
-            },
-        )
-        self.assertContains(preview, "2026-08-13 11:00:00 UTC")
-        self.assertContains(preview, "Support ID 42")
-        self.assertContains(preview, "team@aishippinglabs.com")
-        self.assertNotContains(preview, "unsubscribe")
+        relay = StubRelayTemplateClient()
+        template = relay.template("account_deletion_completed")
+        template["subject"] = "Relay account deletion subject"
+        relay.save_draft("account_deletion_completed", template)
+        relay.calls = []
+        with patch(
+            "studio.views.email_templates.configured_template_client",
+            return_value=relay,
+        ):
+            edit = self.client.get(
+                "/studio/email-templates/account_deletion_completed/edit/",
+            )
+            preview = self.client.post(
+                "/studio/email-templates/account_deletion_completed/preview/",
+                {"recipient": "named"},
+            )
+        self.assertContains(edit, "Relay account deletion subject")
+        self.assertEqual(preview.status_code, 200)
+        preview_call = relay.calls[-1]
+        context = preview_call["context"]
+        self.assertEqual(context["completed_at_utc"], "2026-08-13 11:00:00 UTC")
+        self.assertEqual(context["support_id"], 42)
+        self.assertEqual(context["privacy_email"], "team@aishippinglabs.com")
+        self.assertNotIn("unsubscribe_url", context)
 
     def test_no_destructive_privacy_api_exists(self):
         response = self.client.delete("/api/privacy/deletion-requests/1")

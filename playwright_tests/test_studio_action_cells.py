@@ -277,7 +277,7 @@ class TestStudioActionCells:
             )
 
             row = page.locator('tr[data-template-name="welcome"]')
-            edit = row.get_by_role("link", name="Edit in Relay", exact=True)
+            edit = row.get_by_role("link", name="Edit", exact=True)
             assert edit.is_visible()
             assert "bg-secondary" in edit.get_attribute("class")
             assert "border-red-500/40" not in edit.get_attribute("class")

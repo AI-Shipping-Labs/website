@@ -47,7 +47,7 @@
               <span class="text-xs text-muted-foreground">Compatibility template</span>
             {% else %}
               {% url 'studio_email_template_edit' row.template_name as edit_url %}
-              {% studio_list_action edit_url 'Edit in Relay' 'secondary' %}
+              {% studio_list_action edit_url 'Edit' 'secondary' %}
             {% endif %}
           </div>
         </td>

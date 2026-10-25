@@ -53,14 +53,15 @@
     </label>
     <div class="flex items-center justify-between gap-4 pt-2 border-t border-border">
       <a href="{% url 'studio_email_template_list' %}" class="{% studio_action_class 'secondary' %}">Cancel</a>
-      <button type="submit" class="{% studio_action_class 'primary' %}">Save Relay draft</button>
+      <button type="submit" class="{% studio_action_class 'primary' %}">Save draft</button>
     </div>
   </form>
 
   <div class="space-y-4">
-    <form method="post" action="{% url 'studio_email_template_publish' template_name %}" data-confirm="Publish the current Relay draft as a new immutable version?">
+    <p class="text-sm text-muted-foreground">Publishes the last saved draft as a new immutable version. Unsaved edits are not included.</p>
+    <form method="post" action="{% url 'studio_email_template_publish' template_name %}" data-confirm="Publish the last saved Relay draft as a new immutable version? Unsaved edits are not included.">
       {% csrf_token %}
-      <button type="submit" class="{% studio_action_class 'primary' %}">Publish current draft</button>
+      <button type="submit" class="{% studio_action_class 'secondary' %}">Publish saved draft</button>
     </form>
     <form method="post" action="{% url 'studio_email_template_preview' template_name %}" target="tpl-preview" class="space-y-3">
       {% csrf_token %}

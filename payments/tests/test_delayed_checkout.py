@@ -4,12 +4,12 @@ Since A1.2 slice 2 the checkout failure mail queues a durable
 ``EmailDelivery`` under the ``checkout-payment-failed:{session_id}``
 idempotency key; the provider send happens from the delivery worker, so
 tests drain pending deliveries (with a stubbed or failing
-``ses_local`` client) instead of patching the legacy SES transport.
+Relay client) instead of patching the transport.
 """
 
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from community_base.jobs.runner import RetryableJobError
 from community_base.mail.jobs import deliver as deliver_job
@@ -84,6 +84,30 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             "livemode": False,
             "created": int(timezone.now().timestamp()),
         }
+
+    def _deliver_with_preview_subject(self, subject):
+        relay = StubRelayClient()
+        relay.preview_template = Mock(return_value={
+            "subject": subject,
+            "html_body": "<p>Relay preview</p>",
+            "text_body": "Relay preview",
+        })
+        with patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=relay,
+        ):
+            deliver_pending_mail()
+
+    def _assert_checkout_failure_audit(self):
+        self._deliver_with_preview_subject(
+            "Relay delayed checkout failure subject",
+        )
+        logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
+        self.assertEqual(logs.count(), 1)
+        log = logs.get()
+        self.assertEqual(log.recipient_email, self.user.email)
+        self.assertEqual(log.dedupe_key, "checkout-payment-failed:cs_delayed")
+        self.assertEqual(log.subject, "Relay delayed checkout failure subject")
 
     def test_unpaid_completed_reserves_without_any_entitlement(self):
         handle_checkout_completed(
@@ -177,13 +201,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             deliveries.get().idempotency_key,
             "checkout-payment-failed:cs_delayed",
         )
-        deliver_pending_mail()
-        logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
-        self.assertEqual(logs.count(), 1)
-        self.assertEqual(
-            logs.get().subject,
-            "Your AI Shipping Labs payment didn't complete",
-        )
+        self._assert_checkout_failure_audit()
 
     @patch("payments.services.webhook_handlers._send_checkout_failure_email")
     def test_wrong_mode_failure_is_quarantined_without_email(self, send_failure):

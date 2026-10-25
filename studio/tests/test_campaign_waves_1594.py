@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
 from email_app.services.campaign_repermission import REPERMISSION_COPY, REPERMISSION_CTA
+from email_app.testing import StubRelayTemplateClient
 from payments.models import Tier
 from tests.fixtures import create_user_with_membership
 
@@ -52,6 +53,24 @@ class StudioRepermissionBase(TestCase):
 
 
 class StudioRepermissionAuthoringTest(StudioRepermissionBase):
+    def _assert_repermission_context(self, context):
+        body_markdown = context["body_markdown"]
+        self.assertIn(REPERMISSION_COPY, body_markdown)
+        self.assertIn(REPERMISSION_CTA, body_markdown)
+        self.assertEqual(body_markdown.count("/api/verify-and-subscribe"), 1)
+        self.assertNotIn("/api/verify-email", body_markdown)
+
+    def _campaign_detail_with_relay(self, campaign):
+        relay = StubRelayTemplateClient()
+        with patch(
+            "studio.views.campaigns.configured_template_client",
+            return_value=relay,
+        ):
+            detail = self.client.get(
+                reverse("studio_campaign_detail", args=[campaign.pk]),
+            )
+        return detail, relay.calls[-1]
+
     def test_create_persists_unverified_only_and_detail_shows_safety_policy(self):
         response = self.client.post(
             reverse("studio_campaign_create"),
@@ -67,18 +86,16 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
         self.assertRedirects(
             response, reverse("studio_campaign_detail", args=[campaign.pk]),
         )
-        detail = self.client.get(
-            reverse("studio_campaign_detail", args=[campaign.pk]),
-        )
+        detail, preview_call = self._campaign_detail_with_relay(campaign)
         self.assertContains(detail, "Re-permission monitoring")
         self.assertContains(detail, "pilot of at most 100 recipients")
         self.assertContains(detail, "waves contain at most 250")
         self.assertContains(detail, "24 hours")
         self.assertContains(detail, "bounce rate below 2%")
         self.assertContains(detail, "zero complaints")
-        self.assertContains(detail, REPERMISSION_COPY)
-        self.assertContains(detail, REPERMISSION_CTA)
-        self.assertContains(detail, "preview-only")
+        self.assertEqual(preview_call["template_key"], "campaign-broadcast")
+        self._assert_repermission_context(preview_call["context"])
+        self.assertIn("preview-only", preview_call["context"]["body_markdown"])
 
     @patch(
         "studio.views.campaigns.send_campaign_delivery_to_relay",
@@ -109,13 +126,7 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
         payload = send.call_args.kwargs
         self.assertEqual(payload["recipient_email"], controlled.email)
         self.assertEqual(payload["subject"], "[TEST] Confirm your subscription")
-        self.assertIn(REPERMISSION_COPY, payload["html_body"])
-        self.assertIn(REPERMISSION_COPY, payload["text_body"])
-        self.assertEqual(
-            payload["html_body"].count("/api/verify-and-subscribe"),
-            1,
-        )
-        self.assertNotIn("/api/verify-email", payload["html_body"])
+        self._assert_repermission_context(payload)
         self.assertIsNotNone(payload["unsubscribe_url"])
         self.assertEqual(payload["metadata"]["recipient"], controlled.email)
 

@@ -404,6 +404,45 @@ def _create_snapshotted_delivery(email, *, state, subject, unsubscribed=False):
     return campaign, delivery, recipient
 
 
+def _reject_campaign_batch(campaign):
+    from email_app.models import CampaignDelivery
+    from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
+    from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
+
+    send_campaign(campaign.pk)
+    delivery_ids = list(
+        CampaignDelivery.objects.filter(campaign=campaign)
+        .values_list("pk", flat=True)
+    )
+    with mock.patch(
+        "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
+        side_effect=RelayCampaignDeliveryRejected("rejected"),
+    ):
+        send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
+    connection.close()
+
+
+def _assert_failed_recipient_ui(page, django_server, campaign):
+    page.goto(
+        f"{django_server}/studio/campaigns/{campaign.pk}/",
+        wait_until="domcontentloaded",
+    )
+    assert page.get_by_text("Needs attention", exact=True).is_visible()
+    assert page.get_by_text("Sending", exact=True).count() == 0
+    counts = page.get_by_test_id("campaign-delivery-counts")
+    assert counts.get_by_text("Failed: 1", exact=True).is_visible()
+    attention = page.get_by_test_id("campaign-attention-link")
+    assert attention.get_by_text(
+        "Review 1 recipient needing attention", exact=True,
+    ).is_visible()
+    attention.click()
+    page.wait_for_load_state("domcontentloaded")
+    assert page.get_by_text("hard-fail@test.com", exact=True).is_visible()
+    state = page.get_by_test_id("campaign-delivery-state")
+    assert state.get_by_text("Failed", exact=True).is_visible()
+    assert page.get_by_test_id("campaign-delivery-retry").is_visible()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestStaffSeesNeedsAttentionAfterHardRejection:
     @pytest.mark.core
@@ -413,10 +452,6 @@ class TestStaffSeesNeedsAttentionAfterHardRejection:
         django_server,
         browser,
     ):
-        from email_app.models import CampaignDelivery
-        from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
-        from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
-
         _ensure_tiers()
         _clear_campaigns()
         staff = _create_staff_user("admin@test.com")
@@ -437,41 +472,30 @@ class TestStaffSeesNeedsAttentionAfterHardRejection:
             page.locator('[data-testid="send-campaign-btn"]').click()
             page.wait_for_load_state("domcontentloaded")
 
-        send_campaign(campaign.pk)
-        delivery_ids = list(
-            CampaignDelivery.objects.filter(campaign=campaign)
-            .values_list("pk", flat=True)
-        )
-        with mock.patch(
-            "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
-            side_effect=RelayCampaignDeliveryRejected("rejected"),
-        ):
-            send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
-        connection.close()
-
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_text("Needs attention", exact=True).is_visible()
-        assert page.get_by_text("Sending", exact=True).count() == 0
-        counts = page.get_by_test_id("campaign-delivery-counts")
-        assert counts.get_by_text("Failed: 1", exact=True).is_visible()
-        assert page.get_by_test_id("campaign-attention-link").get_by_text(
-            "Review 1 recipient needing attention",
-            exact=True,
-        ).is_visible()
-
-        page.get_by_test_id("campaign-attention-link").click()
-        page.wait_for_load_state("domcontentloaded")
-        assert page.get_by_text("hard-fail@test.com", exact=True).is_visible()
-        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
-            "Failed",
-            exact=True,
-        ).is_visible()
-        assert page.get_by_test_id("campaign-delivery-retry").is_visible()
-        connection.close()
+        _reject_campaign_batch(campaign)
+        _assert_failed_recipient_ui(page, django_server, campaign)
         context.close()
+
+
+def _queue_failed_retry(page, recipients_url):
+    with mock.patch("jobs.tasks.async_task", return_value="retry-task"):
+        page.goto(recipients_url, wait_until="domcontentloaded")
+        page.locator('[data-testid="campaign-delivery-retry"]').click()
+        page.wait_for_load_state("domcontentloaded")
+    assert page.get_by_text(
+        "Queued retry for retry-me@test.com.", exact=True,
+    ).is_visible()
+
+
+def _complete_failed_retry(campaign, delivery):
+    from email_app.tasks.send_campaign import send_campaign_batch
+
+    with mock.patch(
+        "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
+        return_value="retried-ok",
+    ):
+        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
+    connection.close()
 
 
 @pytest.mark.django_db(transaction=True)
@@ -479,13 +503,9 @@ class TestStaffRetriesFailedRecipient:
     @pytest.mark.core
     @browser_journey
     def test_retry_failed_recipient_can_finish_the_campaign(
-        self,
-        django_server,
-        browser,
+        self, django_server, browser,
     ):
         from email_app.models import CampaignDelivery
-        from email_app.tasks.send_campaign import send_campaign_batch
-
         _ensure_tiers()
         _clear_campaigns()
         _create_staff_user("admin@test.com")
@@ -496,27 +516,11 @@ class TestStaffRetriesFailedRecipient:
         )
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
-
-        with mock.patch("jobs.tasks.async_task", return_value="retry-task"):
-            page.goto(
-                f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1",
-                wait_until="domcontentloaded",
-            )
-            page.locator('[data-testid="campaign-delivery-retry"]').click()
-            page.wait_for_load_state("domcontentloaded")
-
-        assert page.get_by_text(
-            "Queued retry for retry-me@test.com.",
-            exact=True,
-        ).is_visible()
-
-        with mock.patch(
-            "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
-            return_value="retried-ok",
-        ):
-            send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-        connection.close()
-
+        recipients_url = (
+            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1"
+        )
+        _queue_failed_retry(page, recipients_url)
+        _complete_failed_retry(campaign, delivery)
         page.goto(
             f"{django_server}/studio/campaigns/{campaign.pk}/",
             wait_until="domcontentloaded",

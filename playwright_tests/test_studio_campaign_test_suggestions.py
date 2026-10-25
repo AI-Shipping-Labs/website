@@ -88,6 +88,16 @@ def _chip(page, email):
     return page.locator(f'[data-testid="test-recipient-chip"][data-email="{email}"]')
 
 
+def _send_test(page):
+    with mock.patch(
+        "studio.views.campaigns.send_campaign_delivery_to_relay",
+        return_value="relay-id",
+    ) as relay_send:
+        page.get_by_role("button", name="Send Test").click()
+        page.wait_for_load_state("domcontentloaded")
+    return relay_send
+
+
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOwnEmailOneClickFill:
@@ -107,12 +117,7 @@ class TestOwnEmailOneClickFill:
         _chip(page, "admin@test.com").click()
         assert _textarea(page).input_value() == "admin@test.com"
 
-        with mock.patch(
-            "studio.views.campaigns.send_campaign_delivery_to_relay",
-            return_value="relay-id",
-        ) as relay_send:
-            page.get_by_role("button", name="Send Test").click()
-            page.wait_for_load_state("domcontentloaded")
+        relay_send = _send_test(page)
 
         assert page.get_by_text(
             "Test email sent to 1 address(es): admin@test.com.",
@@ -139,12 +144,7 @@ class TestReuseRecentAddress:
         page.goto(detail, wait_until="domcontentloaded")
 
         _textarea(page).fill("qa@example.com")
-        with mock.patch(
-            "studio.views.campaigns.send_campaign_delivery_to_relay",
-            return_value="relay-id",
-        ):
-            page.get_by_role("button", name="Send Test").click()
-            page.wait_for_load_state("domcontentloaded")
+        _send_test(page)
 
         page.goto(detail, wait_until="domcontentloaded")
         recent_chip = _chip(page, "qa@example.com")
@@ -206,12 +206,7 @@ class TestMultiRecipientFromChips:
         _chip(page, "seed@example.com").click()
         assert _textarea(page).input_value() == "admin@test.com\nseed@example.com"
 
-        with mock.patch(
-            "studio.views.campaigns.send_campaign_delivery_to_relay",
-            return_value="relay-id",
-        ) as relay_send:
-            page.get_by_role("button", name="Send Test").click()
-            page.wait_for_load_state("domcontentloaded")
+        relay_send = _send_test(page)
 
         assert page.get_by_text(
             "Test email sent to 2 address(es): admin@test.com, seed@example.com.",

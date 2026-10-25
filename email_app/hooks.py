@@ -1105,97 +1105,66 @@ def _resolve_coursework_context(delivery, context):
         )
 
 
+def _resolve_onboarding_submitted_context(delivery, context):
+    from accounts.services.onboarding_mail import (  # noqa: PLC0415
+        resolve_onboarding_submitted_context,
+    )
+
+    resolve_onboarding_submitted_context(delivery, context)
+
+
+_PURPOSE_CONTEXT_RESOLVERS = {
+    "account_email_change_confirm": _resolve_email_change_confirm,
+    "account_email_changed_notice": _resolve_email_changed_notice,
+    "account_deletion_request": _resolve_privacy_studio_url,
+    "event_recap_ready": _resolve_recap_context,
+    "post_event_followup": _resolve_followup_context,
+    "event_reminder": _resolve_event_reminder_context,
+    "workshop_announcement": _resolve_workshop_announcement_context,
+    "course_announcement": _resolve_course_announcement_context,
+    "plan_shared": _resolve_plan_shared_context,
+    "content_comment": _resolve_content_comment_context,
+    "submission_recorded": _resolve_submission_recorded_context,
+    "bookclub_book_summary": _resolve_bookclub_summary_context,
+    "bookclub_chapter_summary": _resolve_bookclub_summary_context,
+    "sprint_end_recap": _resolve_sprint_end_recap_context,
+    "sprint_partner_intro": _resolve_sprint_partner_intro_context,
+    "sprint_week_start": _resolve_sprint_cadence_context,
+    "sprint_week_note_prompt": _resolve_sprint_cadence_context,
+    "checkout_payment_failed": _resolve_checkout_payment_failed_context,
+    "download_delivery": _resolve_download_delivery_context,
+    "maven_welcome": _resolve_maven_welcome_context,
+    "maven_removal": _resolve_maven_removal_context,
+    "onboarding_submitted": _resolve_onboarding_submitted_context,
+    "lead_magnet_delivery": _resolve_lead_magnet_context,
+    "welcome_imported": _resolve_welcome_imported_context,
+    "community_invite": _member_greeting,
+    "onboarding_reminder": _member_greeting,
+}
+for _purpose in _STAFF_NOTIFICATION_PURPOSES:
+    _PURPOSE_CONTEXT_RESOLVERS[_purpose] = _resolve_staff_notification_context
+for _purpose in _GRACE_MAIL_PURPOSES:
+    _PURPOSE_CONTEXT_RESOLVERS[_purpose] = _resolve_payment_grace_context
+for _purpose in _COURSEWORK_PURPOSES:
+    _PURPOSE_CONTEXT_RESOLVERS[_purpose] = _resolve_coursework_context
+for _purpose in (
+    "email_verification_signup", "email_verification_subscribe", "password_reset",
+    "email_verification_signup_reminder", "email_verification_subscribe_reminder",
+):
+    _PURPOSE_CONTEXT_RESOLVERS[_purpose] = _resolve_auth_links
+
+
 def resolve_auth_mail_context(*, delivery, context):
-    """Mint every rendered link in the worker, not in the stored context.
-
-    Auth sends (#1610 slices 1-2), the email-change confirm and notice,
-    the privacy deletion request, the recap, the post-event follow-up, the
-    notification sends (slice 4: event reminder, workshop announcement,
-    plan share), the staff heads-ups and the bookclub summaries (slice 1),
-    the plans and payments member mail (slice 2: sprint-end recap,
-    partner intro, cadence week notes, the four payment-grace templates
-    and checkout failure), the content download delivery and Maven
-    welcome (slice 3), and the operator surfaces (A1.2 remainder
-    slice 4: the Studio test send, the newsletter subscribe verification
-    and lead magnet delivery, the imported-member welcome) persist only
-    non-secret inputs and relations; this resolver builds their URLs at
-    delivery time so ``EmailDelivery.context_data`` never retains a
-    clickable link (issue #1613, enforced by the site guard in
-    ``email_app.services.context_guard``). Binding failures raise
-    ``PermanentJobError`` — a stale relation must fail closed, not
-    retry forever — and never name the token or URL. The resolver
-    mutates only the in-memory copy the worker passes in; the stored
-    context and its idempotency hash stay byte-for-byte unchanged.
-    """
-
+    """Build delivery-time links without persisting secrets in mail context."""
     from integrations.config import site_base_url  # noqa: PLC0415
 
     if delivery.category == STUDIO_TEST_SEND_CATEGORY:
         _resolve_studio_test_send_context(delivery, context)
-    elif delivery.purpose == "account_email_change_confirm":
-        _resolve_email_change_confirm(delivery, context)
-    elif delivery.purpose == "account_email_changed_notice":
-        _resolve_email_changed_notice(delivery, context)
-    elif delivery.purpose == "account_deletion_request":
-        _resolve_privacy_studio_url(delivery, context)
-    elif delivery.purpose == "event_recap_ready":
-        _resolve_recap_context(delivery, context)
-    elif delivery.purpose == "post_event_followup":
-        _resolve_followup_context(delivery, context)
-    elif delivery.purpose == "event_reminder":
-        _resolve_event_reminder_context(delivery, context)
-    elif delivery.purpose == "workshop_announcement":
-        _resolve_workshop_announcement_context(delivery, context)
-    elif delivery.purpose == "course_announcement":
-        _resolve_course_announcement_context(delivery, context)
-    elif delivery.purpose == "plan_shared":
-        _resolve_plan_shared_context(delivery, context)
-    elif delivery.purpose == "content_comment":
-        _resolve_content_comment_context(delivery, context)
-    elif delivery.purpose == "submission_recorded":
-        _resolve_submission_recorded_context(delivery, context)
-    elif delivery.purpose in _STAFF_NOTIFICATION_PURPOSES:
-        _resolve_staff_notification_context(delivery, context)
-    elif delivery.purpose in ("bookclub_book_summary", "bookclub_chapter_summary"):
-        _resolve_bookclub_summary_context(delivery, context)
-    elif delivery.purpose == "sprint_end_recap":
-        _resolve_sprint_end_recap_context(delivery, context)
-    elif delivery.purpose == "sprint_partner_intro":
-        _resolve_sprint_partner_intro_context(delivery, context)
-    elif delivery.purpose in ("sprint_week_start", "sprint_week_note_prompt"):
-        _resolve_sprint_cadence_context(delivery, context)
-    elif delivery.purpose in _GRACE_MAIL_PURPOSES:
-        _resolve_payment_grace_context(delivery, context)
-    elif delivery.purpose == "checkout_payment_failed":
-        _resolve_checkout_payment_failed_context(delivery, context)
-    elif delivery.purpose == "download_delivery":
-        _resolve_download_delivery_context(delivery, context)
-    elif delivery.purpose == "maven_welcome":
-        _resolve_maven_welcome_context(delivery, context)
-    elif delivery.purpose == "maven_removal":
-        _resolve_maven_removal_context(delivery, context)
-    elif delivery.purpose == "onboarding_submitted":
-        from accounts.services.onboarding_mail import (  # noqa: PLC0415
-            resolve_onboarding_submitted_context,
-        )
-
-        resolve_onboarding_submitted_context(delivery, context)
-    elif delivery.purpose == "lead_magnet_delivery":
-        _resolve_lead_magnet_context(delivery, context)
-    elif delivery.purpose == "welcome_imported":
-        _resolve_welcome_imported_context(delivery, context)
-    elif delivery.purpose in ("community_invite", "onboarding_reminder"):
-        _member_greeting(delivery, context)
-    elif delivery.purpose in _COURSEWORK_PURPOSES:
-        _resolve_coursework_context(delivery, context)
-    elif delivery.purpose in (
-        "email_verification_signup",
-        "email_verification_subscribe",
-        "password_reset",
-        "email_verification_signup_reminder",
-        "email_verification_subscribe_reminder",
-    ):
-        _resolve_auth_links(delivery, context)
+    else:
+        resolver = _PURPOSE_CONTEXT_RESOLVERS.get(delivery.purpose)
+        if resolver is None:
+            return context
+        resolver(delivery, context)
 
     # Render-only injection: templates render absolute links with it,
     # and it never enters the stored context.

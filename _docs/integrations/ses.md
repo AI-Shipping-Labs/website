@@ -64,10 +64,13 @@ deletes a queue message only after the website returns HTTP 200 with `ok` or
 ## Historical correlation fields
 
 `EmailLog.ses_message_id`, `SesEvent`, and SES-named event API fields remain
-intentionally. They store provider identifiers already present in historical
-records and correlate current Relay delivery events with those records.
-Renaming them would be a data and public API migration unrelated to removing
-the old site-owned send path.
+intentionally for historical records and public API compatibility. Historical
+direct-SES rows store the inner SES `mail.messageId` and can correlate with
+provider events. Current Relay-backed rows store Relay's message identifier
+because the transactional response does not expose the provider SES ID, so new
+provider events do not correlate with those rows. Address-based bounce and
+complaint safety plus `SesEvent` recording continue to work. Issue #2010 owns
+the remaining identifier-contract gap.
 
 For outbound senders, campaign settings, and template operations, see
 [`relay.md`](relay.md).

@@ -1175,11 +1175,11 @@ def resolve_auth_mail_context(*, delivery, context):
 
 
 def record_send(delivery, rendered, result):
-    """Write the EmailLog audit row exactly as EmailService did.
+    """Write the website EmailLog audit after Relay accepts the send request.
 
-    The package calls this from the worker after provider acceptance, so a
-    recorded send now implies provider acceptance. Surrogate recipients
-    (no saved user row, issue #703) still produce no Studio-visible row.
+    The audit records the Relay response and does not prove provider delivery.
+    Surrogate recipients (no saved user row, issue #703) still produce no
+    Studio-visible row.
 
     A delivery carrying an ``events.event`` relation (the recap-ready send,
     A1.2 slice 3) keeps the event FK the recap flow attached to its

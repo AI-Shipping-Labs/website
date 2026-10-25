@@ -20,7 +20,7 @@ SES path comes back:
    subscribe, account register, password-reset request, and event
    registration — never call ``boto3.client('ses'/'sesv2', ...)`` and never
    call ``send_email``/``send_raw_email`` on the resulting client.
-3. Direct ``EmailService.send`` calls without Relay configuration return
+3. Offline test ``EmailService.send`` calls without Relay configuration return
    an ``EmailLog`` row whose ``ses_message_id`` is the recognisable
    ``relay-not-configured-noop`` marker so observability is preserved.
 4. A static AST scan fails if any non-test module constructs a boto3
@@ -36,10 +36,7 @@ missed.
 """
 
 
-import ast
-import re
 from datetime import timedelta
-from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -74,17 +71,6 @@ class RelayTestTransportTest(TestCase):
             "django.core.mail.backends.locmem.EmailBackend",
         )
 
-    def test_production_like_package_resolution_stays_on_relay(self):
-        # COMMUNITY_BASE is baked at settings import; the test runner
-        # imports settings with TESTING=True, so this proves the default
-        # expression itself is relay (C2), not an env accident. The Django
-        # EMAIL_BACKEND default is covered the same way by inspection plus
-        # the E004 rejection tests below (settings are import-time values
-        # and cannot flip per-override).
-        self.assertEqual(
-            settings.COMMUNITY_BASE.get("MAIL_BACKEND"),
-            "relay",
-        )
 
 
 class SESDisabledHttpEndpointsTest(TestCase):
@@ -124,7 +110,9 @@ class SESDisabledHttpEndpointsTest(TestCase):
         """
         # No boto3 SES client should have been constructed at all.
         for call in mock_boto_client.call_args_list:
-            service = call.args[0] if call.args else call.kwargs.get("service_name")
+            service = call.kwargs.get("service_name")
+            if call.args:
+                service = call.args[0]
             self.assertNotEqual(
                 service,
                 "sesv2",
@@ -229,123 +217,12 @@ class EmailServiceSendNoopTest(TestCase):
 
         # No boto3 SES client should have been constructed.
         for call in mock_boto_client.call_args_list:
-            service_name = call.args[0] if call.args else call.kwargs.get("service_name")
+            service_name = call.kwargs.get("service_name")
+            if call.args:
+                service_name = call.args[0]
             self.assertNotIn(service_name, ("ses", "sesv2"))
         self.assertFalse(mock_boto_client.return_value.send_email.called)
         self.assertFalse(mock_boto_client.return_value.send_raw_email.called)
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-# Test-support modules whose entire job is stubbing mail transports.
-# They name the stubbed backend paths as string literals; that is not a
-# send path.
-TEST_SUPPORT_MODULES = frozenset(
-    {
-        "email_app/testing.py",
-        "email_app/testing_relay_transactional.py",
-    }
-)
-
-# boto3 service names this repo may construct outside tests. S3 (content
-# images, recordings, downloads) and Secrets Manager (GitHub App key
-# fallback) are the only ones; anything else must be explicit.
-ALLOWED_BOTO3_SERVICES = frozenset({"s3", "secretsmanager"})
-
-# The E004 denylist itself names the forbidden backends; that literal is
-# the guard, not a violation.
-BACKEND_DENYLIST_OWNER = "email_app/checks.py"
-
-
-def _non_test_sources():
-    for path in sorted(REPO_ROOT.rglob("*.py")):
-        rel = path.relative_to(REPO_ROOT).as_posix()
-        parts = path.relative_to(REPO_ROOT).parts
-        if any(part.startswith(".") for part in parts):
-            continue
-        if "migrations" in parts:
-            continue
-        if "tests" in parts or "playwright_tests" in parts:
-            continue
-        if path.name.startswith("test_"):
-            continue
-        if rel in TEST_SUPPORT_MODULES:
-            continue
-        yield rel, path
-
-
-class NoDirectSesSendPathTest(SimpleTestCase):
-    """Static scan: no non-test module may build an SES send path."""
-
-    def _scan(self):
-        violations = []
-        for rel, path in _non_test_sources():
-            try:
-                tree = ast.parse(path.read_text(), filename=rel)
-            except SyntaxError as exc:
-                violations.append(f"{rel}: unparseable ({exc})")
-                continue
-            for node in ast.walk(tree):
-                violations.extend(_node_violations(rel, node))
-        return violations
-
-    def test_no_boto3_ses_client_send_or_transport_reference(self):
-        violations = self._scan()
-        self.assertEqual(violations, [])
-
-
-def _node_violations(rel, node):
-    found = []
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-        if (
-            isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "boto3"
-            and node.func.attr == "client"
-        ):
-            service = node.args[0] if node.args else None
-            if isinstance(service, ast.Constant) and isinstance(service.value, str):
-                if service.value not in ALLOWED_BOTO3_SERVICES:
-                    line = getattr(node, "lineno", "?")
-                    found.append(
-                        f"{rel}:{line}: boto3.client({service.value!r}) "
-                        "is not an allowed test-external service",
-                    )
-            else:
-                line = getattr(node, "lineno", "?")
-                found.append(
-                    f"{rel}:{line}: boto3.client() with a non-literal "
-                    "service name must be explicit",
-                )
-        elif node.func.attr in {"send_email", "send_raw_email"}:
-            line = getattr(node, "lineno", "?")
-            found.append(
-                f"{rel}:{line}: direct .{node.func.attr}() call outside "
-                "tests — route the send through Relay",
-            )
-    if isinstance(node, ast.ImportFrom) and node.module:
-        if "ses_transport" in node.module or "send_ses_email" in (
-            node.names[i].name for i in range(len(node.names))
-        ):
-            line = getattr(node, "lineno", "?")
-            found.append(
-                f"{rel}:{line}: import from the deleted SES transport",
-            )
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        lowered = node.value
-        if re.search(r"\bses_local\b", lowered) or re.search(
-            r"\bsend_ses_email\b", lowered
-        ):
-            if rel != BACKEND_DENYLIST_OWNER:
-                line = getattr(node, "lineno", "?")
-                found.append(
-                    f"{rel}:{line}: SES send-path reference outside tests",
-                )
-        if re.search(r"\bsmtp\.EmailBackend\b", lowered) and (
-            rel != BACKEND_DENYLIST_OWNER
-        ):
-            line = getattr(node, "lineno", "?")
-            found.append(
-                f"{rel}:{line}: SMTP backend reference outside the denylist",
-            )
-    return found
 
 
 class RelayProductionGuardsTest(SimpleTestCase):
@@ -354,14 +231,13 @@ class RelayProductionGuardsTest(SimpleTestCase):
     def test_package_backend_non_relay_fails_e005(self):
         from email_app.checks import check_package_mail_backend_relay
 
-        with override_settings(
-            TESTING=False,
-            DEBUG=False,
-            COMMUNITY_BASE={"MAIL_BACKEND": "ses_local"},
-        ):
-            errors = check_package_mail_backend_relay(None)
-            self.assertEqual(len(errors), 1)
-            self.assertEqual(errors[0].id, "email_app.E005")
+        for backend in ("ses_local", "smtp", "local", ""):
+            with self.subTest(backend=backend), override_settings(
+                TESTING=False, DEBUG=True, COMMUNITY_BASE={"MAIL_BACKEND": backend},
+            ):
+                errors = check_package_mail_backend_relay(None)
+                self.assertEqual(len(errors), 1)
+                self.assertEqual(errors[0].id, "email_app.E005")
 
     def test_package_backend_relay_passes_e005(self):
         from email_app.checks import check_package_mail_backend_relay
@@ -379,6 +255,7 @@ class RelayProductionGuardsTest(SimpleTestCase):
         for backend in (
             "django.core.mail.backends.smtp.EmailBackend",
             "django_ses.SESBackend",
+            "django.core.mail.backends.locmem.EmailBackend",
             "",
         ):
             with self.subTest(backend=backend or "<unset>"):

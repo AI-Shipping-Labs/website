@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from email_app.models import EmailLog, EmailTemplateOverride
-from email_app.testing import deliver_pending_mail
+from email_app.testing import deliver_pending_mail, local_render_backend
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 
 User = get_user_model()
@@ -646,7 +646,7 @@ class EmailTemplateSendTestTest(TestCase):
         from email_app.testing import StubSESClient
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

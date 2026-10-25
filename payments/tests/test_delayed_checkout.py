@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course, CourseAccess
 from email_app.models import EmailLog
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from payments.models import (
     CheckoutAccountBinding,
     CheckoutFulfillment,
@@ -285,7 +285,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
 
                 raise ConnectTimeoutError(endpoint_url="https://ses.test")
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=TimedOutSESClient(),
         ):
@@ -295,7 +295,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(delivery.state, EmailDelivery.State.RETRYABLE)
 
         # The retried worker job completes the provider send.
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=StubSESClient(),
         ):

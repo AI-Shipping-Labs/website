@@ -36,6 +36,7 @@ import os
 import pytest
 from django.utils import timezone
 
+from email_app.testing import local_render_backend
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -431,7 +432,7 @@ class TestSubscribePageDiscloseAccount:
         from email_app.testing import StubSESClient
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

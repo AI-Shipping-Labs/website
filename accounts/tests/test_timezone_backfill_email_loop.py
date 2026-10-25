@@ -43,13 +43,13 @@ class TimezoneBackfillEmailLoopTest(TestCase):
         EmailService().send(self.user, "event_reminder", self.REMINDER_CONTEXT)
         return mock_ses.call_args[0][2]
 
-    @patch.object(EmailService, "_send_ses", return_value="loop-before")
+    @patch.object(EmailService, "_send_relay", return_value="loop-before")
     def test_reminder_renders_utc_before_backfill(self, mock_ses):
         html = self._render_reminder_html(mock_ses)
         self.assertIn("16:00 UTC", html)
         self.assertNotIn("Europe/Berlin", html)
 
-    @patch.object(EmailService, "_send_ses", return_value="loop-after")
+    @patch.object(EmailService, "_send_relay", return_value="loop-after")
     def test_reminder_renders_local_zone_after_passive_backfill(self, mock_ses):
         # The passive client backfill persists the detected browser zone.
         self.client.force_login(self.user)

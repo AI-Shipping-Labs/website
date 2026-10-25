@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from email_app.models import EmailTemplateOverride
+from email_app.testing import local_render_backend
 
 User = get_user_model()
 
@@ -177,7 +178,7 @@ class SendTestUnaffectedByPreviewRecipientTest(TestCase):
         self.assertEqual(response['Location'], '/studio/email-templates/')
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

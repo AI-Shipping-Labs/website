@@ -19,6 +19,7 @@ from email_app.services.email_classification import (
     TRANSACTIONAL_EMAIL_TYPES,
     classify_email_type,
 )
+from email_app.testing import local_render_backend
 from plans.models import (
     PARTNER_INTRO_EMAIL_STATUS_FAILED,
     PARTNER_INTRO_EMAIL_STATUS_SENT,
@@ -205,7 +206,7 @@ class PartnerIntroEmailServiceTest(TestCase):
         from email_app.testing import StubSESClient
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

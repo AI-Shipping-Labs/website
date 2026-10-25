@@ -21,7 +21,7 @@ from django.utils import timezone
 
 from content.models import Cohort, CohortEnrollment, Course, Module, Unit
 from email_app.models import EmailLog
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from events.models import Event, EventRegistration, EventSeries
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
@@ -126,7 +126,7 @@ class CohortEventRemindersTest(TestCase):
         self.assertEqual(bell_urls['registrant@test.com'], self.event.get_absolute_url())
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

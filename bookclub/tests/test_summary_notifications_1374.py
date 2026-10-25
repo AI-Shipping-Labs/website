@@ -28,7 +28,7 @@ from bookclub.summary_notifications import (
     notify_summary_published,
 )
 from content.access import LEVEL_MAIN
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from notifications.models import Notification
 from payments.models import Tier
 from tests.fixtures import set_membership
@@ -426,7 +426,7 @@ class WorkerDeliveryContextTest(SummaryNotificationsFixture):
 
     def _drain(self):
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

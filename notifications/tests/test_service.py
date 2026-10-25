@@ -8,7 +8,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Article, Course, Download, Workshop
-from email_app.testing import deliver_pending_mail
+from email_app.testing import deliver_pending_mail, local_render_backend
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
@@ -611,7 +611,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
             )
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ):

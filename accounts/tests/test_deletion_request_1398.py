@@ -16,7 +16,7 @@ from email_app.services.email_classification import (
     classify_email_type,
 )
 from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from tests.fixtures import TierSetupMixin, set_membership
 
 
@@ -56,7 +56,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):
@@ -131,7 +131,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
         stub = StubSESClient()
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):
@@ -169,7 +169,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
         stub = StubSESClient()
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):
@@ -207,7 +207,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                 self.client.force_login(user)
                 stub = StubSESClient()
 
-                with patch(
+                with local_render_backend(), patch(
                     "community_base.mail.backends.ses_local.configured_client",
                     return_value=stub,
                 ):
@@ -307,7 +307,7 @@ class AccountDeletionRequestFailureTest(TestCase):
         stub = StubSESClient()
         with (
             patch("accounts.services.privacy.get_config", return_value="team@aishippinglabs.com"),
-            patch(
+            local_render_backend(), patch(
                 "community_base.mail.backends.ses_local.configured_client",
                 return_value=stub,
             ),
@@ -348,7 +348,7 @@ class AccountDeletionRequestFailureTest(TestCase):
         # member did their part) with no EmailLog receipt.
         stub = _FailingSESClient(RuntimeError("private SES exception detail"))
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

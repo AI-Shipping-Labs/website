@@ -21,7 +21,7 @@ from content.services.download_validation import (
     storage_key_from_configured_s3_url,
     validate_download_metadata,
 )
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -37,7 +37,7 @@ def deliver_and_capture():
     """
 
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         'community_base.mail.backends.ses_local.configured_client',
         return_value=stub,
     ):

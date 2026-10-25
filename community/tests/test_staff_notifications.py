@@ -1433,10 +1433,10 @@ class EmailServiceCcArgumentTest(TestCase):
         self.assertEqual(_normalize_cc(""), [])
         self.assertEqual(_normalize_cc([""]), [])
 
-        # And the cc actually rides through to _send_ses.
+        # And the cc actually rides through to _send_relay.
         user = User.objects.create_user(email="cc-recipient@test.com")
         service = EmailService()
-        with patch.object(service, "_send_ses", return_value="ses-cc-1") as mock_ses:
+        with patch.object(service, "_send_relay", return_value="ses-cc-1") as mock_ses:
             service.send(
                 user,
                 "cofounder_welcome",
@@ -1450,14 +1450,14 @@ class EmailServiceCcArgumentTest(TestCase):
         self.assertEqual(mock_ses.call_args.kwargs.get("cc"), "cc@test.com")
 
     def test_send_bcc_string_lands_in_ses_payload(self):
-        """Issue #950: a bcc kwarg threads through send() to _send_ses,
+        """Issue #950: a bcc kwarg threads through send() to _send_relay,
         and cc is left untouched so the two paths stay independent.
         """
         from email_app.services import EmailService
 
         user = User.objects.create_user(email="bcc-recipient@test.com")
         service = EmailService()
-        with patch.object(service, "_send_ses", return_value="ses-bcc-1") as mock_ses:
+        with patch.object(service, "_send_relay", return_value="ses-bcc-1") as mock_ses:
             service.send(
                 user,
                 "cofounder_welcome",
@@ -1960,7 +1960,7 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         self.assert_member_visible_with_staff_bcc(welcome)
         options = welcome["delivery"].transport_options or {}
-        self.assertNotIn("bad-reply-to", options.get("reply_to") or [])
+        self.assertNotIn("reply_to", options)
         diagnostic = "\n".join(logs.output)
         self.assertIn("SES_WELCOME_REPLY_TO_EMAIL", diagnostic)
         self.assertNotIn("bad-reply-to", diagnostic)

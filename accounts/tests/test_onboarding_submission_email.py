@@ -11,7 +11,7 @@ from django.urls import reverse
 from accounts.tests.test_onboarding_booking_ctas import _basic_tier
 from booking.models import BookingHost
 from community.models import CallHost
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 from questionnaires.models import Response
 from tests.fixtures import set_membership
 
@@ -79,7 +79,7 @@ class OnboardingSubmissionEmailTest(TestCase):
         self.assertEqual(delivery.related_object_id, str(response.id))
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):
@@ -166,7 +166,7 @@ class OnboardingSubmissionEmailTest(TestCase):
             recipient_user=self.member,
         ).first()
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

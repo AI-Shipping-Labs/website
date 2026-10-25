@@ -405,7 +405,7 @@ class CreatePlanFromRequestSubmitTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
         self.ses_patcher = patch(
-            'email_app.services.email_service.EmailService._send_ses',
+            'email_app.services.email_service.EmailService._send_relay',
             return_value='ses-1',
         )
         self.mock_ses = self.ses_patcher.start()

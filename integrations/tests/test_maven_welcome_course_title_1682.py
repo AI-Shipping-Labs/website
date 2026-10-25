@@ -20,7 +20,7 @@ from django.test import TestCase
 
 from content.models import Cohort, Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven import run_occurrence_steps
 from tests.fixtures import create_user_with_membership
@@ -38,7 +38,7 @@ def _drain(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
 
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         "community_base.mail.backends.ses_local.configured_client",
         return_value=stub,
     ):

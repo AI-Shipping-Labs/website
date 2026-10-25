@@ -102,7 +102,7 @@ class PlanSendReadyEmailApiTest(TestCase):
 
     def test_dry_run_reports_eligible_with_zero_writes(self):
         with patch(
-            'email_app.services.email_service.EmailService._send_ses',
+            'email_app.services.email_service.EmailService._send_relay',
         ) as mock_ses:
             response = self._post({'dry_run': True})
 
@@ -165,7 +165,7 @@ class PlanSendReadyEmailApiTest(TestCase):
             1,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_historically_shared_plan_reports_already_shared(self, mock_ses):
         shared_at = timezone.now()
         self.plan.shared_at = shared_at
@@ -208,7 +208,7 @@ class PlanSendReadyEmailApiTest(TestCase):
         self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_FAILED)
         self.assertIn(provider_detail, log.last_error)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_action_never_touches_a_sibling_plan(self, mock_ses):
         mock_ses.return_value = 'msg-1'
         sibling = Plan.objects.create(member=self.other, sprint=self.sprint)

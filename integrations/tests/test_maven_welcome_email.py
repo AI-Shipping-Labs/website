@@ -25,7 +25,7 @@ from accounts.utils.tokens import (
 )
 from email_app.package_mail import send_package_mail
 from email_app.services.email_service import VERIFY_FOOTER_TOKEN_EXPIRY_HOURS
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 from integrations.services.maven import (
     NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
     _welcome_context,
@@ -41,7 +41,7 @@ def _welcome_html(user, course="Course"):
         user, "maven_welcome", _welcome_context(course),
     )
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         "community_base.mail.backends.ses_local.configured_client",
         return_value=stub,
     ):

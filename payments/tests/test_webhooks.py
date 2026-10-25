@@ -23,7 +23,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from payments import services as payment_services
 from payments.exceptions import WebhookPermanentError
 from payments.models import (
@@ -840,7 +840,7 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
         # cofounder_welcome. Run the real handler so email_verified is
         # flipped before any send happens.
         stub_client = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub_client,
         ):

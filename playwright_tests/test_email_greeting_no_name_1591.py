@@ -16,6 +16,7 @@ import os
 import pytest
 from django.utils import timezone
 
+from email_app.testing import local_render_backend
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import create_user as _create_user
@@ -276,7 +277,7 @@ def test_nameless_member_password_reset_is_greeted_as_a_person(
     # path — the worker mints the reset link and renders the template
     # for a nameless recipient.
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         "community_base.mail.backends.ses_local.configured_client",
         return_value=stub,
     ):

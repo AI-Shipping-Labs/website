@@ -16,6 +16,7 @@ from community.services.import_slack import (
 from community.services.slack import SlackAPIError
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
+from email_app.testing import local_render_backend
 from integrations.config import clear_config_cache
 from payments.models import TierOverride
 
@@ -274,7 +275,7 @@ class SlackImportWelcomeEmailTest(TestCase):
 
         self.assertEqual(result["status"], "sent")
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

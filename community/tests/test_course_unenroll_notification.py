@@ -11,7 +11,7 @@ from django.utils import timezone
 from accounts.models import User
 from community.services.staff_notifications import notify_course_unenroll
 from content.models import Cohort, CohortEnrollment, Course, Enrollment
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -21,7 +21,7 @@ PURPOSE = 'course_unenroll_notification'
 def _drain(delivery):
     """Deliver one delivery through the real worker; return (to, subject, html)."""
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         'community_base.mail.backends.ses_local.configured_client',
         return_value=stub,
     ):

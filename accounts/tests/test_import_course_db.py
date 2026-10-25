@@ -16,6 +16,7 @@ from accounts.services.import_course_db import (
 from accounts.services.import_users import run_import_batch
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
+from email_app.testing import local_render_backend
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -278,7 +279,7 @@ class CourseDbWelcomeEmailTest(TestCase):
 
         self.assertEqual(result["status"], "sent")
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

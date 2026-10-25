@@ -15,7 +15,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from accounts.models import User
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -59,7 +59,8 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        deliver_pending_mail()
+        with local_render_backend():
+            deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/verify-email?token=',
@@ -85,7 +86,8 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        deliver_pending_mail()
+        with local_render_backend():
+            deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/verify-email?token=',
@@ -113,7 +115,8 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        deliver_pending_mail()
+        with local_render_backend():
+            deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/password-reset?token=',
@@ -135,7 +138,8 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        deliver_pending_mail()
+        with local_render_backend():
+            deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/password-reset?token=',

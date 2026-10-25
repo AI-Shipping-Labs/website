@@ -226,7 +226,7 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(result['ready_email']['status'], 'eligible')
         self.assertTrue(result['ready_email']['eligible'])
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_dry_run_after_success_reports_already_sent(self, mock_ses):
         mock_ses.return_value = 'msg-1'
         self._run()

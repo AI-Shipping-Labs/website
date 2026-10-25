@@ -23,7 +23,7 @@ Scenarios
    ``EmailLog`` rows after a notify.
 4. Subscribed member ends up with exactly one ``EmailLog`` row whose
    ``ses_message_id`` is the ``ses-disabled-noop`` literal returned by
-   ``EmailService._send_ses`` when ``SES_ENABLED=False`` (the conftest
+   ``EmailService._send_relay`` when ``SES_ENABLED=False`` (the conftest
    forces this for Playwright runs).
 5. Globally unsubscribed (``user.unsubscribed=True``) user gets zero
    ``EmailLog`` rows after a notify.
@@ -409,7 +409,7 @@ class TestWorkshopSubscribedEmail:
         assert logs.count() == 1, (
             f'expected exactly one EmailLog row, got {logs.count()}'
         )
-        # The conftest forces SES_ENABLED=False, so _send_ses returns
+        # The conftest forces SES_ENABLED=False, so _send_relay returns
         # the noop literal and that's what lands in the DB.
         assert logs.first().ses_message_id == 'ses-disabled-noop'
 

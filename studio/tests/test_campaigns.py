@@ -259,7 +259,7 @@ class StudioCampaignDetailTest(TestCase):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>test</html>"
         mock_service.render_plain_text_email.return_value = "Plain test"
-        mock_service._send_ses.return_value = "test-ses-id"
+        mock_service._send_relay.return_value = "test-ses-id"
 
         response = self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",
@@ -269,7 +269,7 @@ class StudioCampaignDetailTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test email sent to 1 address(es): preview@example.com.")
-        mock_service._send_ses.assert_called_once_with(
+        mock_service._send_relay.assert_called_once_with(
             "preview@example.com",
             "[TEST] Detail Campaign",
             "<html>test</html>",
@@ -282,7 +282,7 @@ class StudioCampaignDetailTest(TestCase):
         self.assertEqual(self.campaign.status, "draft")
         self.assertEqual(self.campaign.sent_count, 0)
 
-    @patch.object(EmailService, "_send_ses", return_value="test-ses-clean")
+    @patch.object(EmailService, "_send_relay", return_value="test-ses-clean")
     def test_test_send_to_unsubscribed_user_uses_clean_footer(self, mock_ses):
         recipient = User.objects.create_user(
             email="recipient@example.com",
@@ -310,7 +310,7 @@ class StudioCampaignDetailTest(TestCase):
         )
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, "_send_ses", return_value="test-ses-arbitrary")
+    @patch.object(EmailService, "_send_relay", return_value="test-ses-arbitrary")
     def test_test_send_to_arbitrary_address_has_test_note_in_both_parts(
         self, mock_ses,
     ):
@@ -332,7 +332,7 @@ class StudioCampaignDetailTest(TestCase):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>test</html>"
         mock_service.render_plain_text_email.return_value = "Plain test"
-        mock_service._send_ses.return_value = "test-ses-id"
+        mock_service._send_relay.return_value = "test-ses-id"
 
         response = self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",
@@ -342,7 +342,7 @@ class StudioCampaignDetailTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test email sent to 2 address(es): one@example.com, two@example.com.")
-        self.assertEqual(mock_service._send_ses.call_count, 2)
+        self.assertEqual(mock_service._send_relay.call_count, 2)
 
     @patch("studio.views.campaigns.EmailService")
     def test_test_send_invalid_address_shows_error(self, MockService):
@@ -356,7 +356,7 @@ class StudioCampaignDetailTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Invalid email address(es): not-an-email.")
         self.assertContains(response, "good@example.com, not-an-email")
-        mock_service._send_ses.assert_not_called()
+        mock_service._send_relay.assert_not_called()
 
     def test_test_send_requires_staff(self):
         self.client.logout()

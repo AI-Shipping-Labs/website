@@ -96,7 +96,7 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             1,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_patch_shared_at_null_clears_silently(self, mock_ses):
         """PATCH with ``{"shared_at": null}`` clears the timestamp and
         fires NOTHING — un-share is silent by design."""
@@ -176,7 +176,7 @@ class PlanSharePatchTest(PlansApiShareTestBase):
         'notifications.services.notification_service.'
         'NotificationService.create_plan_shared'
     )
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_helper_failure_does_not_unwind_shared_at_save(
         self, mock_ses, mock_helper, mock_log_exc,
     ):

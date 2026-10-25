@@ -107,7 +107,7 @@ def signup_newsletter(client, email='subscriber@test.com'):
 # --- Email + password signup -------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class EmailPasswordSignupAttributionTest(TestCase):
     """Scenario: email/password signup snapshots UTMs from cookie + session."""
 
@@ -154,7 +154,7 @@ class EmailPasswordSignupAttributionTest(TestCase):
 class NewsletterSignupAttributionTest(TestCase):
     """Scenario: newsletter signup snapshots UTMs and uses signup_path=newsletter."""
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+    @patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
     def test_last_touch_session_only_signup_path_newsletter(self, _ses):
         c = make_browser_client()
         seed_last_touch_session(
@@ -179,7 +179,7 @@ class NewsletterSignupAttributionTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class NoUtmSignupTest(TestCase):
     """Scenario: signup with no UTMs creates an empty row, not nothing, not error."""
 
@@ -203,7 +203,7 @@ class NoUtmSignupTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class FirstTouchOnlyTest(TestCase):
     """Scenario: first-touch cookie only, no session — first-touch fields populated."""
 
@@ -228,7 +228,7 @@ class FirstTouchOnlyTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LastTouchOnlyTest(TestCase):
     """Scenario: session has last-touch but no first-touch cookie."""
 
@@ -256,7 +256,7 @@ class LastTouchOnlyTest(TestCase):
 # --- Campaign FK resolution ---------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class CampaignFkResolutionTest(TestCase):
 
     def setUp(self):
@@ -294,7 +294,7 @@ class CampaignFkResolutionTest(TestCase):
 # --- Backfill of CampaignVisit ------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class BackfillCampaignVisitTest(TestCase):
     """Scenario: anonymous CampaignVisit rows get attached to the new user."""
 
@@ -596,7 +596,7 @@ class SignalRobustnessTest(TestCase):
 # --- Edge: malformed cookie ---------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class MalformedCookieTest(TestCase):
     """Bad first-touch JSON must not crash the signup."""
 

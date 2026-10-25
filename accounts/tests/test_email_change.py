@@ -20,7 +20,7 @@ from accounts.services.email_change import (
 )
 from accounts.services.email_resolution import resolve_user_by_email
 from email_app.models import EmailLog
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -363,7 +363,7 @@ class EmailChangeConfirmServiceTest(TestCase):
             send=False,
         )
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=StubSESClient(),
         ) as client_factory:
@@ -507,7 +507,7 @@ class EmailChangeConfirmServiceTest(TestCase):
         self.user.email_verified = False
         self.user.save(update_fields=["email_verified"])
 
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=StubSESClient(),
         ) as client_factory:

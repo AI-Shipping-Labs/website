@@ -31,6 +31,7 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
+from email_app.testing import local_render_backend
 from payments.models import Membership, Tier, TierOverride
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
@@ -92,7 +93,7 @@ class GraceBase(TestCase):
         from email_app.testing import StubSESClient
 
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

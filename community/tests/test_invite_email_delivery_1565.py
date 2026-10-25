@@ -17,7 +17,7 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.staff_notifications import _build_removal_context
 from community.tasks.hooks import community_invite_task
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from payments.models import Tier
@@ -50,7 +50,7 @@ class PaidCheckoutInviteEmailTest(TestCase):
         self, _lookup,
     ):
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):

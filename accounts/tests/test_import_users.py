@@ -22,6 +22,7 @@ from accounts.services.import_users import (
 )
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
+from email_app.testing import local_render_backend
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -442,7 +443,7 @@ class ImportUsersServiceTest(TestCase):
             for i in range(1000)
         ]
 
-        with patch("email_app.services.email_service.EmailService._send_ses") as send_ses:
+        with patch("email_app.services.email_service.EmailService._send_relay") as send_ses:
             batch = run_import_batch("slack", rows(*import_rows))
 
         self.assertEqual(batch.users_created, 1000)
@@ -510,7 +511,7 @@ class WelcomeImportedEmailTaskTest(TestCase):
                     "MAIL_BACKEND": "ses_local",
                 }
             ),
-            patch(
+            local_render_backend(), patch(
                 "community_base.mail.backends.ses_local.configured_client",
                 return_value=stub,
             ),

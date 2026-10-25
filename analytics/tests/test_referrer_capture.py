@@ -47,7 +47,7 @@ def signup_email_password(client, email='new@test.com', password='pw1234ABcd'):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LinkedInFirstTouchStickyTest(TestCase):
 
     def setUp(self):
@@ -97,7 +97,7 @@ class LinkedInFirstTouchStickyTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class DirectLandingTest(TestCase):
 
     def setUp(self):
@@ -125,7 +125,7 @@ class DirectLandingTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class SameOriginSkipTest(TestCase):
 
     def setUp(self):
@@ -177,7 +177,7 @@ class SameOriginSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LastTouchOverwriteTest(TestCase):
 
     def setUp(self):
@@ -226,7 +226,7 @@ class BotReferrerSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LoginPageReferrerSkipTest(TestCase):
 
     def setUp(self):
@@ -257,7 +257,7 @@ class LoginPageReferrerSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_ses', return_value='ses-id')
+@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class MalformedReferrerCookieTest(TestCase):
 
     def setUp(self):

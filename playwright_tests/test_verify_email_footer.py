@@ -28,6 +28,7 @@ from unittest.mock import patch
 
 import pytest
 
+from email_app.testing import local_render_backend
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
@@ -55,7 +56,7 @@ def _capture_send_html(user, template_name, context):
     from email_app.testing import StubSESClient
 
     stub = StubSESClient()
-    with patch(
+    with local_render_backend(), patch(
         "community_base.mail.backends.ses_local.configured_client",
         return_value=stub,
     ):

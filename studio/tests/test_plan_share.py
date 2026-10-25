@@ -74,7 +74,7 @@ class PlanShareViewTest(TestCase):
         self.plan.refresh_from_db()
         self.assertIsNone(self.plan.shared_at)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_missing_intent_delivers_nothing(self, mock_ses):
         self.client.login(email='staff@test.com', password='pw')
 
@@ -87,7 +87,7 @@ class PlanShareViewTest(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
         self.assertEqual(PlanReadyEmailLog.objects.count(), 0)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_unknown_intent_delivers_nothing(self, mock_ses):
         self.client.login(email='staff@test.com', password='pw')
 
@@ -98,7 +98,7 @@ class PlanShareViewTest(TestCase):
         self.assertIsNone(self.plan.shared_at)
         self.assertEqual(Notification.objects.count(), 0)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_reshare_intent_on_unshared_plan_delivers_nothing(self, mock_ses):
         self.client.login(email='staff@test.com', password='pw')
 
@@ -138,7 +138,7 @@ class PlanShareViewTest(TestCase):
             PlanReadyEmailLog.objects.filter(plan=self.plan).count(), 1,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_editor_share_returns_to_the_editor(self, mock_ses):
         mock_ses.return_value = 'msg-1'
         self.client.login(email='staff@test.com', password='pw')
@@ -176,7 +176,7 @@ class PlanShareViewTest(TestCase):
             'already' in str(m) for m in response.context['messages']
         ))
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_ready_intent_on_historically_shared_plan_does_not_send(
         self, mock_ses,
     ):
@@ -301,7 +301,7 @@ class PlanShareViewTest(TestCase):
         self.assertTrue(any('failed' in m for m in messages))
         self.assertFalse(any('Plan shared with' in m for m in messages))
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_success_message_names_the_member(self, mock_ses):
         mock_ses.return_value = 'msg-1'
         self.client.login(email='staff@test.com', password='pw')

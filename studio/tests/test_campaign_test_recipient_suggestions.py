@@ -145,7 +145,7 @@ class CampaignRecentTestRecipientsTest(TestCase):
     def test_successful_send_records_recent_recipient(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>x</html>"
-        mock_service._send_ses.return_value = "ses-id"
+        mock_service._send_relay.return_value = "ses-id"
 
         self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",
@@ -161,7 +161,7 @@ class CampaignRecentTestRecipientsTest(TestCase):
     def test_recent_recipient_appears_as_chip_on_next_visit(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>x</html>"
-        mock_service._send_ses.return_value = "ses-id"
+        mock_service._send_relay.return_value = "ses-id"
 
         self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",
@@ -180,7 +180,7 @@ class CampaignRecentTestRecipientsTest(TestCase):
     def test_recent_list_is_capped_at_five_most_recent_first(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>x</html>"
-        mock_service._send_ses.return_value = "ses-id"
+        mock_service._send_relay.return_value = "ses-id"
 
         for i in range(1, 7):
             self.client.post(
@@ -199,7 +199,7 @@ class CampaignRecentTestRecipientsTest(TestCase):
     def test_resending_existing_recent_dedups_case_insensitively(self, MockService):
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>x</html>"
-        mock_service._send_ses.return_value = "ses-id"
+        mock_service._send_relay.return_value = "ses-id"
 
         self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",
@@ -220,7 +220,7 @@ class CampaignRecentTestRecipientsTest(TestCase):
 
         mock_service = MockService.return_value
         mock_service.render_markdown_email.return_value = "<html>x</html>"
-        mock_service._send_ses.side_effect = EmailServiceError("boom")
+        mock_service._send_relay.side_effect = EmailServiceError("boom")
 
         self.client.post(
             f"/studio/campaigns/{self.campaign.pk}/test-send",

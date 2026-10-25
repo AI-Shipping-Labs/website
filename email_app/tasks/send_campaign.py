@@ -492,7 +492,7 @@ def _relay_transport_failure_state(exc):
 def _send_campaign_transport(prepared, campaign_id, delivery_id, user_pk):
     """Deliver one prepared campaign message. Defaults to Relay; honors mock patches if set."""
     legacy_mock_send = getattr(EmailService, 'send_prepared', None)
-    legacy_mock_ses = getattr(EmailService, '_send_ses', None)
+    legacy_mock_ses = getattr(EmailService, '_send_relay', None)
     if (
         hasattr(legacy_mock_send, 'mock_calls')
         or hasattr(legacy_mock_send, '_mock_return_value')

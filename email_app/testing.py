@@ -62,26 +62,7 @@ class StubRelayClient:
     def send(self, delivery, *, context=None):
         self.calls.append({"delivery": delivery, "context": context})
 
-        # Trigger transitional MAIL_SEND_RECORDER if present so EmailLog assertions pass
-        try:
-            from community_base.kernel.hooks import resolve  # noqa: PLC0415
-            from django.conf import settings  # noqa: PLC0415
-
-            cb_conf = getattr(settings, "COMMUNITY_BASE", {})
-            recorder_hook = cb_conf.get("MAIL_SEND_RECORDER")
-            if recorder_hook:
-                recorder = (
-                    resolve(recorder_hook)
-                    if isinstance(recorder_hook, str)
-                    else recorder_hook
-                )
-                rendered = SimpleNamespace(
-                    subject=(context or {}).get("subject", "Test Subject")
-                )
-                result = SimpleNamespace(message_id=self.message_id)
-                recorder(delivery, rendered, result)
-        except Exception:
-            pass
+        _record_send(delivery, context or {}, self.message_id)
 
         return RelaySendResult(
             message_id=self.message_id,
@@ -105,6 +86,21 @@ class StubRelayClient:
 
     def get_template(self, key):
         return {"key": key, "latest_version": 1}
+
+
+def _record_send(delivery, context, message_id):
+    from community_base.kernel.hooks import resolve  # noqa: PLC0415
+    from django.conf import settings  # noqa: PLC0415
+
+    recorder_hook = settings.COMMUNITY_BASE.get("MAIL_SEND_RECORDER")
+    if not recorder_hook:
+        return
+    recorder = recorder_hook
+    if isinstance(recorder_hook, str):
+        recorder = resolve(recorder_hook)
+    rendered = SimpleNamespace(subject=context.get("subject", "Test Subject"))
+    result = SimpleNamespace(message_id=message_id)
+    recorder(delivery, rendered, result)
 
 
 _patcher = None

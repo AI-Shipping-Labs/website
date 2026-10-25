@@ -57,13 +57,7 @@ from email_app.services.email_rendering import (
     render_template_parts,
     render_template_with_footer,
 )
-from email_app.services.relay_campaigns import (
-    RelayCampaignDeliveryAmbiguous,
-    RelayCampaignDeliveryRejected,
-    get_relay_api_key,
-    get_relay_base_url,
-    send_campaign_delivery_to_relay,
-)
+from email_app.services.relay_transport import send_rendered_relay
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -91,7 +85,11 @@ def normalize_cc(cc):
         return []
     if isinstance(cc, str):
         cc = [cc]
-    return [c.strip() for c in cc if c and c.strip()]
+    addresses = []
+    for address in cc:
+        if address and address.strip():
+            addresses.append(address.strip())
+    return addresses
 
 
 # Old private name kept importable for existing callers and tests.
@@ -402,15 +400,8 @@ class EmailService:
         )
 
     def send_prepared(self, prepared):
-        """Cross only the transport boundary for a prepared message.
-
-        Historic seam name kept so the suite's transport mocks
-        (``send_prepared`` / ``_send_ses`` patches across the campaign,
-        studio, analytics, api, accounts, community, plans, and events
-        suites, plus the Playwright campaign specs) keep intercepting
-        here. The implementation delivers through Relay.
-        """
-        return self._send_ses(
+        """Cross only the Relay transport boundary for a prepared message."""
+        return self._send_relay(
             prepared.to_email,
             prepared.subject,
             prepared.full_html,
@@ -642,78 +633,6 @@ class EmailService:
             verify_email_url=verify_email_url,
         )
 
-    def _send_ses(
-        self,
-        to_email,
-        subject,
-        html_body,
-        *,
-        text_body,
-        email_type=None,
-        unsubscribe_url=None,
-        cc=None,
-        bcc=None,
-        redact_recipient=False,
-        idempotency_key=None,
-        metadata=None,
-    ):
-        """Deliver one prepared message through Relay (historic seam name).
-
-        Relay cutover P4: the direct SES implementation is gone. This keeps its name and signature
-        so the suite's transport mocks keep intercepting exactly one
-        seam, and so the Studio/campaign mock branches keep routing
-        through ``send_prepared`` unchanged.
-
-        When Relay is not configured (tests, local dev without Relay
-        credentials) the send short-circuits with a recognisable
-        ``relay-not-configured-noop`` id and no network call — the same
-        safety posture the old ``SES_ENABLED`` kill-switch provided.
-
-        ``cc``/``bcc`` are accepted for seam compatibility and ignored:
-        the Relay campaign transport is per-recipient and no production
-        caller passes them.
-
-        Returns:
-            str: Relay message ID.
-
-        Raises:
-            EmailServiceError: If Relay definitively rejects the send.
-            EmailTransportOutcomeUnknown: If the outcome is indeterminate.
-        """
-        from uuid import uuid4
-
-        recipient_label = "[privacy-recipient]" if redact_recipient else to_email
-        if not get_relay_base_url() or not get_relay_api_key():
-            logger.info(
-                "Relay not configured - skipping send to %s (subject=%s)",
-                recipient_label,
-                subject,
-            )
-            return "relay-not-configured-noop"
-        key = idempotency_key or f"shim-{uuid4().hex}"
-        try:
-            return send_campaign_delivery_to_relay(
-                recipient_email=to_email,
-                subject=subject,
-                html_body=html_body,
-                text_body=text_body,
-                idempotency_key=key,
-                unsubscribe_url=unsubscribe_url,
-                metadata=metadata,
-            )
-        except RelayCampaignDeliveryRejected as e:
-            if redact_recipient:
-                logger.error("Relay rejected redacted recipient request")
-                raise EmailServiceError("Relay privacy send failed") from None
-            logger.exception("Failed to send email via Relay to %s", recipient_label)
-            raise EmailServiceError(f"Relay send failed for {to_email}: {e}") from e
-        except RelayCampaignDeliveryAmbiguous as e:
-            if redact_recipient:
-                logger.error("Relay transport outcome is unknown for redacted recipient")
-                raise EmailTransportOutcomeUnknown(
-                    "Relay privacy send outcome is unknown",
-                ) from None
-            logger.exception("Relay transport outcome is unknown for %s", recipient_label)
-            raise EmailTransportOutcomeUnknown(
-                f"Relay send outcome is unknown for {to_email}: {e}",
-            ) from e
+    def _send_relay(self, to_email, subject, html_body, **kwargs):
+        """Deliver prepared content at the Relay transport boundary."""
+        return send_rendered_relay(to_email, subject, html_body, **kwargs)

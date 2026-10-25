@@ -237,7 +237,7 @@ def get_sender_for_email_type(email_type):
 
     ``None`` (or any unclassified type) falls back to the transactional
     sender, matching the historical ``email_kind='transactional'`` default
-    of ``_send_ses`` — this covers low-level callers that render their own
+    of ``_send_relay`` — this covers low-level callers that render their own
     HTML and pass no template name (e.g. campaign preview sends pass
     ``'campaign'`` explicitly; SES-plumbing tests pass nothing).
     """

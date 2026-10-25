@@ -732,7 +732,7 @@ def _send_studio_test_campaign(
     unsubscribe_url: str | None = None,
 ) -> str:
     legacy_mock_send = getattr(EmailService, "send_prepared", None)
-    legacy_mock_ses = getattr(EmailService, "_send_ses", None)
+    legacy_mock_ses = getattr(EmailService, "_send_relay", None)
     if (
         hasattr(legacy_mock_send, "mock_calls")
         or hasattr(legacy_mock_send, "_mock_return_value")
@@ -740,7 +740,7 @@ def _send_studio_test_campaign(
         or hasattr(legacy_mock_ses, "_mock_return_value")
     ):
         service = EmailService()
-        return service._send_ses(
+        return service._send_relay(
             recipient,
             subject,
             html_body,

@@ -43,28 +43,33 @@ def send_package_mail(
     related=None,
     category=None,
 ):
-    """Send one transactional mail through the package (A1.2).
-
-    Returns the durable ``EmailDelivery`` (state ``suppressed`` when the
-    preference resolver opted the recipient out — the old path returned
-    ``None`` for the same case). SES transport outcomes land on the delivery
-    from the worker; a transport failure no longer raises into the caller.
-    ``related`` takes a saved model instance and lands on the delivery as
-    its ``related_object_type``/``related_object_id`` pair; the site
-    recorder maps an ``events.event`` relation onto the ``EmailLog`` audit
-    row's event FK. ``category`` labels the delivery for caller-side
-    classification (A1.2 slice 4: the Studio test send marks itself so the
-    worker resolver knows the delivery has no producer relation); the
-    preference resolver ignores it.
-    """
-
+    """Create a durable Relay delivery with site sender and welcome reply settings."""
     context = context or {}
-    # Issue #1613: nothing durable may exist yet when the guard fires, so
-    # a URL-bearing context is refused before any row or job is created.
     ensure_no_rendered_urls(template_name, context)
     to_email = (recipient_email or getattr(user, "email", "") or "").strip()
     key = idempotency_key or f"{template_name}:{uuid4().hex}"
+    with transaction.atomic():
+        return package_send(
+            purpose=template_name, to=to_email, context=context, idempotency_key=key,
+            user=_saved_user(user), sender=_relay_sender(template_name),
+            extra=_mail_extra(template_name, cc, bcc), related=related, category=category,
+        )
 
+
+def _saved_user(user):
+    if isinstance(user, Model) and getattr(user, "pk", None):
+        return user
+    return None
+
+
+def _relay_sender(template_name):
+    sender = get_sender_for_email_type(template_name)
+    if "@" in sender:
+        return sender.split("@")[0]
+    return sender
+
+
+def _mail_extra(template_name, cc, bcc):
     extra = {}
     if cc is not None:
         extra["cc"] = cc
@@ -81,18 +86,4 @@ def send_package_mail(
         if reply_to:
             extra["reply_to"] = [reply_to]
 
-    with transaction.atomic():
-        sender = get_sender_for_email_type(template_name)
-        if "@" in sender:
-            sender = sender.split("@")[0]
-        return package_send(
-            purpose=template_name,
-            to=to_email,
-            context=context,
-            idempotency_key=key,
-            user=user if isinstance(user, Model) and getattr(user, "pk", None) else None,
-            sender=sender,
-            extra=extra or None,
-            related=related,
-            category=category,
-        )
+    return extra or None

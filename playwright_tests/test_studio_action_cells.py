@@ -20,6 +20,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -253,6 +254,7 @@ class TestStudioActionCells:
         page.wait_for_url(f"**/studio/users/{target.pk}/")
         context.close()
 
+    @browser_journey
     def test_email_template_row_has_one_relay_edit_action(
         self,
         django_server,

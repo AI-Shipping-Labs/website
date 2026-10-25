@@ -8,6 +8,7 @@ from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
+from scripts.browser_journey_policy import browser_journey
 
 pytestmark = [
     pytest.mark.local_only,
@@ -32,6 +33,7 @@ EXPECTED_GUIDANCE = {
 @pytest.mark.parametrize(
     "template_name,screenshot_name", PREVIEW_CASES
 )
+@browser_journey
 def test_series_email_editor_previews_through_relay(
     django_server,
     browser,

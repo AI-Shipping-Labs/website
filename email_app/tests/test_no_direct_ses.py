@@ -31,7 +31,10 @@ def _production_sources():
 
 class OutboundEmailGuardTest(SimpleTestCase):
     def test_removed_local_sources_stay_absent(self):
-        present = [path for path in REMOVED_PATHS if (REPO_ROOT / path).exists()]
+        present = []
+        for path in REMOVED_PATHS:
+            if (REPO_ROOT / path).exists():
+                present.append(path)
         present.extend(
             path.relative_to(REPO_ROOT).as_posix()
             for path in (REPO_ROOT / "email_app/email_templates").glob("*.md")
@@ -52,6 +55,7 @@ class OutboundEmailGuardTest(SimpleTestCase):
             "from django_ses import SESBackend; SESBackend()",
             "from django.conf import settings; FROM = settings.SES_FROM_EMAIL",
             "import smtplib as smtp; smtp.SMTP_SSL('smtp.example.com')",
+            "from django.core.mail.backends.smtp import EmailBackend; EmailBackend()",
             "EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'",
             "COMMUNITY_BASE = {'MAIL_BACKEND': 'ses_local'}",
             "SETTING = 'SES_FROM_EMAIL'",

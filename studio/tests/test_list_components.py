@@ -648,7 +648,6 @@ class StudioListRowActionRenderTest(TestCase):
         self.assertContains(response, 'data-testid="view-on-site"')
         self.assertContains(response, 'rel="noopener noreferrer"')
 
-    pass
     def test_crm_list_profile_action_renders_secondary_pill_with_testid(self):
         from crm.models import CRMRecord
 

@@ -397,9 +397,7 @@ class TestAnonymousRegistrantSignsInLater:
 
 @pytest.mark.django_db(transaction=True)
 class TestSubscribePageDiscloseAccount:
-    """The /subscribe page success copy mentions "account" and the rendered
-    verification email body says "we've created a free account for you".
-    """
+    """The subscribe UI and durable Relay purpose preserve subscribe framing."""
 
     def test_subscribe_page_message_and_email_body_disclose_account(
         self, django_server, page,
@@ -417,12 +415,8 @@ class TestSubscribePageDiscloseAccount:
         message = page.locator('.subscribe-message').inner_text()
         assert "account" in message.lower()
 
-        # Issue #767: the verification email body — rendered through the
-        # subscribe-flow template the user receives — confirms the
-        # subscription in subscribe framing and does NOT carry the
-        # "your account" framing reserved for the signup path. A1.2
-        # slice 4: the render rides the durable package path, with the
-        # worker minting the verify link from the recipient row.
+        # Issue #767: the subscribe flow selects its dedicated immutable
+        # Relay template and the worker mints the verification link.
         from unittest.mock import patch
 
         from accounts.models import User
@@ -442,16 +436,8 @@ class TestSubscribePageDiscloseAccount:
                 {'ttl_days': resolve_unverified_ttl_days()},
             )
         connection.close()
-        assert stub.calls, "Worker rendered no subscribe verification mail"
-        rendered_html = (
-            stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        )
-        rendered_lower = rendered_html.lower()
-        assert "confirm" in rendered_lower
-        assert "subscription" in rendered_lower or "subscribe" in rendered_lower
-        # Subscribe framing must not threaten account deletion.
-        assert "your account" not in rendered_lower
-        assert "account will be deleted" not in rendered_lower
-        assert "account will be removed" not in rendered_lower
-        # The worker minted the verification link; none was stored.
-        assert "/api/verify-email?token=" in rendered_lower
+        assert stub.calls, "Worker crossed no Relay boundary"
+        call = stub.calls[0]
+        assert call["delivery"].purpose == "email_verification_subscribe"
+        assert call["delivery"].template_version == 1
+        assert "/api/verify-email?token=" in call["context"]["verify_url"]

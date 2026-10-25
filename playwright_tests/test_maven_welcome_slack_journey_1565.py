@@ -1,11 +1,10 @@
 """Browser acceptance for Maven welcome -> Slack delivery (issue #1565).
 
-Three journeys:
+Two journeys:
 
-1. A brand-new Maven enrollee follows the Slack link in their welcome email
+1. A brand-new Maven enrollee follows the resolved Slack join route
    through the login gate and lands on the workspace invite.
-2. Staff previews ``maven_welcome`` in Studio before the cohort goes out.
-3. Support opens a Maven occurrence and reads that the join link went out
+2. Support opens a Maven occurrence and reads that the join link went out
    through the welcome email rather than a direct Slack invite (#1665).
 """
 
@@ -67,15 +66,8 @@ def _enrol(email):
     return user
 
 
-def _render_welcome(user):
-    """Render the maven_welcome body exactly as a real send would.
-
-    A1.2 slice 3: the producer persists the course scalar only and the
-    worker resolver mints every link and token at delivery time, so the
-    stored delivery is re-rendered through the package renderer with the
-    same resolver the worker runs.
-    """
-    from community_base.mail.backends.relay import render_delivery
+def _resolve_welcome_context(user):
+    """Resolve the durable Maven delivery context handed to Relay."""
     from community_base.mail.models import EmailDelivery
     from django.db import connection
 
@@ -87,15 +79,8 @@ def _render_welcome(user):
     context = resolve_auth_mail_context(
         delivery=delivery, context=dict(delivery.context_data),
     )
-    rendered = render_delivery(delivery, context)
     connection.close()
-    return rendered.html
-
-
-def _slack_href(body_html):
-    match = re.search(r'href="([^"]*/community/slack)"', body_html)
-    assert match, "maven_welcome renders no /community/slack link"
-    return match.group(1)
+    return delivery, context
 
 
 @browser_journey
@@ -109,8 +94,10 @@ def test_enrollee_follows_the_welcome_email_into_slack(
     invite_target = f"{django_server}/?slack-workspace-invite=1"
     settings.SLACK_INVITE_URL = invite_target
 
-    body_html = _render_welcome(user)
-    join_path = urlparse(_slack_href(body_html)).path
+    delivery, resolved = _resolve_welcome_context(user)
+    assert delivery.purpose == "maven_welcome"
+    assert delivery.template_version == 1
+    join_path = urlparse(resolved["slack_join_url"]).path
     assert join_path == "/community/slack"
 
     # Step 1 of the email: the enrollee sets a password.
@@ -136,53 +123,6 @@ def test_enrollee_follows_the_welcome_email_into_slack(
     # workspace invite the email promised.
     page.wait_for_url(invite_target, timeout=15000)
     expect(page.get_by_test_id("account-menu-trigger")).to_be_visible()
-    context.close()
-
-
-@browser_journey
-def test_staff_preview_shows_the_ordered_steps_and_the_slack_link(
-    django_server, browser,
-):
-    ensure_tiers()
-    create_staff_user("staff-1565@example.com")
-
-    context = auth_context(browser, "staff-1565@example.com")
-    page = context.new_page()
-    page.goto(
-        f"{django_server}/studio/email-templates/maven_welcome/edit/",
-        wait_until="domcontentloaded",
-    )
-    status = page.locator('[data-testid="preview-status"]')
-    status.wait_for(state="visible")
-    page.wait_for_function(
-        "() => {"
-        "  const el = document.querySelector('[data-testid=\"preview-status\"]');"
-        "  return el && el.textContent && el.textContent.trim() === 'Up to date';"
-        "}",
-        timeout=15000,
-    )
-    srcdoc = page.locator('[data-testid="email-template-preview"]').get_attribute(
-        "srcdoc"
-    )
-    assert srcdoc, "maven_welcome preview iframe is empty"
-
-    assert "You're enrolled in" in srcdoc
-    assert "Set a password" in srcdoc
-    assert "Sign in" in srcdoc
-    assert "/community/slack" in srcdoc
-    assert "your course" not in srcdoc
-
-    # Issue #1593: staff must be able to see, before it goes out, that the
-    # newsletter is offered rather than assumed, and that the two tokened
-    # links are different things with different labels.
-    assert "did not add" not in srcdoc
-    assert "If you want to hear from us" in srcdoc
-    assert "verify your email" in srcdoc
-    assert "/api/verify-and-subscribe" in srcdoc
-    assert "turn off course emails" in srcdoc
-    assert "/api/maven-email-opt-out" in srcdoc
-    # An empty href here is the preview bug this assertion exists to catch.
-    assert 'href=""' not in srcdoc
     context.close()
 
 

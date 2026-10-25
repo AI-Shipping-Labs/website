@@ -44,34 +44,21 @@ def _seed_download(*, slug='browser-guide', required_level=0):
 @pytest.mark.django_db(transaction=True)
 class TestDownloadDelivery1264:
     @staticmethod
-    def _capture_rendered_mail(mailbox, monkeypatch, django_server):
-        """Capture each mail exactly as the worker renders it (A1.2 slice 3).
+    def _capture_relay_call(monkeypatch, django_server):
+        """Install an offline Relay client and return its accepted calls."""
+        from email_app.testing import StubRelayClient
 
-        The request queues a durable ``EmailDelivery``; the session's sync
-        jobs backend drains it at commit and the worker resolver mints the
-        delivery or verification link then. Capturing at the render
-        boundary records the provider-visible context without re-running
-        the resolver (which would mint a second grant).
-        """
-
-        from community_base.mail.backends import ses_local
-
-        real_render = ses_local.render_delivery
-
-        def capture_render(delivery, context):
-            mailbox.update({
-                'recipient': delivery.recipient_email,
-                'purpose': delivery.purpose,
-                **context,
-            })
-            return real_render(delivery, context)
-
-        monkeypatch.setattr(ses_local, 'render_delivery', capture_render)
+        relay = StubRelayClient()
+        monkeypatch.setattr(
+            'community_base.mail.backends.relay.configured_client',
+            lambda: relay,
+        )
         # The worker resolver reads the site URL lazily from this module.
         monkeypatch.setattr(
             'integrations.config.site_base_url',
             lambda: django_server,
         )
+        return relay
 
     @pytest.mark.core
     def test_real_mailbox_verify_presign_count_and_activity_journey(
@@ -81,11 +68,10 @@ class TestDownloadDelivery1264:
         page,
         monkeypatch,
     ):
-        mailbox = {}
         with django_db_blocker.unblock():
             download = _seed_download(slug='real-mailbox-guide')
 
-        self._capture_rendered_mail(mailbox, monkeypatch, django_server)
+        relay = self._capture_relay_call(monkeypatch, django_server)
         monkeypatch.setattr(
             'content.services.download_delivery.verify_download_object_exists',
             lambda _key: None,
@@ -101,11 +87,15 @@ class TestDownloadDelivery1264:
         with relay_test_backend():
             form.get_by_test_id('download-request-submit').click()
             expect(page.get_by_test_id('download-request-success')).to_be_visible()
-        assert mailbox['recipient'] == 'real-mailbox@example.com'
-        assert mailbox['purpose'] == 'download_delivery'
-        assert mailbox['verification_required'] is True
+        assert len(relay.calls) == 1
+        call = relay.calls[0]
+        delivery = call['delivery']
+        resolved = call['context']
+        assert delivery.recipient_email == 'real-mailbox@example.com'
+        assert delivery.purpose == 'download_delivery'
+        assert resolved['verification_required'] is True
 
-        page.goto(mailbox['delivery_url'], wait_until='domcontentloaded')
+        page.goto(resolved['delivery_url'], wait_until='domcontentloaded')
         expect(page).to_have_url(
             f'{django_server}{download.get_absolute_url()}?delivered=1',
         )
@@ -134,7 +124,6 @@ class TestDownloadDelivery1264:
         page,
         monkeypatch,
     ):
-        mailbox = {}
         with django_db_blocker.unblock():
             download = _seed_download(slug='existing-address-guide')
             user = create_user(
@@ -145,7 +134,7 @@ class TestDownloadDelivery1264:
             user.email_verified = True
             user.save(update_fields=['email_verified'])
 
-        self._capture_rendered_mail(mailbox, monkeypatch, django_server)
+        relay = self._capture_relay_call(monkeypatch, django_server)
         monkeypatch.setattr(
             'content.services.download_delivery.verify_download_object_exists',
             lambda _key: None,
@@ -161,10 +150,14 @@ class TestDownloadDelivery1264:
         with relay_test_backend():
             form.get_by_test_id('download-request-submit').click()
             expect(page.get_by_test_id('download-request-success')).to_be_visible()
-        assert mailbox['recipient'] == user.email
-        assert mailbox['purpose'] == 'download_delivery'
-        assert mailbox['verification_required'] is False
-        page.goto(mailbox['delivery_url'], wait_until='domcontentloaded')
+        assert len(relay.calls) == 1
+        call = relay.calls[0]
+        delivery = call['delivery']
+        resolved = call['context']
+        assert delivery.recipient_email == user.email
+        assert delivery.purpose == 'download_delivery'
+        assert resolved['verification_required'] is False
+        page.goto(resolved['delivery_url'], wait_until='domcontentloaded')
         expect(page).to_have_url(
             f'{django_server}{download.get_absolute_url()}?existing=1',
         )

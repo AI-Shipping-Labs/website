@@ -19,6 +19,7 @@ FORBIDDEN_SENDS = frozenset({
     "send_email", "send_raw_email", "send_ses_email",
 })
 FORBIDDEN_CLIENTS = frozenset({
+    "django.core.mail.backends.smtp.EmailBackend",
     "smtplib.SMTP",
     "smtplib.SMTP_SSL",
 })
@@ -115,6 +116,8 @@ def _call_violation(node, bindings):
         return "direct outbound email call"
     if names & {"django_ses.SESBackend"}:
         return "direct SES backend construction"
+    if names & {"django.core.mail.backends.smtp.EmailBackend"}:
+        return "direct SMTP backend construction"
     if names & FORBIDDEN_CLIENTS:
         return "direct SMTP client construction"
     if any(name.startswith("boto3.") and name.endswith(".client") for name in names):

@@ -118,7 +118,17 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    pass
+    def _capture_cancel_url(self):
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
+        with patch(
+            'events.services.registration_email._send_calendar_email',
+            return_value='relay-override',
+        ) as send:
+            send_registration_confirmation(registration)
+        return send.call_args.kwargs['context']['cancel_url']
+
     def test_cancel_url_uses_db_override(self):
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',
@@ -126,25 +136,21 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
             group='site',
         )
         clear_config_cache()
-        body = self._capture_rendered_body()
-        self.assertIn(
+        url = self._capture_cancel_url()
+        self.assertTrue(url.startswith(
             'https://override.example.com/events/cancel-override-event/'
             'cancel-registration?token=',
-            body,
-        )
-        self.assertNotIn('https://env.example.com/events/cancel-override-event', body)
+        ))
 
     def test_cancel_url_falls_back_to_settings(self):
-        body = self._capture_rendered_body()
-        self.assertIn(
+        url = self._capture_cancel_url()
+        self.assertTrue(url.startswith(
             'https://env.example.com/events/cancel-override-event/'
             'cancel-registration?token=',
-            body,
-        )
+        ))
 
 
-class RegistrationEmailLegacySesSettingTest(TestCase):
-    """The retired SES switch does not suppress Relay registration mail."""
+class RegistrationEmailRelayTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):

@@ -13,12 +13,12 @@ Scenarios:
 5. No suggestions -> the test-send section renders cleanly, no chips.
 6. A bad config value does not break the page; only valid chips show.
 
-Test sends call Relay, so we patch EmailService._send_relay /
-render_markdown_email in-process — the django_server runs in the same
-process as the test, the same approach used in test_studio_campaigns.py.
+Test sends call Relay, so the journeys patch the campaign Relay transport
+in-process while exercising the real recipient/context preparation.
 """
 
 import os
+from unittest import mock
 
 import pytest
 
@@ -91,13 +91,68 @@ def _chip(page, email):
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestOwnEmailOneClickFill:
-    pass
+    def test_fill_and_send_with_own_email(self, django_server, browser):
+        _ensure_tiers()
+        _reset_state()
+        _create_staff_user("admin@test.com")
+        campaign = _create_campaign()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        _chip(page, "admin@test.com").click()
+        assert _textarea(page).input_value() == "admin@test.com"
+
+        with mock.patch(
+            "studio.views.campaigns.send_campaign_delivery_to_relay",
+            return_value="relay-id",
+        ) as relay_send:
+            page.get_by_role("button", name="Send Test").click()
+            page.wait_for_load_state("domcontentloaded")
+
+        assert page.get_by_text(
+            "Test email sent to 1 address(es): admin@test.com.",
+            exact=True,
+        ).is_visible()
+        assert relay_send.call_count == 1
+        assert relay_send.call_args.kwargs["recipient_email"] == "admin@test.com"
+        connection.close()
+        context.close()
 
 
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestReuseRecentAddress:
-    pass
+    def test_recent_chip_appears_after_send(self, django_server, browser):
+        _ensure_tiers()
+        _reset_state()
+        _create_staff_user("admin@test.com")
+        campaign = _create_campaign()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        detail = f"{django_server}/studio/campaigns/{campaign.pk}/"
+        page.goto(detail, wait_until="domcontentloaded")
+
+        _textarea(page).fill("qa@example.com")
+        with mock.patch(
+            "studio.views.campaigns.send_campaign_delivery_to_relay",
+            return_value="relay-id",
+        ):
+            page.get_by_role("button", name="Send Test").click()
+            page.wait_for_load_state("domcontentloaded")
+
+        page.goto(detail, wait_until="domcontentloaded")
+        recent_chip = _chip(page, "qa@example.com")
+        recent_chip.wait_for(state="visible")
+        recent_chip.click()
+        assert _textarea(page).input_value() == "qa@example.com"
+        connection.close()
+        context.close()
 
 
 @pytest.mark.core
@@ -133,7 +188,40 @@ class TestConfiguredCommonAddresses:
 @pytest.mark.core
 @pytest.mark.django_db(transaction=True)
 class TestMultiRecipientFromChips:
-    pass
+    def test_build_and_send_multiple(self, django_server, browser):
+        _ensure_tiers()
+        _reset_state()
+        _set_common_recipients("seed@example.com")
+        _create_staff_user("admin@test.com")
+        campaign = _create_campaign()
+
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign.pk}/",
+            wait_until="domcontentloaded",
+        )
+
+        _chip(page, "admin@test.com").click()
+        _chip(page, "seed@example.com").click()
+        assert _textarea(page).input_value() == "admin@test.com\nseed@example.com"
+
+        with mock.patch(
+            "studio.views.campaigns.send_campaign_delivery_to_relay",
+            return_value="relay-id",
+        ) as relay_send:
+            page.get_by_role("button", name="Send Test").click()
+            page.wait_for_load_state("domcontentloaded")
+
+        assert page.get_by_text(
+            "Test email sent to 2 address(es): admin@test.com, seed@example.com.",
+            exact=True,
+        ).is_visible()
+        assert [
+            call.kwargs["recipient_email"] for call in relay_send.call_args_list
+        ] == ["admin@test.com", "seed@example.com"]
+        connection.close()
+        context.close()
 
 
 @pytest.mark.core

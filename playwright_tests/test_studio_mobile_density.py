@@ -167,22 +167,11 @@ def _seed_users(count):
         )
 
 
-def _email_template_filesystem_count():
-    """Return the number of filesystem-defined email templates.
+def _email_template_catalog_count():
+    """Return the number of Relay templates in the offline test catalog."""
+    from email_app.testing import StubRelayTemplateClient
 
-    The /studio/email-templates/ list is driven by ``_all_template_names()``
-    which reads ``email_app/email_templates/*.md`` and includes any DB
-    overrides. We don't need to seed anything; the shipped templates
-    (welcome, password_reset, etc.) provide enough rows on every test DB.
-    """
-    from pathlib import Path
-
-    templates_dir = (
-        Path(__file__).resolve().parent.parent
-        / "email_app"
-        / "email_templates"
-    )
-    return len(list(templates_dir.glob("*.md")))
+    return len(StubRelayTemplateClient().templates())
 
 
 # ---------------------------------------------------------------------------
@@ -500,15 +489,13 @@ def test_users_list_dense_rows_and_view_link_works(django_server, browser):
 def test_email_templates_list_dense_rows_at_pixel_7(django_server, browser):
     """Scenario 7: Email templates list shows ≥ 5 rows compactly.
 
-    No seeding required — the email-template list is driven by the
-    filesystem templates shipped in ``email_app/email_templates/`` plus
-    any DB overrides. The shipped set has ~11 rows which is plenty.
+    No seeding is required; the test Relay catalog supplies the rows.
     """
     _ensure_tiers()
     staff_email = "density-email@test.com"
     _create_staff_user(staff_email)
     _reset_density_data()
-    assert _email_template_filesystem_count() >= 5
+    assert _email_template_catalog_count() >= 5
 
     context = _auth_context(browser, staff_email)
     page = context.new_page()

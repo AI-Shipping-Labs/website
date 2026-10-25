@@ -514,7 +514,16 @@ class TestScenario449UnverifiedSignupFreeArticle:
 class TestScenario1160VerifyEmailReturnToContent:
     """Verification emails carry safe signed return paths back to content."""
 
-    pass
+    def _latest_signup_delivery(self, email):
+        """Return the durable signup-verification delivery for this reader."""
+        from community_base.mail.models import EmailDelivery
+
+        delivery = EmailDelivery.objects.filter(
+            purpose="email_verification_signup",
+            recipient_email=email,
+        ).latest("created_at")
+        connection.close()
+        return delivery
 
     def _resolved_verify_url(self, delivery):
         """The clickable link exactly as the worker resolves it."""

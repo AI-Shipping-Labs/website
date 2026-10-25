@@ -5,6 +5,7 @@ import os
 import re
 import uuid
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from django.utils import timezone
@@ -252,7 +253,41 @@ class TestStudioActionCells:
         page.wait_for_url(f"**/studio/users/{target.pk}/")
         context.close()
 
-    pass
+    def test_email_template_row_has_one_relay_edit_action(
+        self,
+        django_server,
+        browser,
+    ):
+        from email_app.testing import StubRelayTemplateClient
+
+        _ensure_tiers()
+        _reset_state()
+        _create_staff_user("studio-actions@test.com")
+        relay = StubRelayTemplateClient()
+
+        context = _auth_context(browser, "studio-actions@test.com")
+        page = context.new_page()
+        with mock.patch(
+            "studio.views.email_templates.configured_template_client",
+            return_value=relay,
+        ):
+            page.goto(
+                f"{django_server}/studio/email-templates/",
+                wait_until="domcontentloaded",
+            )
+
+            row = page.locator('tr[data-template-name="welcome"]')
+            edit = row.get_by_role("link", name="Edit in Relay", exact=True)
+            assert edit.is_visible()
+            assert "bg-secondary" in edit.get_attribute("class")
+            assert "border-red-500/40" not in edit.get_attribute("class")
+            assert row.locator("form").count() == 0
+
+            edit.click()
+            page.wait_for_url("**/studio/email-templates/welcome/edit/")
+            assert page.get_by_test_id("email-template-edit-form").is_visible()
+
+        context.close()
     def test_worker_destructive_and_async_actions_have_clear_confirm(
         self,
         django_server,

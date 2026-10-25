@@ -110,6 +110,7 @@ def test_staff_proves_the_controlled_consent_action_before_release(
         REPERMISSION_COPY,
         REPERMISSION_CTA,
     )
+    from email_app.testing import StubRelayTemplateClient
 
     _ensure_tiers()
     _reset_campaign_data()
@@ -127,6 +128,7 @@ def test_staff_proves_the_controlled_consent_action_before_release(
     connection.close()
 
     delivered_messages = []
+    relay_templates = StubRelayTemplateClient()
 
     def capture(**message):
         delivered_messages.append(message)
@@ -134,38 +136,44 @@ def test_staff_proves_the_controlled_consent_action_before_release(
 
     context = _auth_context(browser, "consent-admin@test.com")
     page = context.new_page()
-    page.goto(
-        f"{django_server}/studio/campaigns/{campaign_id}/",
-        wait_until="domcontentloaded",
-    )
-    preview = page.frame_locator('[data-testid="campaign-preview-iframe"]')
-    expect(preview.get_by_text(REPERMISSION_COPY, exact=False)).to_be_visible()
-    expect(preview.get_by_role("link", name=REPERMISSION_CTA)).to_be_visible()
-    assert "preview-only" in preview.get_by_role(
-        "link",
-        name=REPERMISSION_CTA,
-    ).get_attribute("href")
-
-    page.locator("#test-recipients").fill(controlled.email)
     with mock.patch(
-        "studio.views.campaigns.send_campaign_delivery_to_relay",
-        side_effect=capture,
+        "studio.views.campaigns.configured_template_client",
+        return_value=relay_templates,
     ):
-        with page.expect_navigation(wait_until="domcontentloaded"):
-            page.get_by_role("button", name="Send Test", exact=True).click()
+        page.goto(
+            f"{django_server}/studio/campaigns/{campaign_id}/",
+            wait_until="domcontentloaded",
+        )
+        preview = page.frame_locator('[data-testid="campaign-preview-iframe"]')
+        expect(preview.locator("body")).to_contain_text("Relay preview")
+        preview_call = next(
+            call for call in relay_templates.calls
+            if isinstance(call, dict) and call.get("operation") == "preview"
+        )
+        assert REPERMISSION_COPY in preview_call["context"]["body_markdown"]
+        assert REPERMISSION_CTA in preview_call["context"]["body_markdown"]
+        assert "preview-only" in preview_call["context"]["body_markdown"]
+
+        page.locator("#test-recipients").fill(controlled.email)
+        with mock.patch(
+            "studio.views.campaigns.send_campaign_delivery_to_relay",
+            side_effect=capture,
+        ):
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                page.get_by_role("button", name="Send Test", exact=True).click()
 
     assert len(delivered_messages) == 1
     delivered = delivered_messages[0]
     assert delivered["recipient_email"] == controlled.email
-    for rendered in (delivered["html_body"], delivered["text_body"]):
-        assert REPERMISSION_COPY in rendered
-        assert REPERMISSION_CTA in rendered
-        assert rendered.count("/api/verify-and-subscribe") == 1
-        assert "/api/unsubscribe" in rendered
-        assert "/api/verify-email" not in rendered
+    body_markdown = delivered["body_markdown"]
+    assert REPERMISSION_COPY in body_markdown
+    assert REPERMISSION_CTA in body_markdown
+    assert body_markdown.count("/api/verify-and-subscribe") == 1
+    assert "/api/unsubscribe" in delivered["unsubscribe_url"]
+    assert delivered["verify_email_url"] == ""
     match = re.search(
         r"https?://[^\s)]+/api/verify-and-subscribe\?token=[^\s)]+",
-        delivered["text_body"],
+        body_markdown,
     )
     assert match is not None
 
@@ -182,6 +190,109 @@ def test_staff_proves_the_controlled_consent_action_before_release(
     assert controlled.unsubscribed is False
     assert controlled.email_preferences["newsletter"] is True
     connection.close()
+    context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+@browser_journey
+def test_late_consent_skips_the_future_wave_delivery(
+    django_server,
+    browser,
+):
+    from email_app.models import (
+        CampaignDelivery,
+        CampaignWave,
+        EmailCampaign,
+        EmailLog,
+    )
+    from email_app.services.campaign_repermission import confirmation_url_for_user
+    from email_app.tasks.send_campaign import VERIFIED_AT_SEND, send_campaign_batch
+
+    _ensure_tiers()
+    _reset_campaign_data()
+    staff = _create_staff_user("late-admin@test.com")
+    sent_user = _create_user("late-sent@test.com", email_verified=False)
+    future_user = _create_user("late-future@test.com", email_verified=False)
+    campaign = EmailCampaign.objects.create(
+        subject="Late consent",
+        body="Introduction",
+        audience_verification="unverified_only",
+        status="sending",
+        audience_snapshotted_at=timezone.now(),
+    )
+    first = CampaignWave.objects.create(
+        campaign=campaign,
+        number=1,
+        state=CampaignWave.State.MONITORING,
+        released_at=timezone.now() - timedelta(hours=25),
+        released_by=staff,
+        monitoring_started_at=timezone.now() - timedelta(hours=24),
+    )
+    second = CampaignWave.objects.create(campaign=campaign, number=2)
+    log = EmailLog.objects.create(
+        campaign=campaign,
+        user=sent_user,
+        recipient_email=sent_user.email,
+        email_type="campaign_repermission",
+    )
+    CampaignDelivery.objects.create(
+        campaign=campaign,
+        wave=first,
+        user=sent_user,
+        recipient_user_pk=sent_user.pk,
+        recipient_email=sent_user.email,
+        state=CampaignDelivery.State.SENT,
+        email_log=log,
+    )
+    future_delivery = CampaignDelivery.objects.create(
+        campaign=campaign,
+        wave=second,
+        user=future_user,
+        recipient_user_pk=future_user.pk,
+        recipient_email=future_user.email,
+    )
+    confirmation_path = _relative(confirmation_url_for_user(future_user))
+    campaign_id = campaign.pk
+    delivery_id = future_delivery.pk
+    connection.close()
+
+    consent_page = browser.new_page()
+    consent_page.goto(
+        f"{django_server}{confirmation_path}",
+        wait_until="domcontentloaded",
+    )
+    expect(consent_page.get_by_role("heading", name="You're subscribed")).to_be_visible()
+    consent_page.close()
+
+    context = _auth_context(browser, "late-admin@test.com")
+    page = context.new_page()
+    page.on("dialog", lambda dialog: dialog.accept())
+    page.goto(
+        f"{django_server}/studio/campaigns/{campaign_id}/",
+        wait_until="domcontentloaded",
+    )
+    page.locator('[data-testid="release-next-wave"]').click()
+    page.wait_for_load_state("domcontentloaded")
+
+    with mock.patch(
+        "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
+    ) as relay_send:
+        send_campaign_batch(campaign_id, [delivery_id], send_delay=0)
+
+    future_delivery.refresh_from_db()
+    second.refresh_from_db()
+    assert future_delivery.state == CampaignDelivery.State.SKIPPED
+    assert future_delivery.skip_reason == VERIFIED_AT_SEND
+    assert second.state == CampaignWave.State.MONITORING
+    relay_send.assert_not_called()
+    connection.close()
+
+    page.goto(
+        f"{django_server}/studio/campaigns/{campaign_id}/",
+        wait_until="domcontentloaded",
+    )
+    second_row = page.locator('[data-testid="campaign-wave-row"]').nth(1)
+    expect(second_row).to_contain_text("Monitoring")
     context.close()
 
 

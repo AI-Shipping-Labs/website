@@ -45,13 +45,8 @@ from django.db import connection  # noqa: E402
 pytestmark = pytest.mark.local_only
 
 
-def _capture_send_html(user, template_name, context):
-    """Send through the durable package path; return the rendered HTML.
-
-    The Playwright server drains mail jobs inline with an offline transport;
-    capturing with a fresh local-render stub gives us the exact bytes
-    the worker rendered for the recipient without any real API call.
-    """
+def _capture_send(user, template_name, context):
+    """Send through the durable package path; return the Relay boundary call."""
     from email_app.package_mail import send_package_mail
     from email_app.testing import StubRelayClient
 
@@ -63,25 +58,8 @@ def _capture_send_html(user, template_name, context):
         send_package_mail(user, template_name, context)
 
     connection.close()
-    if not stub.calls:
-        return ''
-    return stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-
-
-def _extract_verify_url(html):
-    """Pull the verify URL out of the footer CTA paragraph.
-
-    Anchored to ``verify-email-cta`` so we never accidentally pick up a
-    body-level verify link (only the email-verification template embeds
-    one, and that template opts out of the footer anyway, but the
-    anchor keeps the test honest).
-    """
-    match = re.search(
-        r'<p class="verify-email-cta">.*?<a href="([^"]+)"',
-        html,
-        re.DOTALL,
-    )
-    return match.group(1) if match else None
+    assert stub.calls, "Worker crossed no Relay boundary"
+    return stub.calls[0]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -93,8 +71,8 @@ class TestVerifyEmailFooterRoundTrip:
         self, django_server, page,
     ):
         """Given an unverified Free user.
-        1. Trigger a welcome email; capture rendered HTML offline.
-        2. Extract the verify URL from the footer CTA.
+        1. Trigger a welcome email and capture its resolved Relay context.
+        2. Read the worker-minted verification URL.
         3. Open the URL anonymously in the browser.
         Then: 200 + verification-success message.
         4. Re-read the user from the DB.
@@ -107,20 +85,15 @@ class TestVerifyEmailFooterRoundTrip:
         )
         assert not user.email_verified
 
-        # Step 1 & 2: capture HTML and pull the verify URL out of the
-        # footer CTA. Both must exist or the test stops here.
-        html = _capture_send_html(
+        # Step 1 & 2: the website owns the durable purpose and resolved URL;
+        # Relay owns the rendered footer copy.
+        call = _capture_send(
             user,
             "welcome",
             {"tier_name": "Free"},
         )
-        assert '<p class="verify-email-cta">' in html, (
-            "Footer verify CTA missing from rendered email"
-        )
-        verify_url = _extract_verify_url(html)
-        assert verify_url is not None, (
-            "Could not extract verify URL from footer CTA"
-        )
+        assert call["delivery"].purpose == "welcome"
+        verify_url = call["context"]["verify_url"]
         assert "/api/verify-email?token=" in verify_url
 
         # The captured URL embeds the production base URL via

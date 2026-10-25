@@ -589,11 +589,6 @@ class FooterSubscribeFormTest(TestCase):
         self.assertIn('type="email"', content)
 
 
-class EmailServiceUnsubscribeLinkTest(TestCase):
-    """Transactional EmailService sends do not include marketing unsubscribe UI."""
-
-    pass
-
 class SubscriberAdminTest(TestCase):
     """Test admin subscriber list, filter, and CSV export."""
 

@@ -105,11 +105,12 @@ class PartnerIntroGreetingTest(TestCase):
                 state=EmailDelivery.State.PENDING,
             ):
                 deliver_job(None, {'delivery_id': str(delivery.id)})
-        context = next(
-            call['context']
-            for call in stub.calls
-            if call['delivery'].recipient_email == 'nameless.member@test.com'
-        )
+        context = None
+        for call in stub.calls:
+            if call['delivery'].recipient_email == 'nameless.member@test.com':
+                context = call['context']
+                break
+        self.assertIsNotNone(context)
 
         self.assertEqual(context['member_name'], 'there')
         self.assertEqual(context['partners'][0]['name'], 'p.artner')

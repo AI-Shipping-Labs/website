@@ -3,6 +3,7 @@
 import datetime
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
@@ -74,11 +75,41 @@ class PlanShareViewTest(TestCase):
         self.plan.refresh_from_db()
         self.assertIsNone(self.plan.shared_at)
 
-    pass
+    def test_missing_intent_delivers_nothing(self):
+        self.client.login(email='staff@test.com', password='pw')
 
-    pass
+        response = self._post()
 
-    pass
+        self.assertEqual(response.status_code, 302)
+        self.plan.refresh_from_db()
+        self.assertIsNone(self.plan.shared_at)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(PlanReadyEmailLog.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
+
+    def test_unknown_intent_delivers_nothing(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+        self._post('publish')
+
+        self.plan.refresh_from_db()
+        self.assertIsNone(self.plan.shared_at)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
+
+    def test_reshare_intent_on_unshared_plan_delivers_nothing(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+        response = self._post('reshare', follow=True)
+
+        self.plan.refresh_from_db()
+        self.assertIsNone(self.plan.shared_at)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
+        self.assertTrue(any(
+            'has not been shared yet' in str(message)
+            for message in response.context['messages']
+        ))
 
     def test_first_share_sets_timestamp_and_creates_bell_and_email(self):
         self.client.login(email='staff@test.com', password='pw')
@@ -105,7 +136,17 @@ class PlanShareViewTest(TestCase):
             PlanReadyEmailLog.objects.filter(plan=self.plan).count(), 1,
         )
 
-    pass
+    def test_editor_share_returns_to_the_editor(self):
+        self.client.login(email='staff@test.com', password='pw')
+
+        response = self._post(
+            'ready', return_to=f'/studio/plans/{self.plan.pk}/edit/',
+        )
+
+        self.assertEqual(
+            response['Location'],
+            f'/studio/plans/{self.plan.pk}/edit/',
+        )
 
     def test_replayed_ready_intent_does_not_duplicate_delivery(self):
         self.client.login(email='staff@test.com', password='pw')
@@ -131,7 +172,22 @@ class PlanShareViewTest(TestCase):
             'already' in str(m) for m in response.context['messages']
         ))
 
-    pass
+    def test_ready_intent_on_historically_shared_plan_does_not_send(self):
+        shared_at = timezone.now()
+        self.plan.shared_at = shared_at
+        self.plan.save(update_fields=['shared_at'])
+        self.client.login(email='staff@test.com', password='pw')
+
+        response = self._post('ready', follow=True)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.shared_at, shared_at)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
+        self.assertTrue(any(
+            'Re-share with member' in str(message)
+            for message in response.context['messages']
+        ))
 
     def test_reshare_creates_second_bell_and_second_email(self):
         """Operator-driven re-share fires both legs again. NOT a no-op."""
@@ -238,7 +294,11 @@ class PlanShareViewTest(TestCase):
         self.assertTrue(any('failed' in m for m in messages))
         self.assertFalse(any('Plan shared with' in m for m in messages))
 
-    pass
+    def test_success_message_names_the_member(self):
+        self.client.login(email='staff@test.com', password='pw')
+        response = self._post('ready', follow=True)
+        messages = list(response.context['messages'])
+        self.assertTrue(any('member@test.com' in str(message) for message in messages))
 
 
 @tag('core')

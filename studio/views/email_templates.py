@@ -65,6 +65,7 @@ TEMPLATE_SENT_WHEN = {
     'bookclub_book_summary': 'Sent to book-access members when an organizer publishes a full-book summary.',
     'bookclub_chapter_summary': 'Sent to book-access members when an organizer publishes a chapter summary.',
     'cancellation': 'Sent when a paid membership is scheduled to cancel.',
+    'campaign-broadcast': 'Sent by staff-created campaigns and explicit campaign test sends.',
     'cofounder_welcome': 'Sent when a cofounder membership signup is completed.',
     'coursework.pool_ready': 'Sent to each member of a self-paced peer-review group when the group forms, with links to the projects they review.',
     'coursework.review_assigned': 'Sent to each learner in a dated cohort when staff assigns the peer reviews for a project.',
@@ -138,10 +139,11 @@ def _relay_error_message(error):
 def email_template_list(request):
     """List editable Relay templates without any local fallback."""
     try:
-        rows = _ordered_templates(
-            row for row in configured_template_client().templates()
-            if row.get("key") not in INTERNAL_TEMPLATE_KEYS
-        )
+        visible = []
+        for row in configured_template_client().templates():
+            if row.get("key") not in INTERNAL_TEMPLATE_KEYS:
+                visible.append(row)
+        rows = _ordered_templates(visible)
     except RelayTemplateError as error:
         rows = ()
         messages.error(request, _relay_error_message(error))
@@ -235,13 +237,17 @@ def email_template_preview(request, template_name):
     _add_preview_recipient(context, recipient)
     raw_version = request.POST.get("version", "").strip()
     try:
-        version = int(raw_version) if raw_version else None
+        version = None
+        if raw_version:
+            version = int(raw_version)
         rendered = configured_template_client().preview(
             template_name, context, version=version, draft=not raw_version,
         )
         return HttpResponse(rendered["html_body"], content_type="text/html")
     except (RelayTemplateError, ValueError) as error:
-        code = error.code if isinstance(error, RelayTemplateError) else "invalid_version"
+        code = "invalid_version"
+        if isinstance(error, RelayTemplateError):
+            code = error.code
         logger.warning("Relay template preview failed for %s: %s", template_name, code)
         html = (
             '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:1rem;color:#900">'

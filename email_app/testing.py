@@ -41,6 +41,10 @@ class StubRelayTemplateClient:
     """Stateful offline Relay template API boundary with no local rendering."""
 
     def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Restore deterministic state between tests that share the stub."""
         self.calls = []
         self.fail_operations = set()
         self._templates = {
@@ -143,23 +147,39 @@ def _record_send(delivery, context, message_id):
     recorder_hook = settings.COMMUNITY_BASE.get("MAIL_SEND_RECORDER")
     if not recorder_hook:
         return
-    recorder = resolve(recorder_hook) if isinstance(recorder_hook, str) else recorder_hook
+    recorder = recorder_hook
+    if isinstance(recorder_hook, str):
+        recorder = resolve(recorder_hook)
     rendered = SimpleNamespace(subject=context.get("subject", "Test Subject"))
     result = SimpleNamespace(message_id=message_id)
     recorder(delivery, rendered, result)
 
 
 _relay_patchers = []
+_relay_template_client = None
+
+
+def get_test_relay_template_client():
+    """Return the process-wide template stub installed by the test runner."""
+    if _relay_template_client is None:
+        raise RuntimeError("The test Relay template client is not installed")
+    return _relay_template_client
+
+
+def reset_test_relay_template_client():
+    """Reset the installed template stub so browser tests cannot leak state."""
+    get_test_relay_template_client().reset()
 
 
 def install_test_relay():
     """Point package mail at an offline Relay client for the test run."""
-    global _relay_patchers
+    global _relay_patchers, _relay_template_client
     from unittest.mock import patch  # noqa: PLC0415
 
     if _relay_patchers:
         return
     template_client = StubRelayTemplateClient()
+    _relay_template_client = template_client
     targets = (
         ("community_base.mail.backends.relay.configured_client", StubRelayClient()),
         ("email_app.services.relay_templates.configured_template_client", template_client),

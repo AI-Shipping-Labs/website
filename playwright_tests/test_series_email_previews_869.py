@@ -1,6 +1,7 @@
 """Local Studio preview evidence for series calendar email copy (#869)."""
 
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from playwright.sync_api import expect
@@ -16,21 +17,9 @@ pytestmark = [
 SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-869-email-previews"
 
 PREVIEW_CASES = (
-    (
-        "series_registration",
-        "This email includes a calendar invitation for the sessions above.",
-        "registration",
-    ),
-    (
-        "series_update",
-        "this email includes an updated calendar invitation",
-        "update",
-    ),
-    (
-        "series_cancellation",
-        "This email includes a calendar cancellation update",
-        "cancellation",
-    ),
+    ("series_registration", "registration"),
+    ("series_update", "update"),
+    ("series_cancellation", "cancellation"),
 )
 
 EXPECTED_GUIDANCE = {
@@ -41,46 +30,45 @@ EXPECTED_GUIDANCE = {
 
 
 @pytest.mark.parametrize(
-    "template_name,expected_copy,screenshot_name", PREVIEW_CASES
+    "template_name,screenshot_name", PREVIEW_CASES
 )
-def test_series_email_preview_uses_prompt_aware_calendar_copy(
+def test_series_email_editor_previews_through_relay(
     django_server,
     browser,
     template_name,
-    expected_copy,
     screenshot_name,
 ):
+    from email_app.testing import StubRelayTemplateClient
+
     expected_guidance = EXPECTED_GUIDANCE[template_name]
     _create_staff_user("staff-series-preview@test.com")
+    relay = StubRelayTemplateClient()
     context = _auth_context(browser, "staff-series-preview@test.com")
     page = context.new_page()
 
-    response = page.goto(
-        f"{django_server}/studio/email-templates/{template_name}/edit/",
-        wait_until="domcontentloaded",
-    )
-    assert response is not None and response.status == 200
-    sent_when = page.get_by_test_id("template-sent-when")
-    expect(sent_when).to_be_visible()
-    expect(sent_when).to_contain_text("Sent when:")
-    expect(sent_when).to_contain_text(expected_guidance)
-    expect(page.locator('[data-testid="preview-status"]')).to_have_text(
-        "Up to date"
-    )
-
-    preview = page.frame_locator('[data-testid="email-template-preview"]')
-    body = preview.locator("body")
-    expect(body).to_contain_text(expected_copy)
-    expect(body).to_contain_text("if prompted", ignore_case=True)
-    rendered = body.inner_text().lower()
-    for forbidden in (
-        "attached to this email",
-        "download",
-        "automatically",
-        "rather than create duplicates",
-        "will update the existing",
+    with mock.patch(
+        "studio.views.email_templates.configured_template_client",
+        return_value=relay,
     ):
-        assert forbidden not in rendered
+        response = page.goto(
+            f"{django_server}/studio/email-templates/{template_name}/edit/",
+            wait_until="domcontentloaded",
+        )
+        assert response is not None and response.status == 200
+        sent_when = page.get_by_test_id("template-sent-when")
+        expect(sent_when).to_be_visible()
+        expect(sent_when).to_contain_text("Sent when:")
+        expect(sent_when).to_contain_text(expected_guidance)
+
+        page.get_by_role("button", name="Preview through Relay").click()
+        preview = page.frame_locator('[data-testid="email-template-preview"]')
+        expect(preview.locator("body")).to_contain_text("Relay preview")
+        call = next(
+            call for call in relay.calls
+            if isinstance(call, dict) and call.get("operation") == "preview"
+        )
+        assert call["template_key"] == template_name
+        assert call["draft"] is True
 
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
     page.screenshot(

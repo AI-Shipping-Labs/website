@@ -1,5 +1,7 @@
 """Tests for studio campaign management views."""
 
+import re
+from html import unescape
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -8,6 +10,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from email_app.models import EmailCampaign
+from email_app.services.campaign_test_send import TEST_EMAIL_FOOTER_NOTE
 from jobs.tasks import build_task_name
 from payments.models import Tier
 from tests.fixtures import set_membership
@@ -195,10 +198,19 @@ class StudioCampaignDetailTest(TestCase):
         response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
         self.assertEqual(response.status_code, 200)
 
-    def test_detail_shows_campaign_info(self):
+    @patch("studio.views.campaigns.configured_template_client")
+    def test_detail_shows_campaign_info(self, configured_template_client):
+        relay = configured_template_client.return_value
+        relay.preview.return_value = {"html_body": "<p>Relay campaign preview</p>"}
+
         response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
+
         self.assertContains(response, "Detail Campaign")
-        self.assertContains(response, "Test body")
+        self.assertContains(response, "Relay campaign preview")
+        call = relay.preview.call_args
+        self.assertEqual(call.args[0], "campaign-broadcast")
+        self.assertEqual(call.args[1]["body_markdown"], "Test body")
+        self.assertEqual(call.kwargs["version"], 2)
 
     def test_detail_shows_recipient_count(self):
         response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
@@ -251,15 +263,69 @@ class StudioCampaignDetailTest(TestCase):
         self.assertContains(response, "Created draft copy")
         self.assertContains(response, "Detail Campaign (Copy)")
 
-    pass
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_test_send_single_address(self, send):
+        response = self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "preview@example.com"},
+            follow=True,
+        )
 
-    pass
+        self.assertContains(
+            response, "Test email sent to 1 address(es): preview@example.com.",
+        )
+        message = send.call_args.kwargs["message"]
+        self.assertEqual(message.recipient, "preview@example.com")
+        self.assertEqual(message.subject, "[TEST] Detail Campaign")
+        self.assertEqual(message.body_markdown, self.campaign.body)
+        self.assertEqual(message.footer_note, TEST_EMAIL_FOOTER_NOTE)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "draft")
+        self.assertEqual(self.campaign.sent_count, 0)
 
-    pass
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_test_send_to_unsubscribed_user_has_no_subscription_actions(self, send):
+        recipient = User.objects.create_user(
+            email="recipient@example.com",
+            email_verified=True,
+            unsubscribed=True,
+        )
 
-    pass
+        self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": recipient.email},
+        )
 
-    pass
+        message = send.call_args.kwargs["message"]
+        self.assertEqual(message.recipient, recipient.email)
+        self.assertEqual(message.unsubscribe_url, "")
+        self.assertEqual(message.verify_email_url, "")
+        self.assertEqual(message.footer_note, "")
+
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_test_send_multiple_addresses_deduplicates(self, send):
+        response = self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "one@example.com,\ntwo@example.com; one@example.com"},
+            follow=True,
+        )
+
+        self.assertContains(
+            response,
+            "Test email sent to 2 address(es): one@example.com, two@example.com.",
+        )
+        self.assertEqual(send.call_count, 2)
+
+    @patch("studio.views.campaigns._send_studio_test_campaign")
+    def test_test_send_invalid_address_shows_error(self, send):
+        response = self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "good@example.com, not-an-email"},
+        )
+
+        self.assertContains(response, "Invalid email address(es): not-an-email.")
+        self.assertContains(response, "good@example.com, not-an-email")
+        send.assert_not_called()
 
     def test_test_send_requires_staff(self):
         self.client.logout()
@@ -679,9 +745,26 @@ class StudioCampaignDetailPreviewTest(TestCase):
         )
         self.client.login(email="staff@test.com", password="testpass")
 
-    pass
+    @patch("studio.views.campaigns.configured_template_client")
+    def test_preview_uses_campaign_v2_relay_context(self, configured):
+        configured.return_value.preview.return_value = {
+            "subject": "Relay subject",
+            "html_body": "<h1>Relay preview</h1>",
+            "text_body": "Relay preview",
+        }
+        campaign = EmailCampaign.objects.create(
+            subject="Pipeline subject", body="# Pipeline body",
+            status="draft",
+        )
 
-    pass
+        response = self.client.get(f"/studio/campaigns/{campaign.pk}/")
+
+        self.assertEqual(response.context["preview_html"], "<h1>Relay preview</h1>")
+        call = configured.return_value.preview.call_args
+        self.assertEqual(call.args[0], "campaign-broadcast")
+        self.assertEqual(call.args[1]["subject"], "Pipeline subject")
+        self.assertEqual(call.args[1]["body_markdown"], "# Pipeline body")
+        self.assertEqual(call.kwargs["version"], 2)
 
     def test_preview_is_scoped_to_iframe_via_srcdoc(self):
         """The response contains an <iframe ... srcdoc="..."> element
@@ -696,7 +779,21 @@ class StudioCampaignDetailPreviewTest(TestCase):
         self.assertContains(response, 'title="Campaign email preview"')
         self.assertContains(response, "srcdoc=")
 
-    pass
+    @patch("studio.views.campaigns.configured_template_client")
+    def test_preview_srcdoc_contains_complete_relay_document(self, configured):
+        rendered = '<!doctype html><html lang="en"><body><p>Relay</p></body></html>'
+        configured.return_value.preview.return_value = {
+            "subject": "Ready", "html_body": rendered, "text_body": "Relay",
+        }
+        campaign = EmailCampaign.objects.create(
+            subject="Reg test", body="Body", status="draft",
+        )
+
+        response = self.client.get(f"/studio/campaigns/{campaign.pk}/")
+
+        match = re.search(r'srcdoc="([^"]*)"', response.content.decode())
+        self.assertIsNotNone(match)
+        self.assertEqual(unescape(match.group(1)), rendered)
 
     def test_detail_shows_edit_and_delete_for_draft(self):
         """Draft campaigns render the Edit link and Delete form."""

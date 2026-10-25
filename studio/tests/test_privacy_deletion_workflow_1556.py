@@ -600,8 +600,6 @@ class PrivacyCompletionTemplateTest(TestCase):
                 f"{ciphertext[:25]}{tampered_character}{ciphertext[26:]}"
             )
 
-    pass
-
     def test_studio_editor_and_preview_use_synthetic_privacy_context(self):
         superuser = User.objects.create_superuser(
             email="privacy-template-admin@test.com",

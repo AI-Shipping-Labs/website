@@ -143,4 +143,3 @@ class MavenWelcomePreviewContextTest(TestCase):
         ctx = PREVIEW_CONTEXTS['maven_welcome']
         self.assertIn('/api/verify-and-subscribe', ctx['newsletter_opt_in_url'])
         self.assertIn('/api/maven-email-opt-out', ctx['opt_out_url'])
-

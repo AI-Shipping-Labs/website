@@ -253,7 +253,3 @@ class TestRelayHealthAndSystemChecks(SimpleTestCase):
         ), patch("email_app.checks.get_config", return_value=""):
             errors = check_relay_configuration_in_production(None)
             self.assertTrue(any(e.id == "email_app.E002" for e in errors))
-
-
-class TestTemplateCatalogIntegrity(SimpleTestCase):
-    pass

@@ -160,5 +160,3 @@ class TestStudioConfirmGuard:
         assert not CourseAccess.objects.filter(pk=access.pk).exists()
         assert "Access revoked for member.o'brien@test.com" in page.content()
         context.close()
-
-    pass

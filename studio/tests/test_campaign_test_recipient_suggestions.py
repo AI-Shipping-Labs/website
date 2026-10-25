@@ -8,12 +8,14 @@ per the testing guidelines — these TestCases never assert on the inline
 script.
 """
 
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
 from email_app.models import EmailCampaign
 from email_app.services.campaign_test_send import send_campaign_test_recipient
+from studio.views.campaigns import RECENT_TEST_RECIPIENTS_SESSION_KEY
 
 User = get_user_model()
 
@@ -140,7 +142,71 @@ class CampaignRecentTestRecipientsTest(TestCase):
             body="Body",
         )
 
-    pass
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_successful_send_records_recent_recipient(self, _send):
+        self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "qa@example.com"},
+        )
+
+        self.assertEqual(
+            self.client.session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY),
+            ["qa@example.com"],
+        )
+
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_recent_recipient_appears_as_chip_on_next_visit(self, _send):
+        self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "qa@example.com"},
+        )
+
+        response = self.client.get(f"/studio/campaigns/{self.campaign.pk}/")
+        chips = {
+            suggestion["email"]: suggestion["label"]
+            for suggestion in response.context["test_recipient_suggestions"]
+        }
+        self.assertEqual(chips["qa@example.com"], "Recent")
+
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_recent_list_is_capped_at_five_most_recent_first(self, _send):
+        for index in range(1, 7):
+            self.client.post(
+                f"/studio/campaigns/{self.campaign.pk}/test-send",
+                {"test_recipients": f"r{index}@example.com"},
+            )
+
+        self.assertEqual(
+            self.client.session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY),
+            ["r6@example.com", "r5@example.com", "r4@example.com",
+             "r3@example.com", "r2@example.com"],
+        )
+
+    @patch("studio.views.campaigns._send_studio_test_campaign", return_value="relay-id")
+    def test_resending_existing_recent_dedups_case_insensitively(self, _send):
+        for recipient in ("qa@example.com", "QA@example.com"):
+            self.client.post(
+                f"/studio/campaigns/{self.campaign.pk}/test-send",
+                {"test_recipients": recipient},
+            )
+
+        recent = self.client.session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY)
+        self.assertEqual(len(recent), 1)
+        self.assertEqual(recent[0].casefold(), "qa@example.com")
+
+    @patch(
+        "studio.views.campaigns._send_studio_test_campaign",
+        side_effect=RuntimeError("relay unavailable"),
+    )
+    def test_failed_send_does_not_record_recent(self, _send):
+        self.client.post(
+            f"/studio/campaigns/{self.campaign.pk}/test-send",
+            {"test_recipients": "fail@example.com"},
+        )
+
+        self.assertIsNone(
+            self.client.session.get(RECENT_TEST_RECIPIENTS_SESSION_KEY),
+        )
 
 
 class CampaignTestRecipientPolicyTest(TestCase):
@@ -167,11 +233,3 @@ class CampaignTestRecipientPolicyTest(TestCase):
         self.assertEqual(message.unsubscribe_url, "")
         self.assertEqual(message.footer_note, "")
         self.assertIsNone(message.skip_reason)
-
-    pass
-
-    pass
-
-    pass
-
-    pass

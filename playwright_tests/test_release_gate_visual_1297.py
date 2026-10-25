@@ -165,13 +165,11 @@ def test_release_gate_changed_states_light_dark_desktop_mobile(
                 )
                 assert response is not None and response.status == 200
                 expect(page.get_by_test_id("template-sent-when")).not_to_be_empty()
-                expect(page.get_by_test_id("preview-status")).to_have_text(
-                    "Up to date"
-                )
+                page.get_by_role("button", name="Preview through Relay").click()
                 expect(
                     page.frame_locator('[data-testid="email-template-preview"]')
                     .locator("body")
-                ).not_to_be_empty()
+                ).to_contain_text("Relay preview")
                 _capture(page, f"email-{template_name}", viewport, theme)
 
             context.close()

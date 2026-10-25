@@ -32,7 +32,11 @@ class RelayTemplateClient:
         rows = document.get("templates")
         if not isinstance(rows, list):
             raise RelayTemplateError("malformed_templates_response")
-        return tuple(row for row in rows if _visible_template(row))
+        visible = []
+        for row in rows:
+            if _visible_template(row):
+                visible.append(row)
+        return tuple(visible)
 
     def template(self, template_key):
         document = self._request(

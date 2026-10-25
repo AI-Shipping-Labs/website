@@ -39,4 +39,6 @@ def template_version_for(template_key):
     named templates into newer versions after live inventory and previews.
     """
 
-    return 2 if template_key == "campaign-broadcast" else 1
+    if template_key == "campaign-broadcast":
+        return 2
+    return 1

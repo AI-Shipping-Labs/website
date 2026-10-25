@@ -402,7 +402,22 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         )
         cls.sprint = _make_sprint()
 
-    pass
+    def setUp(self):
+        self.client.login(email='staff@test.com', password='pw')
+        self.llm_enabled_patcher = patch(
+            'plans.services.first_sprint_draft_service.llm.is_enabled',
+            return_value=True,
+        )
+        self.draft_patcher = patch(
+            'plans.services.first_sprint_draft_service.draft_first_sprint',
+            return_value=_first_draft_result(),
+        )
+        self.llm_enabled_patcher.start()
+        self.draft_patcher.start()
+        self.addCleanup(self.llm_enabled_patcher.stop)
+        self.addCleanup(self.draft_patcher.stop)
+        PlanRequest.objects.create(sprint=self.sprint, member=self.member)
+        _submit_onboarding(self.member)
 
     def _url(self):
         return (
@@ -488,7 +503,6 @@ class CreatePlanFromRequestSubmitTest(TestCase):
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
             0,
         )
-        self.assertEqual(self.mock_ses.call_count, 0)
 
     def test_post_preserves_plan_request_audit_rows(self):
         """``PlanRequest`` rows are audit data; never deleted (issue #718)."""
@@ -548,7 +562,6 @@ class CreatePlanFromRequestSubmitTest(TestCase):
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
             0,
         )
-        self.assertEqual(self.mock_ses.call_count, 0)
 
     def test_second_post_flashes_already_has_plan_message(self):
         self.client.post(self._url())

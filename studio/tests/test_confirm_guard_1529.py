@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
 
+from content.models import Course, CourseAccess, CourseInstructor, Enrollment, Instructor
+
 User = get_user_model()
 
 
@@ -30,7 +32,36 @@ def _confirm_forms(response):
 
 @tag("core")
 class StudioConfirmGuardMarkupTest(TestCase):
-    pass
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="staff-confirm@test.com", password="pw", is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email="member.o'brien@test.com", password="pw",
+        )
+        cls.course = Course.objects.create(
+            title=(
+                "Beginner's \"AI\" </form>"
+                "<script>window.coursePwned=true</script>"
+            ),
+            slug="beginners-ai-confirm",
+            status="published",
+        )
+        cls.enrollment = Enrollment.objects.create(
+            user=cls.member, course=cls.course, source="admin",
+        )
+        cls.access = CourseAccess.objects.create(
+            user=cls.member, course=cls.course,
+            access_type="granted", granted_by=cls.staff,
+        )
+        cls.instructor = Instructor.objects.create(
+            instructor_id="obrien-confirm",
+            name="O'Brien </form><script>window.instructorPwned=true</script>",
+        )
+        cls.association = CourseInstructor.objects.create(
+            course=cls.course, instructor=cls.instructor, position=0,
+        )
 
     def setUp(self):
         self.client.force_login(self.staff)
@@ -79,22 +110,3 @@ class StudioConfirmGuardMarkupTest(TestCase):
         self.assertNotIn("onsubmit", matching[0])
         self.assertNotContains(response, "confirm('Remove O")
         self.assertNotContains(response, "window.instructorPwned=true</script>")
-
-    def test_email_template_reset_uses_safe_form_and_submit_control_markup(self):
-        list_response = self.client.get(reverse("studio_email_template_list"))
-        message = "Reset welcome to the filesystem default? This deletes the override."
-        self.assert_safe_confirm_forms(list_response, [message])
-        self.assertNotContains(list_response, "confirm('Reset welcome")
-
-        edit_response = self.client.get(
-            reverse("studio_email_template_edit", args=["welcome"])
-        )
-        parser = _FormAttributeParser()
-        parser.feed(edit_response.content.decode())
-        reset_controls = [
-            button for button in parser.buttons
-            if button.get("data-confirm") == message
-        ]
-        self.assertEqual(len(reset_controls), 1)
-        self.assertNotIn("onclick", reset_controls[0])
-        self.assertNotContains(edit_response, "confirm('Reset welcome")

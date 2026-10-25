@@ -275,5 +275,3 @@ class SeriesRegistrationTimezoneLineTest(TestCase):
         # Exactly one timezone line covers all occurrences.
         self.assertEqual(text.count("Set your timezone"), 1)
         self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
-
-

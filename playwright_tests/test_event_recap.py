@@ -489,33 +489,6 @@ class TestRecapThroughTheStaffApi:
         assert gone.status == 404
 
 
-@pytest.mark.django_db(transaction=True)
-class TestFollowupEmailRecapLink:
-    def test_studio_email_preview_links_the_recap_instead_of_promising_notes(
-        self, django_server, browser,
-    ):
-        _clear_events()
-        create_staff_user('admin@test.com')
-
-        context = auth_context(browser, 'admin@test.com')
-        page = context.new_page()
-        page.goto(
-            f'{django_server}/studio/email-templates/'
-            f'post_event_followup/edit/',
-            wait_until='domcontentloaded',
-        )
-        expect(page.get_by_test_id('preview-status')).to_have_text(
-            'Up to date'
-        )
-        preview = page.frame_locator(
-            '[data-testid="email-template-preview"]'
-        ).locator('body')
-        expect(preview).to_contain_text('Read the recap')
-        rendered = preview.inner_text()
-        assert 'notes are still being put together' not in rendered
-        context.close()
-
-
 def _clear_recap_notification_state():
     """Reset the rows owned by the recap-notification browser journeys."""
     from email_app.models import EmailLog

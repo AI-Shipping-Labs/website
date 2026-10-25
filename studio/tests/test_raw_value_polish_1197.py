@@ -125,8 +125,6 @@ class StudioRawValuePolishTest(TestCase):
         detail_response = self.client.get(f'/studio/plans/{plan.pk}/')
         self.assertContains(detail_response, '**Ship** `RAG` with [docs]')
 
-    pass
-
     def test_trigger_subscription_filters_are_readable_not_python_reprs(self):
         TriggerSubscription.objects.create(
             event_type='custom',

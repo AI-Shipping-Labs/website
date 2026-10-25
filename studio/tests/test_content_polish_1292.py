@@ -36,7 +36,26 @@ class ContentPolishStudioTest(TestCase):
     def setUp(self):
         self.client.force_login(self.staff)
 
-    pass
+    def test_every_relay_template_has_trigger_guidance(self):
+        response = self.client.get(reverse("studio_email_template_list"))
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.context["rows"]
+        self.assertTrue(rows)
+        for row in rows:
+            with self.subTest(template_name=row["template_name"]):
+                self.assertIn(row["template_name"], TEMPLATE_SENT_WHEN)
+                self.assertEqual(
+                    row["sent_when"], TEMPLATE_SENT_WHEN[row["template_name"]],
+                )
+
+        template_name = rows[0]["template_name"]
+        edit_response = self.client.get(
+            reverse("studio_email_template_edit", args=[template_name]),
+        )
+        self.assertEqual(
+            edit_response.context["sent_when"], TEMPLATE_SENT_WHEN[template_name],
+        )
 
     def test_payment_grace_templates_have_trigger_guidance_and_render_in_list(self):
         grace_templates = {

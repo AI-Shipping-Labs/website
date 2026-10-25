@@ -375,5 +375,3 @@ class MavenWelcomeResolverTest(TestCase):
         _deliver_expect_permanent_error(
             self, delivery, "maven_welcome_user_missing",
         )
-
-

@@ -30,8 +30,8 @@ from integrations.models import IntegrationSetting
 BASE_URL = "https://site.test"
 
 
-def _drain_html(delivery):
-    """Deliver one delivery through the real worker; return (subject, html)."""
+def _drain_context(delivery):
+    """Deliver one row through the worker and return Relay's resolved context."""
 
     from email_app.testing import relay_test_backend
 
@@ -46,8 +46,8 @@ def _drain_html(delivery):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1
     call = stub.calls[0]
-    simple = call["Content"]["Simple"]
-    return simple["Subject"]["Data"], simple["Body"]["Html"]["Data"]
+    assert call["delivery"].pk == delivery.pk
+    return call["context"]
 
 
 def _drain_expect_permanent_error(test, delivery, reason):
@@ -108,21 +108,15 @@ class LeadMagnetResolverTest(TestCase):
         for url_key in ("verify_url", "download_url"):
             self.assertNotIn(url_key, delivery.context_data)
 
-        _subject, html = _drain_html(delivery)
-        verify_urls = re.findall(
-            rf"{re.escape(BASE_URL)}/api/verify-email\?token=[A-Za-z0-9_.\-]+",
-            html,
-        )
-        # The body carries the download CTA and the verify link points at
-        # the same redirect.
-        self.assertGreaterEqual(len(verify_urls), 1)
-        payload = _extract_token_payload(verify_urls[0])
+        context = _drain_context(delivery)
+        self.assertEqual(context["verify_url"], context["download_url"])
+        payload = _extract_token_payload(context["verify_url"])
         self.assertEqual(payload["action"], "verify_email")
         self.assertEqual(
             payload["return_path"], "/downloads/ai-cheat-sheet/file",
         )
-        self.assertIn("your resource", html)
-        self.assertIn("Hi Ada,", html)
+        self.assertEqual(context["resource_title"], "your resource")
+        self.assertEqual(context["user_name"], "Ada")
 
     def test_nameless_member_gets_the_1591_greeting(self):
         member = self._member("nameless.magnet@test.com")
@@ -132,10 +126,8 @@ class LeadMagnetResolverTest(TestCase):
             "ttl_days": 7,
         })
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi there,", html)
-        self.assertNotIn("Hi nameless.magnet,", html)
-        self.assertNotIn("Hi ,", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "there")
 
     def test_delivery_without_recipient_fails_closed(self):
         delivery = send_package_mail(
@@ -171,12 +163,9 @@ class WelcomeImportedResolverTest(TestCase):
         self.assertNotIn("password_reset_url", delivery.context_data)
         self.assertNotIn("sign_in_url", delivery.context_data)
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn(f"{BASE_URL}/login/", html)
-        match = re.search(
-            rf"{re.escape(BASE_URL)}/api/password-reset\?token=([A-Za-z0-9_.\-]+)",
-            html,
-        )
+        context = _drain_context(delivery)
+        self.assertEqual(context["sign_in_url"], f"{BASE_URL}/login/")
+        match = re.search(r"token=([A-Za-z0-9_.\-]+)", context["password_reset_url"])
         self.assertIsNotNone(match)
         payload = jwt.decode(
             match.group(1),
@@ -193,8 +182,8 @@ class WelcomeImportedResolverTest(TestCase):
         lifetime = expires_at - datetime.datetime.now(datetime.timezone.utc)
         self.assertGreater(lifetime, datetime.timedelta(minutes=59))
         self.assertLess(lifetime, datetime.timedelta(hours=1, minutes=1))
-        self.assertIn("Hi Grace,", html)
-        self.assertIn("datatalks-alumni", html)
+        self.assertEqual(context["user_name"], "Grace")
+        self.assertEqual(context["import_tags"], "datatalks-alumni")
 
     def test_nameless_imported_member_gets_the_1591_greeting(self):
         user = User.objects.create_user(email="nameless.import@test.com")
@@ -207,9 +196,8 @@ class WelcomeImportedResolverTest(TestCase):
             "course_slug_list": "",
         })
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi there,", html)
-        self.assertNotIn("Hi nameless.import,", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "there")
 
     def test_delivery_without_recipient_fails_closed(self):
         delivery = send_package_mail(
@@ -238,11 +226,8 @@ class SubscribeVerificationResolverTest(TestCase):
 
         self.assertNotIn("verify_url", delivery.context_data)
 
-        _subject, html = _drain_html(delivery)
-        match = re.search(
-            rf"{re.escape(BASE_URL)}/api/verify-email\?token=([A-Za-z0-9_.\-]+)",
-            html,
-        )
+        context = _drain_context(delivery)
+        match = re.search(r"token=([A-Za-z0-9_.\-]+)", context["verify_url"])
         self.assertIsNotNone(match)
         payload = jwt.decode(
             match.group(1),
@@ -282,11 +267,9 @@ class AuthLinkGreetingTest(TestCase):
         member = User.objects.create_user(email="nameless.auth@test.com")
         delivery = send_package_mail(member, "password_reset", {})
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi there,", html)
-        self.assertNotIn("Hi nameless.auth,", html)
-        self.assertNotIn("Hi ,", html)
-        self.assertIn("/api/password-reset?token=", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "there")
+        self.assertIn("/api/password-reset?token=", context["reset_url"])
 
     def test_named_member_keeps_their_name(self):
         member = User.objects.create_user(
@@ -294,9 +277,8 @@ class AuthLinkGreetingTest(TestCase):
         )
         delivery = send_package_mail(member, "password_reset", {})
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi Ada,", html)
-        self.assertNotIn("Hi there,", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "Ada")
 
 
 @tag("core")
@@ -318,17 +300,16 @@ class StudioTestSendCategoryTest(TestCase):
         delivery = send_package_mail(
             member,
             "event_recap_ready",
-            {"event_title": "AI Shipping Workshop"},
+            {"event_title": "AI Shipping Workshop", "user_name": "Operator"},
             category=STUDIO_TEST_SEND_CATEGORY,
         )
 
         self.assertEqual(delivery.category, STUDIO_TEST_SEND_CATEGORY)
-        subject, html = _drain_html(delivery)
-        self.assertIn("AI Shipping Workshop", html)
-        self.assertIn("Hi Operator,", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["event_title"], "AI Shipping Workshop")
+        self.assertEqual(context["user_name"], "Operator")
         self.assertNotIn("recap_url", delivery.context_data)
-        # No relation-minted link renders.
-        self.assertNotIn("/events/", html)
+        self.assertNotIn("recap_url", context)
 
     def test_same_purpose_without_the_category_fails_closed(self):
         member = User.objects.create_user(email="real-send@test.com")
@@ -370,16 +351,11 @@ class TrailingSlashSiteUrlOverrideTest(TestCase):
             "ttl_days": 7,
         })
 
-        _subject, html = _drain_html(delivery)
-        # Scoped to the minted link: this template's footer also renders
-        # ``{{ site_url }}/tutorials/`` from the render-only injection,
-        # which is not the resolver mint under test.
-        self.assertIn(
-            "https://override.example.com/api/verify-email?token=", html,
-        )
-        self.assertNotIn(
-            "https://override.example.com//api/verify-email?token=", html,
-        )
+        context = _drain_context(delivery)
+        self.assertTrue(context["verify_url"].startswith(
+            "https://override.example.com/api/verify-email?token=",
+        ))
+        self.assertEqual(context["verify_url"], context["download_url"])
 
     def test_subscribe_verify_link_strips_the_override(self):
         _set_site_url_override("https://override.example.com/")
@@ -388,19 +364,17 @@ class TrailingSlashSiteUrlOverrideTest(TestCase):
             member, "email_verification_subscribe", {"ttl_days": 7},
         )
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn(
-            "https://override.example.com/api/verify-email?token=", html,
-        )
-        self.assertNotIn("example.com//", html)
+        context = _drain_context(delivery)
+        self.assertTrue(context["verify_url"].startswith(
+            "https://override.example.com/api/verify-email?token=",
+        ))
 
     def test_password_reset_link_strips_the_override(self):
         _set_site_url_override("https://override.example.com/")
         member = User.objects.create_user(email="slash.reset@test.com")
         delivery = send_package_mail(member, "password_reset", {})
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn(
-            "https://override.example.com/api/password-reset?token=", html,
-        )
-        self.assertNotIn("example.com//", html)
+        context = _drain_context(delivery)
+        self.assertTrue(context["reset_url"].startswith(
+            "https://override.example.com/api/password-reset?token=",
+        ))

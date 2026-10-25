@@ -26,10 +26,8 @@ from payments.models import Tier
 @override_settings(
     SITE_BASE_URL='https://env.example.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
-    AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
-    SES_ENABLED=True,
 )
 class RegistrationEmailTimezoneTest(TestCase):
     """Issue #666: ``event_datetime`` in the rendered body is the user's
@@ -163,7 +161,6 @@ class RegistrationEmailTimezoneTest(TestCase):
         self.assertIn('18:00 Asia/Kolkata', html)
 
 
-@override_settings(SES_ENABLED=False)
 class RegistrationEmailDoesNotUseFormattedStartTest(TestCase):
     """Regression guard: ``event.formatted_start()`` (hardcoded UTC)
     must NOT be used to build the email context. The test patches

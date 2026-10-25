@@ -19,7 +19,7 @@ from community_base.mail.models import EmailDelivery
 from community_base.mail.service import MailError
 from django.conf import settings
 from django.core.cache import cache
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import EmailChangeRequest, User
@@ -34,18 +34,10 @@ TEST_PURPOSE = "email_verification_signup"
 
 
 def _drain(deliveries):
-    """Deliver exactly the given deliveries with a local stub; return HTML."""
+    """Deliver exactly the given deliveries and return Relay contexts."""
 
-    # These tests assert the locally-rendered HTML, so they opt the worker
-    # into the package's local-render backend explicitly (Relay cutover P4:
-    # the runner default is now the relay backend, which renders
-    # server-side and returns no local HTML).
     stub = StubRelayClient()
-    backend_override = override_settings(
-        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "relay"},
-    )
     with (
-        backend_override,
         relay_test_backend(), patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
@@ -53,14 +45,13 @@ def _drain(deliveries):
     ):
         for delivery in deliveries:
             deliver_job(None, {"delivery_id": str(delivery.id)})
-    return [
-        call["Content"]["Simple"]["Body"]["Html"]["Data"]
-        for call in stub.calls
+    assert [call["delivery"].pk for call in stub.calls] == [
+        delivery.pk for delivery in deliveries
     ]
+    return [call["context"] for call in stub.calls]
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class ContextGuardTest(TestCase):
     def _assert_rejected(self, context, path):
         from email_app.services.context_guard import ensure_no_rendered_urls
@@ -137,7 +128,6 @@ class ContextGuardTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class EmailChangeWorkerMintTest(TestCase):
     def setUp(self):
         cache.clear()
@@ -172,9 +162,9 @@ class EmailChangeWorkerMintTest(TestCase):
 
     def test_worker_mints_the_only_live_link_and_context_stays_frozen(self):
         stored_before = deepcopy(self.delivery.context_data)
-        (html,) = _drain([self.delivery])
+        (context,) = _drain([self.delivery])
 
-        self.assertIn("/account/change-email/confirm?token=", html)
+        self.assertIn("/account/change-email/confirm?token=", context["confirm_url"])
         self.delivery.refresh_from_db()
         self.assertEqual(self.delivery.context_data, stored_before)
 
@@ -282,8 +272,8 @@ class EmailChangeWorkerMintTest(TestCase):
             },
             idempotency_key=f"email-change-confirm:{legacy.pk}",
         )
-        (html,) = _drain([legacy_delivery])
-        self.assertIn(f"token={legacy_token}", html)
+        (context,) = _drain([legacy_delivery])
+        self.assertIn(f"token={legacy_token}", context["confirm_url"])
 
         result = confirm_email_change(legacy_token)
         self.assertTrue(result.success)
@@ -292,7 +282,6 @@ class EmailChangeWorkerMintTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class WorkerContextInjectionTest(TestCase):
     def test_worker_injects_site_url_without_storing_it(self):
         from email_app.hooks import resolve_auth_mail_context
@@ -354,7 +343,6 @@ class DirectPackageSendContractTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class NotificationWorkerMintTest(TestCase):
     """A1.2 slice 4: the notification sends (event reminder, workshop
     announcement, plan share) persist an empty durable context and the
@@ -406,13 +394,15 @@ class NotificationWorkerMintTest(TestCase):
         self.assertEqual(delivery.related_object_type, "events.event")
         self.assertEqual(delivery.related_object_id, str(event.pk))
 
-        (html,) = _drain([delivery])
-        self.assertIn("Reminder Mint Event", html)
-        self.assertIn("June 16, 2026, 18:00 Europe/Berlin", html)
-        self.assertIn(
-            f'href="{site_base_url()}{event.get_join_url()}"', html,
+        (context,) = _drain([delivery])
+        self.assertEqual(context["event_title"], "Reminder Mint Event")
+        self.assertEqual(
+            context["event_datetime"], "June 16, 2026, 18:00 Europe/Berlin",
         )
-        self.assertIn("Change your timezone", html)
+        self.assertEqual(
+            context["event_url"], f"{site_base_url()}{event.get_join_url()}",
+        )
+        self.assertIn("Change your timezone", context["timezone_help"])
         delivery.refresh_from_db()
         self.assertEqual(delivery.context_data, {})
 
@@ -422,7 +412,6 @@ class NotificationWorkerMintTest(TestCase):
         from datetime import date
 
         from content.models import Workshop
-        from integrations.config import site_base_url
 
         workshop = Workshop.objects.create(
             title="Mint Workshop", slug="mint-workshop",
@@ -435,11 +424,11 @@ class NotificationWorkerMintTest(TestCase):
         self.assertEqual(delivery.context_data, {})
         self.assertEqual(delivery.related_object_type, "content.workshop")
 
-        (html,) = _drain([delivery])
-        self.assertIn("Mint Workshop", html)
-        self.assertIn("Hands-on minting", html)
-        self.assertIn(
-            f'href="{site_base_url()}/workshops/mint-workshop"', html,
+        (context,) = _drain([delivery])
+        self.assertEqual(context["workshop_title"], "Mint Workshop")
+        self.assertEqual(context["workshop_description"], "Hands-on minting")
+        self.assertEqual(
+            context["workshop_url"], "/workshops/mint-workshop",
         )
         delivery.refresh_from_db()
         self.assertEqual(delivery.context_data, {})
@@ -449,8 +438,6 @@ class NotificationWorkerMintTest(TestCase):
 
         from content.models import Course
         from content.models.course_announcement import CourseAnnouncement
-        from integrations.config import site_base_url
-
         course = Course.objects.create(
             title="Mint Course", slug="mint-course-1942", status="published",
         )
@@ -467,15 +454,18 @@ class NotificationWorkerMintTest(TestCase):
             delivery.related_object_type, "content.courseannouncement",
         )
 
-        (html,) = _drain([delivery])
+        (context,) = _drain([delivery])
         tab_url = reverse(
             "course_announcements", kwargs={"slug": course.slug},
         )
-        self.assertIn("Mint Course", html)
-        self.assertIn("Week 2 office hours moved", html)
-        self.assertIn("<strong>Tomorrow</strong>", html)
-        self.assertIn(f'href="{site_base_url()}{tab_url}"', html)
-        self.assertIn("There's a new announcement in Mint Course.", html)
+        self.assertEqual(context["course_title"], "Mint Course")
+        self.assertEqual(
+            context["announcement_title"], "Week 2 office hours moved",
+        )
+        self.assertEqual(
+            context["announcement_body"], "**Tomorrow** we meet at 18:00 CET.",
+        )
+        self.assertEqual(context["course_url"], tab_url)
         delivery.refresh_from_db()
         self.assertEqual(delivery.context_data, {})
 
@@ -497,13 +487,13 @@ class NotificationWorkerMintTest(TestCase):
         self.assertEqual(delivery.context_data, {})
         self.assertEqual(delivery.related_object_type, "plans.plan")
 
-        (html,) = _drain([delivery])
+        (context,) = _drain([delivery])
         expected_url = (
             f"{site_base_url()}"
             f"{reverse('my_plan_detail', kwargs={'sprint_slug': 'mint-sprint', 'plan_id': plan.pk})}"
         )
-        self.assertIn("Mint Sprint", html)
-        self.assertIn(f'href="{expected_url}"', html)
+        self.assertEqual(context["sprint_name"], "Mint Sprint")
+        self.assertEqual(context["plan_url"], expected_url)
         delivery.refresh_from_db()
         self.assertEqual(delivery.context_data, {})
 

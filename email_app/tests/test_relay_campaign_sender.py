@@ -39,7 +39,6 @@ class SenderContractAdapter(requests.adapters.BaseAdapter):
 @override_settings(
     RELAY_BASE_URL="https://relay.example",
     RELAY_API_KEY="fixture-relay-key",
-    SES_FROM_EMAIL="",
     RELAY_PROMOTIONAL_FROM_EMAIL="",
 )
 class CampaignSenderWireTest(TestCase):
@@ -53,10 +52,6 @@ class CampaignSenderWireTest(TestCase):
     @override_settings(RELAY_PROMOTIONAL_FROM_EMAIL="AI Shipping Labs <content@aishippinglabs.com>")
     def test_promotional_display_address_uses_registered_content_slug(self):
         self._assert_sender("content")
-
-    @override_settings(SES_FROM_EMAIL="noreply@aishippinglabs.com")
-    def test_legacy_no_reply_sender_is_preserved(self):
-        self._assert_sender("noreply")
 
     @override_settings(RELAY_PROMOTIONAL_FROM_EMAIL="content")
     def test_already_resolved_sender_slug_is_preserved(self):

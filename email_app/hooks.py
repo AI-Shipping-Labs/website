@@ -1184,6 +1184,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_lead_magnet_context(delivery, context)
     elif delivery.purpose == "welcome_imported":
         _resolve_welcome_imported_context(delivery, context)
+    elif delivery.purpose in ("community_invite", "onboarding_reminder"):
+        _member_greeting(delivery, context)
     elif delivery.purpose in _COURSEWORK_PURPOSES:
         _resolve_coursework_context(delivery, context)
     elif delivery.purpose in (

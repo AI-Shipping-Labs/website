@@ -11,7 +11,10 @@ from django_q.models import Schedule
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.services.campaign_message import UNSUBSCRIBED_AT_SEND
-from email_app.services.relay_campaigns import (RelayCampaignDeliveryAmbiguous, RelayCampaignDeliveryRejected)
+from email_app.services.relay_campaigns import (
+    RelayCampaignDeliveryAmbiguous,
+    RelayCampaignDeliveryRejected,
+)
 from email_app.tasks.campaign_delivery_recovery import (
     BATCH_FUNC,
     recover_campaign_deliveries,

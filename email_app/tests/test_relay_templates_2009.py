@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase
 
-from email_app.relay_versions import RELAY_V2_TEMPLATE_KEYS, template_version_for
+from email_app.relay_versions import RELAY_TEMPLATE_KEYS, template_version_for
 from email_app.services.relay_templates import (
     RelayTemplateClient,
     RelayTemplateError,
@@ -72,11 +72,11 @@ class RelayTemplateClientTest(SimpleTestCase):
 
 
 class RelayTemplateVersionPolicyTest(SimpleTestCase):
-    def test_all_migrated_named_templates_and_campaign_are_version_two(self):
-        self.assertEqual(len(RELAY_V2_TEMPLATE_KEYS), 61)
-        for template_key in RELAY_V2_TEMPLATE_KEYS:
+    def test_named_templates_use_v1_until_relay_v2_is_published(self):
+        self.assertEqual(len(RELAY_TEMPLATE_KEYS), 61)
+        for template_key in RELAY_TEMPLATE_KEYS:
             with self.subTest(template_key=template_key):
-                self.assertEqual(template_version_for(template_key), 2)
+                self.assertEqual(template_version_for(template_key), 1)
         self.assertEqual(template_version_for("campaign-broadcast"), 2)
 
     def test_compatibility_and_unknown_templates_stay_version_one(self):

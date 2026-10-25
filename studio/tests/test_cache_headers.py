@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase
 
 from accounts.models import MemberAPIKey
 from accounts.services.email_change import request_email_change
@@ -126,7 +126,6 @@ class AccountsCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
         self.assert_token_response_is_private(response, vary=True)
 
 
-@override_settings(SES_ENABLED=False)
 class MemberAccountCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
     """Every sensitive member-account response is private and uncacheable."""
 

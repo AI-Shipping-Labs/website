@@ -24,10 +24,8 @@ CANCEL_RE = re.compile(
 @override_settings(
     SITE_BASE_URL='https://env.example.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
-    AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
-    SES_ENABLED=True,
 )
 class RegistrationEmailCancelUrlTest(TestCase):
     """The rendered HTML body carries a valid cancel URL bound to this registration."""
@@ -89,7 +87,7 @@ class RegistrationEmailCancelUrlTest(TestCase):
         self.assertIsNotNone(log)
 
 
-@override_settings(SITE_BASE_URL='https://env.example.com', SES_ENABLED=False)
+@override_settings(SITE_BASE_URL='https://env.example.com')
 class RegistrationEmailCancelUrlOverrideTest(TestCase):
     """The cancel URL host respects the Studio ``SITE_BASE_URL`` override.
 
@@ -145,7 +143,6 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
         )
 
 
-@override_settings(SES_ENABLED=False)
 class RegistrationEmailLegacySesSettingTest(TestCase):
     """The retired SES switch does not suppress Relay registration mail."""
 

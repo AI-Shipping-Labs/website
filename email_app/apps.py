@@ -7,8 +7,7 @@ class EmailAppConfig(AppConfig):
     def ready(self):
         # Importing the checks module is enough to register the
         # ``@register``-decorated Relay configuration checks with Django's
-        # system-check framework. (Relay cutover P4: the SES_ENABLED E001
-        # check is gone with the SES send paths.)
+        # system-check framework.
         # A6.2: importing relay_sync registers its durable job handlers and
         # connects the relay_callback_processed receiver.
         from email_app import (

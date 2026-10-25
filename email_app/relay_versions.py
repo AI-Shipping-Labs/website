@@ -1,6 +1,6 @@
 """Immutable Relay template versions selected by this website release."""
 
-RELAY_V2_TEMPLATE_KEYS = frozenset(
+RELAY_TEMPLATE_KEYS = frozenset(
     {
         "account_deletion_completed", "account_deletion_request",
         "account_email_change_confirm", "account_email_changed_notice",
@@ -31,6 +31,12 @@ RELAY_V2_TEMPLATE_KEYS = frozenset(
 
 
 def template_version_for(template_key):
-    if template_key in RELAY_V2_TEMPLATE_KEYS or template_key == "campaign-broadcast":
-        return 2
-    return 1
+    """Return the immutable version verified for this website release.
+
+    Relay currently has only version 1 of the named templates. Campaigns use
+    the new version-2 context contract, so their release remains blocked until
+    that immutable version is published. A later website release must opt the
+    named templates into newer versions after live inventory and previews.
+    """
+
+    return 2 if template_key == "campaign-broadcast" else 1

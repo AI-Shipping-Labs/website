@@ -19,7 +19,7 @@
         <th class="text-left px-4 py-3">Template</th>
         <th class="text-left px-4 py-3">Subject</th>
         <th class="text-left px-4 py-3 min-w-64">Sent when</th>
-        <th class="text-left px-4 py-3">Published version</th>
+        <th class="text-left px-4 py-3">Latest / active send</th>
         <th class="text-left px-4 py-3">Updated</th>
         <th class="text-right px-4 py-3">Actions</th>
       </tr>
@@ -36,6 +36,7 @@
         <td class="px-4 py-3 text-xs text-muted-foreground md:text-sm" data-label="Sent when" data-testid="template-sent-when">{{ row.sent_when }}</td>
         <td class="px-4 py-3" data-label="Status">
           {% if row.latest_version %}v{{ row.latest_version }}{% else %}Not published{% endif %}
+          <span class="block text-xs text-muted-foreground">Sends use v{{ row.active_send_version }}</span>
         </td>
         <td class="px-4 py-3 text-muted-foreground" data-label="Last edited">
           {% if row.updated_at %}{{ row.updated_at }}{% else %}&mdash;{% endif %}

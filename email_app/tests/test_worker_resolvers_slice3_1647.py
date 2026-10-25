@@ -5,7 +5,8 @@ The two producers persist scalar-only contexts plus the natural relation
 worker (``email_app.hooks.resolve_auth_mail_context``) and assert the
 provider-visible email carries the exact links and tokens the old
 synchronous send rendered — and that a stale relation fails closed with a
-``PermanentJobError`` reason code instead of delivering a broken link.
+``PermanentJobError`` reason code instead of delivering a broken link. Relay
+owns rendered subject/body copy, so successful cases assert its input context.
 """
 
 import datetime
@@ -40,8 +41,8 @@ from integrations.services.maven import (
 BASE_URL = "https://site.test"
 
 
-def _drain_html(delivery):
-    """Deliver one delivery through the real worker; return (subject, html)."""
+def _drain_context(delivery):
+    """Deliver one delivery through the real worker; return Relay context."""
 
     from email_app.testing import relay_test_backend
 
@@ -50,8 +51,8 @@ def _drain_html(delivery):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1
     call = stub.calls[0]
-    simple = call["Content"]["Simple"]
-    return simple["Subject"]["Data"], simple["Body"]["Html"]["Data"]
+    assert call["delivery"].pk == delivery.pk
+    return call["context"]
 
 
 def patch_configured_client(stub):
@@ -140,22 +141,22 @@ class DownloadDeliveryResolverTest(TestCase):
         for url_key in ("delivery_url", "expires_hours", "site_url"):
             self.assertNotIn(url_key, delivery.context_data)
 
-        _subject, html = _drain_html(delivery)
+        context = _drain_context(delivery)
 
-        self.assertIn(
-            f"{BASE_URL}/api/downloads/{download.slug}/file?grant=", html,
+        self.assertTrue(
+            context["delivery_url"].startswith(
+                f"{BASE_URL}/api/downloads/{download.slug}/file?grant=",
+            ),
         )
-        self.assertNotIn("/api/verify-email", html)
-        self.assertIn("expires in 24 hours", html)
+        self.assertFalse(context["verification_required"])
+        self.assertEqual(context["expires_hours"], 24)
         # The worker minted a real, single-use grant from the relation and
         # the stored scalars.
         grant = DownloadDeliveryGrant.objects.get(user=user, download=download)
         self.assertTrue(grant.newsletter_opt_in)
         self.assertEqual(grant.surface, "shortcode")
         self.assertIsNone(grant.redeemed_at)
-        grant_token = _extract_query_value(
-            _grant_url_from_html(html), "grant",
-        )
+        grant_token = _extract_query_value(context["delivery_url"], "grant")
         grant_id, _secret = unpack_delivery_grant_token(grant_token)
         self.assertEqual(str(grant.pk), grant_id)
 
@@ -170,10 +171,11 @@ class DownloadDeliveryResolverTest(TestCase):
 
         delivery = self._send(user, download)
 
-        _subject, html = _drain_html(delivery)
+        context = _drain_context(delivery)
 
-        verify_url = _verify_url_from_html(html)
+        verify_url = context["delivery_url"]
         self.assertTrue(verify_url.startswith(f"{BASE_URL}/api/verify-email?"))
+        self.assertTrue(context["verification_required"])
         token = _extract_query_value(verify_url, "token")
         payload = _decode_token(token)
         self.assertEqual(payload["user_id"], user.pk)
@@ -196,8 +198,7 @@ class DownloadDeliveryResolverTest(TestCase):
             expires_at,
             started_at + datetime.timedelta(hours=ttl_hours + 1),
         )
-        # The rendered copy quotes the same TTL the token carries.
-        self.assertIn(f"expires in {ttl_hours} hours", html)
+        self.assertEqual(context["expires_hours"], ttl_hours)
         # The grant itself was minted (and awaits the verified click).
         self.assertTrue(
             DownloadDeliveryGrant.objects.filter(
@@ -234,22 +235,6 @@ class DownloadDeliveryResolverTest(TestCase):
         )
 
 
-def _grant_url_from_html(html):
-    import re  # noqa: PLC0415
-
-    match = re.search(r'href="([^"]*/api/downloads/[^"]*file\?grant=[^"]+)"', html)
-    assert match, "download_delivery renders no grant link"
-    return match.group(1)
-
-
-def _verify_url_from_html(html):
-    import re  # noqa: PLC0415
-
-    match = re.search(r'href="([^"]*/api/verify-email\?token=[^"]+)"', html)
-    assert match, "download_delivery renders no verification link"
-    return match.group(1)
-
-
 @tag("core")
 @override_settings(SITE_BASE_URL=BASE_URL)
 class MavenWelcomeResolverTest(TestCase):
@@ -276,21 +261,21 @@ class MavenWelcomeResolverTest(TestCase):
             delivery.context_data, {"course_name": "Buildcamp"},
         )
 
-        subject, html = _drain_html(delivery)
+        context = _drain_context(delivery)
 
-        self.assertIn("You're enrolled in Buildcamp", subject)
-        self.assertIn(f'href="{BASE_URL}/accounts/login/"', html)
-        self.assertIn(f'href="{BASE_URL}/onboarding/"', html)
-        self.assertIn(f'href="{BASE_URL}/community/slack"', html)
+        self.assertEqual(context["course_name"], "Buildcamp")
+        self.assertEqual(context["sign_in_url"], f"{BASE_URL}/accounts/login/")
+        self.assertEqual(context["onboarding_url"], f"{BASE_URL}/onboarding/")
+        self.assertEqual(context["slack_join_url"], f"{BASE_URL}/community/slack")
 
         reset_token = _extract_query_value(
-            _url_from_html(html, "/api/password-reset?token="), "token",
+            context["password_reset_url"], "token",
         )
         reset_user, _payload = resolve_password_reset_token(reset_token)
         self.assertEqual(reset_user.pk, user.pk)
 
         opt_in_token = _extract_query_value(
-            _url_from_html(html, "/api/verify-and-subscribe?token="), "token",
+            context["newsletter_opt_in_url"], "token",
         )
         opt_in_payload = _decode_token(opt_in_token)
         self.assertEqual(opt_in_payload["user_id"], user.pk)
@@ -306,7 +291,7 @@ class MavenWelcomeResolverTest(TestCase):
         )
 
         opt_out_token = _extract_query_value(
-            _url_from_html(html, "/api/maven-email-opt-out?token="), "token",
+            context["opt_out_url"], "token",
         )
         opt_out_payload = _decode_token(opt_out_token)
         self.assertEqual(opt_out_payload["user_id"], user.pk)
@@ -320,10 +305,9 @@ class MavenWelcomeResolverTest(TestCase):
 
         delivery = self._send(user, course="AI Engineering Buildcamp")
 
-        _subject, html = _drain_html(delivery)
+        context = _drain_context(delivery)
 
-        self.assertIn("Hi there,", html)
-        self.assertNotIn("x.arrieta", html)
+        self.assertEqual(context["user_name"], "there")
 
     def test_named_enrollee_is_greeted_by_full_name(self):
         user = User.objects.create_user(
@@ -335,9 +319,9 @@ class MavenWelcomeResolverTest(TestCase):
 
         delivery = self._send(user)
 
-        _subject, html = _drain_html(delivery)
+        context = _drain_context(delivery)
 
-        self.assertIn("Hi Ada Lovelace,", html)
+        self.assertEqual(context["user_name"], "Ada Lovelace")
 
     def test_a_cohort_label_can_no_longer_reach_member_facing_copy(self):
         """Issue #1682: this helper used to fall back to the Maven cohort
@@ -358,10 +342,8 @@ class MavenWelcomeResolverTest(TestCase):
         delivery = self._send(user, course="")
 
         self.assertEqual(delivery.context_data, {"course_name": ""})
-        subject, html = _drain_html(delivery)
-        self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
-        self.assertNotIn("Cohort 1", subject)
-        self.assertNotIn("Cohort 1", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["course_name"], "")
 
     def test_course_channel_setting_is_read_at_delivery_time(self):
         user = User.objects.create_user(
@@ -377,9 +359,9 @@ class MavenWelcomeResolverTest(TestCase):
         delivery = self._send(user)
 
         self.assertNotIn("course_channel", delivery.context_data)
-        _subject, html = _drain_html(delivery)
-        self.assertIn(
-            "compare notes in #ai-engineering-buildcamp.", html,
+        context = _drain_context(delivery)
+        self.assertEqual(
+            context["course_channel"], "#ai-engineering-buildcamp",
         )
 
     def test_missing_recipient_user_fails_closed_with_reason(self):
@@ -395,9 +377,3 @@ class MavenWelcomeResolverTest(TestCase):
         )
 
 
-def _url_from_html(html, prefix):
-    import re  # noqa: PLC0415
-
-    match = re.search(rf'href="([^"]*{re.escape(prefix)}[^"]+)"', html)
-    assert match, f"maven_welcome renders no {prefix} link"
-    return match.group(1)

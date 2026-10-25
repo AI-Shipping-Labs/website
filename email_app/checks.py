@@ -1,9 +1,4 @@
-"""Django system checks for the ``email_app`` (Relay cutover P4).
-
-The SES_ENABLED E001 production gate is gone with the SES send paths:
-every send goes through Relay, and a production-like environment without
-Relay credentials fails the E002 check below instead.
-"""
+"""Django system checks for Relay outbound email configuration."""
 
 from __future__ import annotations
 

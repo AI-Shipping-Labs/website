@@ -28,7 +28,6 @@ class WelcomeRelayWireTest(TestCase):
             COMMUNITY_BASE=configured,
             RELAY_WELCOME_FROM_EMAIL="welcome@aishippinglabs.com",
             RELAY_WELCOME_REPLY_TO_EMAIL="welcome@aishippinglabs.com",
-            SES_CONFIGURATION_SET_NAME="fixture-ses-only",
         )
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)

@@ -10,7 +10,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REMOVED_PATHS = (
     "templates/email_app/base_email.html",
     "email_app/services/email_service.py", "email_app/services/email_rendering.py",
+    "email_app/services/email_errors.py", "email_app/services/relay_transport.py",
     "email_app/template_catalog.py",
+    "email_app/models/template_override.py",
+    "email_app/management/commands/sync_email_templates.py",
 )
 
 
@@ -44,6 +47,11 @@ class OutboundEmailGuardTest(SimpleTestCase):
     def test_detector_rejects_each_legacy_boundary(self):
         snippets = (
             "import boto3; boto3.client('ses')", "client.send_email()",
+            "import boto3 as aws; service = 'ses'; aws.client(service)",
+            "from boto3 import client as make_client; make_client(service_name='sesv2')",
+            "from django_ses import SESBackend; SESBackend()",
+            "from django.conf import settings; FROM = settings.SES_FROM_EMAIL",
+            "import smtplib as smtp; smtp.SMTP_SSL('smtp.example.com')",
             "EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'",
             "COMMUNITY_BASE = {'MAIL_BACKEND': 'ses_local'}",
             "SETTING = 'SES_FROM_EMAIL'",
@@ -52,3 +60,14 @@ class OutboundEmailGuardTest(SimpleTestCase):
         for source in snippets:
             with self.subTest(source=source):
                 self.assertTrue(source_violations(source, "example.py"))
+
+    def test_detector_allows_s3_and_ses_event_ingress(self):
+        snippets = (
+            "import boto3; boto3.client('s3')",
+            "message_id = event.get('mail', {}).get('messageId')",
+            "topic = 'ses-bounces'",
+            "from django.core.mail import EmailMessage; EmailMessage().send()",
+        )
+        for source in snippets:
+            with self.subTest(source=source):
+                self.assertEqual(source_violations(source, "example.py"), [])

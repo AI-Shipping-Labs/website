@@ -616,28 +616,24 @@ and continues on a second line.
 {{ user.profile.display_name|default:user.email }}
 ```
 
-Three surfaces are covered, because all three are compiled by
+The repository-owned HTML surface is covered because it is compiled by
 `django.template.Template`:
 
 | Surface | Enforced by |
 |---|---|
 | `templates/**/*.html` | `content/tests/test_template_comment_lint.py` |
-| `email_app/email_templates/*.md` | `content/tests/test_template_comment_lint.py` |
-| Operator-authored `EmailTemplateOverride` rows | `studio/views/email_templates.py` rejects the save |
 
-The lint is a `@tag("core")` hard gate with no baseline. It scans both file
-trees as raw text and fails on any multi-line or unclosed `{# #}`, `{% %}` or
+The lint is a `@tag("core")` hard gate with no baseline. It scans the template
+tree as raw text and fails on any multi-line or unclosed `{# #}`, `{% %}` or
 `{{ }}`, naming the token form so the failure says which construct to fix. It
 replaces the reactive per-page `assertNotContains` guards on the opening
 marker, which missed untested branches. Nothing else is scanned: `.py`,
 `_docs/`, `specs/`, `.claude/` and `skills/` carry legitimate lone opening
 markers in prose and string literals.
 
-Operator copy in `EmailTemplateOverride` cannot be reached by a file lint, so
-the Studio email-template editor applies the identical rule from
-`content/utils/template_comments.py` — the single implementation both callers
-import — and rejects the save with a line-numbered message instead of writing
-the row.
+Email subjects and bodies are stored, validated, previewed, and published by
+Relay. The website test suite checks the API boundary and context contract; it
+does not compile or lint Relay-owned template source.
 
 Helpers that scan template source must mirror the same tokenizer. Do not add
 `re.DOTALL` to a `{# #}` or opening-tag pattern: a permissive pattern masks a

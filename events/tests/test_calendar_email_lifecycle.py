@@ -37,7 +37,6 @@ def _attendee_text(vevent):
 
 @tag('core')
 @override_settings(
-    SES_ENABLED=True,
     SITE_BASE_URL='https://aishippinglabs.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <content@aishippinglabs.com>'

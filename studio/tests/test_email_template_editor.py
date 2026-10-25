@@ -43,6 +43,7 @@ class RelayTemplateEditorTest(TestCase):
         configured.return_value.templates.return_value = (
             relay_template(),
             relay_template("raw_transactional", name="Raw compatibility template"),
+            relay_template("relay-inbound-forward", name="Internal inbound template"),
         )
 
         response = self.client.get(reverse("studio_email_template_list"))
@@ -51,6 +52,8 @@ class RelayTemplateEditorTest(TestCase):
         self.assertContains(response, "Welcome")
         self.assertContains(response, "raw_transactional")
         self.assertContains(response, "Compatibility template")
+        self.assertNotContains(response, "relay-inbound-forward")
+        self.assertContains(response, "Sends use v1", count=2)
 
     @patch("studio.views.email_templates.configured_template_client")
     def test_save_updates_relay_draft_without_publishing(self, configured):
@@ -95,6 +98,17 @@ class RelayTemplateEditorTest(TestCase):
         )
         configured.return_value.publish.assert_called_once_with("welcome")
 
+    @patch("studio.views.email_templates.configured_template_client")
+    def test_editor_distinguishes_latest_from_active_send_version(self, configured):
+        configured.return_value.template.return_value = relay_template(latest_version=3)
+        configured.return_value.versions.return_value = ({"version": 3},)
+
+        response = self.client.get(
+            reverse("studio_email_template_edit", args=["welcome"]),
+        )
+
+        self.assertContains(response, "Website sends currently use immutable Relay v1")
+
     @patch(
         "studio.views.email_templates.get_preview_context",
         return_value={"user_name": "Ada"},
@@ -130,10 +144,24 @@ class RelayTemplateEditorTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "relay_unavailable")
 
-    def test_raw_compatibility_template_cannot_be_edited(self):
-        response = self.client.get(
-            reverse("studio_email_template_edit", args=["raw_transactional"])
+    @patch("studio.views.email_templates.configured_template_client")
+    def test_internal_and_read_only_templates_cannot_be_mutated(self, configured):
+        for template_name in ("raw_transactional", "relay-inbound-forward"):
+            for route in (
+                "studio_email_template_edit",
+                "studio_email_template_publish",
+            ):
+                with self.subTest(template_name=template_name, route=route):
+                    response = self.client.post(reverse(route, args=[template_name]))
+                    self.assertEqual(response.status_code, 404)
+        configured.assert_not_called()
+
+    @patch("studio.views.email_templates.configured_template_client")
+    def test_internal_template_cannot_be_previewed(self, configured):
+        response = self.client.post(
+            reverse("studio_email_template_preview", args=["relay-inbound-forward"]),
         )
 
         self.assertEqual(response.status_code, 404)
+        configured.assert_not_called()
 

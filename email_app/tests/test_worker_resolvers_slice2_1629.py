@@ -5,7 +5,8 @@ The five producers persist scalar-only contexts plus the natural relation
 worker (``email_app.hooks.resolve_auth_mail_context``) and assert the
 provider-visible email carries the exact links the old synchronous send
 rendered — and that a stale relation fails closed with a
-``PermanentJobError`` reason code instead of delivering a broken link.
+``PermanentJobError`` reason code instead of delivering a broken link. Relay
+owns rendered subject/body copy, so successful cases assert its input context.
 """
 
 import datetime
@@ -30,8 +31,8 @@ from tests.fixtures import TierSetupMixin, set_membership
 BASE_URL = "https://site.test"
 
 
-def _drain_html(delivery):
-    """Deliver one delivery through the real worker; return (subject, html)."""
+def _drain_context(delivery):
+    """Deliver one delivery through the real worker; return Relay context."""
 
     from email_app.testing import relay_test_backend
 
@@ -46,8 +47,8 @@ def _drain_html(delivery):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1
     call = stub.calls[0]
-    simple = call["Content"]["Simple"]
-    return simple["Subject"]["Data"], simple["Body"]["Html"]["Data"]
+    assert call["delivery"].pk == delivery.pk
+    return call["context"]
 
 
 def _deliver_expect_permanent_error(test, delivery, reason):
@@ -130,18 +131,19 @@ class SprintEndRecapResolverTest(TierSetupMixin, TestCase):
         for url_key in ("plan_url", "feedback_url", "next_action_url"):
             self.assertNotIn(url_key, delivery.context_data)
 
-        subject, html = _drain_html(delivery)
-        self.assertEqual(subject, "Your May Sprint sprint recap")
-        self.assertIn(f"{BASE_URL}/sprints/may-sprint/plan/{plan.pk}", html)
-        self.assertIn(
-            f"{BASE_URL}/sprints/may-sprint/feedback/"
-            f"{feedback_response.pk}",
-            html,
+        context = _drain_context(delivery)
+        self.assertEqual(
+            context["plan_url"], f"{BASE_URL}/sprints/may-sprint/plan/{plan.pk}",
         )
-        self.assertIn(
-            f"{BASE_URL}/sprints/next-sprint/plan/{next_plan.pk}", html,
+        self.assertEqual(
+            context["feedback_url"],
+            f"{BASE_URL}/sprints/may-sprint/feedback/{feedback_response.pk}",
         )
-        self.assertIn("Carry over unfinished work", html)
+        self.assertEqual(
+            context["next_action_url"],
+            f"{BASE_URL}/sprints/next-sprint/plan/{next_plan.pk}",
+        )
+        self.assertEqual(context["next_action_label"], "Carry over unfinished work")
 
     def test_member_without_name_gets_the_1591_greeting(self):
         member = self._member("nameless.recap@test.com")
@@ -153,10 +155,8 @@ class SprintEndRecapResolverTest(TierSetupMixin, TestCase):
             "has_next_action": False,
         })
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi there,", html)
-        self.assertNotIn("Hi ,", html)
-        self.assertNotIn("Hi nameless.recap,", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "there")
 
     def test_deleted_plan_fails_closed_with_reason(self):
         member = self._member("stale-recap@test.com")
@@ -257,13 +257,13 @@ class SprintPartnerIntroResolverTest(TestCase):
             delivery.context_data["partners"][0],
         )
 
-        subject, html = _drain_html(delivery)
-        self.assertIn(
-            "Your accountability partner for May Sprint", subject,
+        context = _drain_context(delivery)
+        self.assertEqual(context["board_url"], f"{BASE_URL}/sprints/may-sprint/board")
+        self.assertEqual(
+            context["partners"][0]["slack_profile_url"],
+            "https://app.slack.com/client/TWORKSPACE/UPARTNER",
         )
-        self.assertIn(f"{BASE_URL}/sprints/may-sprint/board", html)
-        self.assertIn("https://app.slack.com/client/TWORKSPACE/UPARTNER", html)
-        self.assertIn("Ada", html)
+        self.assertEqual(context["member_name"], "Ada")
 
     def test_deleted_sprint_fails_closed_with_reason(self):
         sprint = Sprint.objects.create(
@@ -327,11 +327,10 @@ class SprintCadenceResolverTest(TestCase):
         )
         self.assertNotIn("plan_url", delivery.context_data)
 
-        subject, html = _drain_html(delivery)
-        self.assertEqual(subject, "Week 3 is ready for May Sprint")
-        self.assertIn(
+        context = _drain_context(delivery)
+        self.assertEqual(
+            context["plan_url"],
             f"{BASE_URL}/sprints/may-sprint/plan/{plan.pk}#week-{week.pk}",
-            html,
         )
 
     def test_week_note_prompt_gets_the_same_anchor_rule(self):
@@ -348,11 +347,10 @@ class SprintCadenceResolverTest(TestCase):
             related=plan,
         )
 
-        subject, html = _drain_html(delivery)
-        self.assertEqual(subject, "Write your Week 3 sprint note")
-        self.assertIn(
+        context = _drain_context(delivery)
+        self.assertEqual(
+            context["plan_url"],
             f"{BASE_URL}/sprints/may-sprint/plan/{plan.pk}#week-{week.pk}",
-            html,
         )
 
     def test_deleted_plan_fails_closed_with_reason(self):
@@ -431,17 +429,15 @@ class PaymentGraceResolverTest(TierSetupMixin, TestCase):
         for url_key in ("recovery_url", "studio_member_url", "studio_report_url"):
             self.assertNotIn(url_key, delivery.context_data)
 
-        subject, html = _drain_html(delivery)
-        self.assertEqual(subject, "[Payments] Member payment failed")
-        # The template documents the MEMBER even though the delivery goes
-        # to the team mailbox; the package default would have used the
-        # delivery recipient here.
-        self.assertIn("grace@test.com", html)
-        self.assertIn(f"{BASE_URL}/studio/users/{member.pk}/", html)
-        self.assertIn(
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_email"], "grace@test.com")
+        self.assertEqual(
+            context["studio_member_url"], f"{BASE_URL}/studio/users/{member.pk}/",
+        )
+        self.assertEqual(
+            context["studio_report_url"],
             f"{BASE_URL}/studio/payments/subscription-reconciliation/"
             "?filter=payment_grace",
-            html,
         )
 
     def test_member_template_renders_the_1591_greeting(self):
@@ -455,9 +451,11 @@ class PaymentGraceResolverTest(TierSetupMixin, TestCase):
             related=grace,
         )
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn("Hi there,", html)
-        self.assertIn("https://billing.stripe.com/p/login/safe", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["user_name"], "there")
+        self.assertEqual(
+            context["recovery_url"], "https://billing.stripe.com/p/login/safe",
+        )
 
     def test_deleted_grace_fails_closed_with_reason(self):
         member = User.objects.create_user(email="stale.grace@test.com")
@@ -498,10 +496,9 @@ class CheckoutPaymentFailedResolverTest(TestCase):
         )
         self.assertNotIn("retry_url", delivery.context_data)
 
-        subject, html = _drain_html(delivery)
-        self.assertIn("Your AI Shipping Labs payment didn't complete", subject)
-        self.assertIn(
-            f"{BASE_URL}{course.get_absolute_url()}", html,
+        context = _drain_context(delivery)
+        self.assertEqual(
+            context["retry_url"], f"{BASE_URL}{course.get_absolute_url()}",
         )
 
     def test_tier_checkout_without_course_uses_membership_fallback(self):
@@ -513,8 +510,8 @@ class CheckoutPaymentFailedResolverTest(TestCase):
             idempotency_key="checkout-payment-failed:cs_test_2",
         )
 
-        _subject, html = _drain_html(delivery)
-        self.assertIn(f"{BASE_URL}/membership", html)
+        context = _drain_context(delivery)
+        self.assertEqual(context["retry_url"], f"{BASE_URL}/membership")
 
     def test_deleted_course_fails_closed_with_reason(self):
         member = User.objects.create_user(email="stale.checkout@test.com")

@@ -23,9 +23,7 @@ from notifications.services.staff_slack import (
 logger = logging.getLogger(__name__)
 
 RELAY_TIMEOUT_SECONDS = 15
-ACCEPTED_STATUSES = frozenset(
-    {"accepted", "queued", "sent", "provider_accepted", "delivered"},
-)
+ACCEPTED_STATUSES = frozenset({"accepted", "queued", "sent", "provider_accepted", "delivered"})
 
 
 class RelayTransactionalError(RuntimeError):

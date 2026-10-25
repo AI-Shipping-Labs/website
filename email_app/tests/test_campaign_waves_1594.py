@@ -16,6 +16,10 @@ from django_q.models import Schedule
 
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
 from email_app.services.campaign_dispatch import retry_delivery
+from email_app.services.campaign_message import (
+    UNSUBSCRIBED_AT_SEND,
+    prepare_campaign_message,
+)
 from email_app.services.campaign_repermission import (
     REPERMISSION_COPY,
     REPERMISSION_CTA,
@@ -26,10 +30,6 @@ from email_app.services.campaign_waves import (
     bounce_threshold_breached,
     campaign_wave_summary,
     release_next_wave,
-)
-from email_app.services.campaign_message import (
-    UNSUBSCRIBED_AT_SEND,
-    prepare_campaign_message,
 )
 from email_app.tasks.campaign_delivery_recovery import recover_campaign_deliveries
 from email_app.tasks.send_campaign import (

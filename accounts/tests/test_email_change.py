@@ -5,7 +5,7 @@ from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount
 from community_base.mail.models import EmailDelivery
 from django.core.cache import cache
-from django.test import Client, TestCase, override_settings, tag
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from accounts.models import EmailAlias, EmailChangeRequest, MemberAPIKey, User
@@ -26,7 +26,6 @@ from tests.fixtures import set_membership
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class EmailChangeAccountPageTest(TestCase):
     def test_activated_member_tiers_and_staff_have_no_login_email_card(self):
         for index, tier_slug in enumerate(["free", "basic", "main", "premium"]):
@@ -77,7 +76,6 @@ class EmailChangeAccountPageTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class EmailChangeRequestRouteWithdrawalTest(TestCase):
     url = "/account/api/change-email/request"
 
@@ -134,7 +132,6 @@ class EmailChangeRequestRouteWithdrawalTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class EmailChangeConfirmationViewTest(TestCase):
     confirm_url = "/account/change-email/confirm"
     support_href = (
@@ -251,7 +248,6 @@ class EmailChangeConfirmationViewTest(TestCase):
 
 
 @tag("core")
-@override_settings(SES_ENABLED=False)
 class EmailChangeConfirmServiceTest(TestCase):
     def setUp(self):
         cache.clear()

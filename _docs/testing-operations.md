@@ -327,7 +327,7 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 
 | # | Changed path | Target |
 |---|---|---|
-| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 9 -> `email_app`), and `.agents/**` (equivalently `.claude/**`) has content guards in `tests/` (rule 3). |
+| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code because `.agents/**` (equivalently `.claude/**`) has content guards in `tests/` (rule 3). |
 | 2 | escalation triggers (authoritative table in `testing-guidelines.md`) | sets Playwright to `full`, then falls through to the remaining rules |
 | 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.agents/**` and `.claude/**` (both spellings map identically -- `.claude/skills` is a symlink, so `.agents/**` is what a real diff produces), `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
 | 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
@@ -379,7 +379,7 @@ commands) that run it, and any exclusions.
 |---|---|---|
 | `tailwind-producers` | all four Git-owned families `_producer_classes()` reads: explicit producers, `studio/views/*.py`, any first-party `forms`/`widgets` directory, and first-party `static/js/**/*.js` (plus the verifier and discovery owner) | `make check-tailwind` |
 | `repo-wide-template-lints` | `templates/**/*.html` | the seven lints that read only that tree |
-| `template-comment-lint` | `templates/**/*.html` and `email_app/email_templates/*.md` | `content.tests.test_template_comment_lint` |
+| `template-comment-lint` | `templates/**/*.html` | `content.tests.test_template_comment_lint` |
 | `tailwind-source-scan` | `templates/**/*.html`, `static/js/**/*.js`, `**/*.py` minus the shared exclusion set | `tests.test_tailwind_build.TailwindSourceScanTest` |
 | `admin-link-scan` | every `*.py` and `*.html`, test trees and migrations included | `studio.tests.test_admin_links` |
 | `legacy-template-reference-scan` | every `*.py`, `*.html` and `*.js`, `static/vendor/**` included | `tests.test_unreachable_legacy_templates_1543` |
@@ -392,11 +392,8 @@ table got them wrong:
 
 - An exclusion belongs to a checker, not to a row that happens to group
   several. Grouping labels in one row is only legal when the checkers read the
-  same files -- true for the seven pure-`templates/` lints, false for anything
-  that walks `*.py`. It is also why the single-line-token lint has its own row:
-  it reads `email_app/email_templates/*.md` as well, and grouping it with the
-  other seven would declare all eight as reading a tree seven of them never
-  open. The first cut applied the Tailwind lint's exclusion set to six
+  same files -- true for the template-only lints, false for anything that
+  walks `*.py`. The first cut applied the Tailwind lint's exclusion set to six
   labels at once, which declared `studio.tests.test_admin_links` as skipping
   `tests/**` when it in fact scans it and pins per-file content hashes there.
   Appending a line containing a Django admin URL to a test module reddened that

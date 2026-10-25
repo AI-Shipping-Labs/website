@@ -863,7 +863,6 @@ COMMUNITY_BASE = {
     ),
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
-    'MAIL_TEMPLATE_VERSION_RESOLVER': 'email_app.relay_versions.template_version_for',
     'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',

@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from accounts.utils.tags import list_all_tags, normalize_tags
 from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.relay_versions import template_version_for
 from email_app.services.campaign_audience import campaign_recipient_count as recount
 from email_app.services.campaign_dispatch import (
     CampaignDeliveryConflict,
@@ -639,7 +640,9 @@ def campaign_detail(request, campaign_id):
     )
     try:
         rendered = configured_template_client().preview(
-            "campaign-broadcast", campaign_relay_context(preview_message), version=2,
+            "campaign-broadcast",
+            campaign_relay_context(preview_message),
+            version=template_version_for("campaign-broadcast"),
         )
         preview_html = rendered["html_body"]
     except RelayTemplateError as error:

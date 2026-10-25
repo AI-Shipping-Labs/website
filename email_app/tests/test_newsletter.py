@@ -957,13 +957,13 @@ class SubscribeSharedTtlHelperTest(TestCase):
 
 
 class EmailVerificationTemplateCopyTest(TestCase):
-    """Issue #767 split: the subscribe-flow body uses subscription
-    framing (no account-creation threat), and the signup-flow body uses
-    account framing with a 7-day auto-deletion window. Both call paths
-    receive ``ttl_days`` and ``site_url`` in the context.
+    """Issue #767 split: signup and subscribe use distinct Relay templates.
+
+    The website owns the purpose selection and dynamic context. Relay owns
+    the subject and body copy.
     """
 
-    def test_subscribe_render_uses_subscription_framing(self):
+    def test_subscribe_dispatches_subscription_template_and_context(self):
         # A6.2 step 4: /api/subscribe hands the standard message to Relay's
         # double opt-in flow. The lead-magnet path still uses this site
         # template family, so the #767 copy contract is asserted on the
@@ -986,30 +986,16 @@ class EmailVerificationTemplateCopyTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
+        call = stub.calls[0]
+        self.assertEqual(call["delivery"].recipient_email, "render-sub@example.com")
         self.assertEqual(
-            stub.calls[0]["Destination"]["ToAddresses"],
-            ["render-sub@example.com"],
+            call["delivery"].template_key, "email_verification_subscribe",
         )
-        subject = stub.calls[0]["Content"]["Simple"]["Subject"]["Data"]
-        # Subject confirms a subscription, not an account.
-        self.assertIn("Confirm", subject)
-        self.assertIn("subscription", subject)
-
-        html_lower = (
-            stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"].lower()
-        )
-        # Subscribe framing: confirm subscription, not "your account".
-        self.assertIn("confirm subscription", html_lower)
-        # Issue #767: subscribe path must NOT use account framing.
-        self.assertNotIn("we've created a free account for you", html_lower)
-        self.assertNotIn("your account will be removed", html_lower)
-        self.assertNotIn("your account will be deleted", html_lower)
-        # The worker minted the verification link; the stored context
-        # carried none.
-        self.assertIn("/api/verify-email?token=", html_lower)
+        self.assertEqual(call["context"]["ttl_days"], 7)
+        self.assertIn("/api/verify-email?token=", call["context"]["verify_url"])
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
-    def test_register_render_uses_account_framing(
+    def test_register_dispatches_signup_template_and_context(
         self, _probe,
     ):
         from unittest.mock import patch as mock_patch
@@ -1037,21 +1023,13 @@ class EmailVerificationTemplateCopyTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
-        payload = stub.calls[0]
+        call = stub.calls[0]
         self.assertEqual(
-            payload["Destination"]["ToAddresses"],
-            ["render-reg@example.com"],
+            call["delivery"].recipient_email,
+            "render-reg@example.com",
         )
-        subject = payload["Content"]["Simple"]["Subject"]["Data"]
-        # Subject mentions "Verify" for the signup flow.
-        self.assertIn("Verify", subject)
-
-        html = payload["Content"]["Simple"]["Body"]["Html"]["Data"]
-        html_lower = html.lower()
-        # Signup framing: account creation disclosed.
-        self.assertIn("signing up", html_lower)
-        self.assertIn("/accounts/login/", html)
-        # Issue #767: signup path keeps the 7-day auto-deletion disclosure.
-        self.assertIn("7 days", html)
-        # And does not use the subscribe-flow phrasing.
-        self.assertNotIn("newsletter", html_lower)
+        self.assertEqual(
+            call["delivery"].template_key, "email_verification_signup",
+        )
+        self.assertEqual(call["context"]["ttl_days"], 7)
+        self.assertIn("/api/verify-email?token=", call["context"]["verify_url"])

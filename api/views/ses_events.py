@@ -14,8 +14,7 @@ Payload shapes supported:
   ``Complaint``, ``Delivery``, ``Open``, ``Click``, ``Reject``,
   ``Send``, ``DeliveryDelay``, ``RenderingFailure``,
   ``Subscription``. These come through when SES is configured to publish
-  events via a configuration-set destination, which is the production
-  setup driven by ``SES_CONFIGURATION_SET_NAME``.
+  events via a configuration-set destination configured in AWS infrastructure.
 
 In both shapes the inner JSON includes the same ``mail`` block with
 ``messageId`` and ``destination``, plus the per-event detail block under

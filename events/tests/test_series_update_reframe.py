@@ -21,7 +21,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.services.timezones import (
@@ -292,7 +292,6 @@ class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
 class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
     """The fan-out threads old_start_iso into the rendered body."""
 
@@ -415,7 +414,6 @@ class EnqueueSeriesUpdateThreadingTest(TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
 class RescheduleNoticeWeekdayTest(TestCase):
     """The per-event event_rescheduled email carries the weekday."""
 

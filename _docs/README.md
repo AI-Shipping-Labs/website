@@ -43,8 +43,7 @@ integration runbook documents its group's keys.
 | Skill | `.agents/skills/<name>/SKILL.md` (`.claude/skills` is a symlink); member API skill in `skills/` | Self-contained enough to execute safely: auth, production-data limits, and destructive-action guards stay at the point of use. |
 | Component reference | Next to the component (`asl_cli/README.md`, `integrations/services/ai_eval/README.md`, `docs/member-api/`) | Kept current with that component. |
 
-Excluded from this map: runtime email copy in `email_app/email_templates/`,
-generated files (`static/css/tailwind.css`, `_docs/openapi.json`,
+Excluded from this map: generated files (`static/css/tailwind.css`, `_docs/openapi.json`,
 `_docs/member-openapi.json` are regenerated, not hand-edited), and
 documentation owned by the content, infrastructure, and `community-base`
 repositories.

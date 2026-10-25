@@ -68,7 +68,6 @@ SCANNED_ROOTS = APPLICATION_ROOTS + (
     Path("tests"),
     Path("playwright_tests"),
     Path("templates"),
-    Path("email_app/email_templates"),
     Path("README.md"),
     Path("_docs"),
     Path("docs"),

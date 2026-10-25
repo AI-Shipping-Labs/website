@@ -8,6 +8,7 @@ from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
+from email_app.relay_versions import template_version_for
 from email_app.services.preview_contexts import (
     RECIPIENT_CHOICES,
     RECIPIENT_NAMED,
@@ -15,6 +16,7 @@ from email_app.services.preview_contexts import (
     get_preview_context,
 )
 from email_app.services.relay_templates import (
+    INTERNAL_TEMPLATE_KEYS,
     READ_ONLY_TEMPLATE_KEYS,
     RelayTemplateError,
     configured_template_client,
@@ -136,7 +138,10 @@ def _relay_error_message(error):
 def email_template_list(request):
     """List editable Relay templates without any local fallback."""
     try:
-        rows = _ordered_templates(configured_template_client().templates())
+        rows = _ordered_templates(
+            row for row in configured_template_client().templates()
+            if row.get("key") not in INTERNAL_TEMPLATE_KEYS
+        )
     except RelayTemplateError as error:
         rows = ()
         messages.error(request, _relay_error_message(error))
@@ -144,6 +149,7 @@ def email_template_list(request):
         row["template_name"] = row["key"]
         row["sent_when"] = _sent_when(row["key"])
         row["read_only"] = row["key"] in READ_ONLY_TEMPLATE_KEYS
+        row["active_send_version"] = template_version_for(row["key"])
     return render(request, "studio/email_templates/list.html", {"rows": rows})
 
 
@@ -154,6 +160,7 @@ def _editor_context(template_name, template, versions, rendered=None):
         "versions": versions,
         "rendered": rendered,
         "sent_when": _sent_when(template_name),
+        "active_send_version": template_version_for(template_name),
     }
 
 
@@ -172,11 +179,18 @@ def _draft_from_post(request, existing):
     return draft
 
 
+def _require_manageable_template(template_name, *, allow_read_only=False):
+    forbidden = INTERNAL_TEMPLATE_KEYS
+    if not allow_read_only:
+        forbidden |= READ_ONLY_TEMPLATE_KEYS
+    if template_name in forbidden:
+        raise Http404("This Relay template cannot be managed in Studio.")
+
+
 @staff_required
 def email_template_edit(request, template_name):
     """Read or save a Relay draft. Publishing remains a separate action."""
-    if template_name in READ_ONLY_TEMPLATE_KEYS:
-        raise Http404("This Relay compatibility template is read-only.")
+    _require_manageable_template(template_name)
     try:
         client = configured_template_client()
         template = client.template(template_name)
@@ -194,12 +208,18 @@ def email_template_edit(request, template_name):
 @require_POST
 def email_template_publish(request, template_name):
     """Publish the saved Relay draft as a new immutable version."""
+    _require_manageable_template(template_name)
     try:
         version = configured_template_client().publish(template_name)
     except RelayTemplateError as error:
         messages.error(request, _relay_error_message(error))
     else:
-        messages.success(request, f'Published "{template_name}" as Relay version {version}.')
+        active = template_version_for(template_name)
+        messages.success(
+            request,
+            f'Published "{template_name}" as Relay version {version}. '
+            f'Website sends remain pinned to v{active} until a release changes the pin.',
+        )
     return redirect("studio_email_template_edit", template_name=template_name)
 
 
@@ -207,6 +227,7 @@ def email_template_publish(request, template_name):
 @require_POST
 def email_template_preview(request, template_name):
     """Render a saved draft or immutable version through Relay."""
+    _require_manageable_template(template_name, allow_read_only=True)
     recipient = request.POST.get("recipient") or RECIPIENT_NAMED
     if recipient not in dict(RECIPIENT_CHOICES):
         recipient = RECIPIENT_NAMED

@@ -43,10 +43,8 @@ def _html_from_raw(raw):
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
     RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
-    AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
-    SES_ENABLED=True,
 )
 class RegistrationEmailTimezoneLineTest(TestCase):
     @classmethod
@@ -110,10 +108,8 @@ class RegistrationEmailTimezoneLineTest(TestCase):
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
     RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
-    AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
-    SES_ENABLED=True,
 )
 class RescheduleEmailTimezoneLineTest(TestCase):
     @classmethod
@@ -174,10 +170,8 @@ class RescheduleEmailTimezoneLineTest(TestCase):
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
     RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
-    AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
-    SES_ENABLED=True,
 )
 class HostRegistrationTimezoneLineTest(TestCase):
     @classmethod
@@ -225,10 +219,8 @@ class HostRegistrationTimezoneLineTest(TestCase):
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
     RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
-    AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
-    SES_ENABLED=True,
 )
 class SeriesRegistrationTimezoneLineTest(TestCase):
     @classmethod
@@ -285,13 +277,3 @@ class SeriesRegistrationTimezoneLineTest(TestCase):
         self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
 
 
-class PostEventFollowupNoTimezoneLineTest(TestCase):
-    """The recap email renders no future time, so it must not carry the line."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_user(
-            email="recap@example.com", preferred_timezone="",
-        )
-
-    pass

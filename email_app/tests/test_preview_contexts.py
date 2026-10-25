@@ -19,7 +19,17 @@ from email_app.services.preview_contexts import (
 
 
 class DownloadDeliveryPreviewContextTest(TestCase):
-    pass
+    def test_preview_populates_consent_and_delivery_fields(self):
+        ctx = get_preview_context('download_delivery')
+        for key in (
+            'resource_title',
+            'delivery_url',
+            'verification_required',
+            'newsletter_opt_in',
+            'expires_hours',
+        ):
+            self.assertIn(key, ctx)
+            self.assertNotEqual(ctx[key], '')
 
 class EventRegistrationPreviewContextTest(TestCase):
     """The event_registration preview must populate every template var."""
@@ -121,8 +131,6 @@ class RecordingReadyPreviewContextTest(TestCase):
         self.assertIn('/video', ctx['watch_url'])
         self.assertNotIn('amazonaws', ctx['watch_url'])
 
-    pass
-
 class MavenWelcomePreviewContextTest(TestCase):
     """Issue #1593: the operator previewing the welcome must see real hrefs.
 
@@ -136,4 +144,3 @@ class MavenWelcomePreviewContextTest(TestCase):
         self.assertIn('/api/verify-and-subscribe', ctx['newsletter_opt_in_url'])
         self.assertIn('/api/maven-email-opt-out', ctx['opt_out_url'])
 
-    pass

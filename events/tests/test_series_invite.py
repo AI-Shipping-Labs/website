@@ -192,7 +192,6 @@ class GenerateSeriesIcsTest(TestCase):
 
 @tag('core')
 @override_settings(
-    SES_ENABLED=True,
     RELAY_TRANSACTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
@@ -273,7 +272,6 @@ class LegacySesSettingTest(TierSetupMixin, TestCase):
         SeriesRegistration.objects.create(series=self.series, user=self.user)
         EventRegistration.objects.create(event=self.e1, user=self.user)
 
-    @override_settings(SES_ENABLED=False)
     @patch(
         'events.services.series_invite._send_calendar_email',
     )
@@ -297,7 +295,6 @@ class LegacySesSettingTest(TierSetupMixin, TestCase):
 
 @tag('core')
 @override_settings(
-    SES_ENABLED=True,
     RELAY_TRANSACTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
@@ -429,7 +426,6 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
 
 @tag('core')
 @override_settings(
-    SES_ENABLED=True,
     RELAY_TRANSACTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
@@ -558,7 +554,6 @@ class AdditionAutoEnrollTriggerTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
 class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
     """A subscriber's invite carries only the occurrences they can access."""
 
@@ -599,7 +594,7 @@ class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True, SITE_BASE_URL='https://aishippinglabs.com')
+@override_settings(SITE_BASE_URL='https://aishippinglabs.com')
 class PartialAccessNoteTest(TierSetupMixin, TestCase):
     """The upsell note flags gated sessions a recipient cannot yet access.
 

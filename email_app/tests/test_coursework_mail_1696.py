@@ -1,14 +1,12 @@
-"""Coursework peer-review mail renders from AISL file templates (#1696).
+"""Coursework peer-review mail reaches Relay with resolved context (#1696).
 
 ``community_base.coursework.notifications`` sends the four purposes itself.
 Each test sends through the package function, then delivers the durable row
-with the ``relay`` worker and a stub SES client, so it covers the
-template file, the transactional classification, the review URL builder and
-the worker hook that makes the links absolute.
+with the ``relay`` worker and a stub Relay client, covering the transactional
+classification, review URL builder, and worker context resolver.
 """
 
 import datetime
-import os
 from unittest.mock import patch
 
 from community_base.coursework import notifications
@@ -19,7 +17,6 @@ from community_base.coursework.models import (
 )
 from community_base.mail.jobs import deliver as deliver_job
 from community_base.mail.models import EmailDelivery
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -40,15 +37,7 @@ def _deliver_latest(purpose):
     # The durable row stores no link (#1613); the worker renders them.
     ensure_no_rendered_urls(purpose, delivery.context_data)
     stub = StubRelayClient()
-    # This test asserts the locally-rendered HTML, so it opts the worker
-    # into the package's local-render backend explicitly (Relay cutover
-    # P4: the runner default is the relay backend, which renders
-    # server-side).
-    backend_override = override_settings(
-        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "relay"},
-    )
     with (
-        backend_override,
         relay_test_backend(), patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
@@ -56,11 +45,11 @@ def _deliver_latest(purpose):
     ):
         deliver_job(None, {'delivery_id': str(delivery.id)})
     (call,) = stub.calls
-    simple = call['Content']['Simple']
-    return delivery, simple['Subject']['Data'], simple['Body']['Html']['Data']
+    assert call['delivery'].pk == delivery.pk
+    return delivery, call['context']
 
 
-@override_settings(SES_ENABLED=False, SITE_BASE_URL=SITE)
+@override_settings(SITE_BASE_URL=SITE)
 class CourseworkMailTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -98,29 +87,23 @@ class CourseworkMailTest(TestCase):
             batch=cls.batch,
         )
 
-    def setUp(self):
-        # The package sends without a per-purpose sender, so relay falls
-        # back to SES_FROM_EMAIL (phase 6 follow-up: the transactional sender
-        # and the SES configuration set for package-originated mail).
-        env = patch.dict(os.environ, {'SES_FROM_EMAIL': 'noreply@aishippinglabs.com'})
-        env.start()
-        self.addCleanup(env.stop)
-
     def test_pool_ready_links_each_review_and_formats_the_due_date(self):
         notifications.send_pool_ready_notification(
             self.batch, self.ada_submission,
             [self.ada_reviews_bob, self.bob_reviews_ada],
         )
 
-        delivery, subject, html = _deliver_latest('coursework.pool_ready')
+        delivery, context = _deliver_latest('coursework.pool_ready')
 
         self.assertEqual(delivery.recipient_email, 'ada@test.com')
-        self.assertEqual(subject, 'Review 1 project for Attempt 1')
-        self.assertIn('Hi Ada,', html)
-        self.assertIn(f'href="{REVIEWS}/{self.ada_reviews_bob.id}"', html)
-        self.assertIn(f'href="{REVIEWS}"', html)
-        self.assertIn('November 23, 2026', html)
-        self.assertIn('Europe/Berlin', html)
+        self.assertEqual(context['user_name'], 'Ada')
+        self.assertEqual(
+            context['reviews'][0]['url'],
+            f'{REVIEWS}/{self.ada_reviews_bob.id}',
+        )
+        self.assertEqual(context['review_list_url'], REVIEWS)
+        self.assertIn('November 23, 2026', context['due_date_display'])
+        self.assertIn('Europe/Berlin', context['due_date_display'])
 
     def test_review_assigned_links_the_review_list(self):
         self.project.peer_review_due_date = self.due_at
@@ -130,21 +113,19 @@ class CourseworkMailTest(TestCase):
 
         notifications.send_review_assigned_notifications([self.bob_reviews_ada])
 
-        delivery, subject, html = _deliver_latest('coursework.review_assigned')
+        delivery, context = _deliver_latest('coursework.review_assigned')
 
         self.assertEqual(delivery.recipient_email, 'bob@test.com')
-        self.assertEqual(subject, 'Peer reviews are open for Attempt 1')
-        self.assertIn(f'href="{REVIEWS}"', html)
-        self.assertIn('November 23, 2026, 22:59 UTC', html)
+        self.assertEqual(context['review_list_url'], REVIEWS)
+        self.assertEqual(context['due_date_display'], 'November 23, 2026, 22:59 UTC')
 
     def test_review_received_links_the_projects_tab(self):
         notifications.send_review_received_notification(self.bob_reviews_ada)
 
-        delivery, subject, html = _deliver_latest('coursework.review_received')
+        delivery, context = _deliver_latest('coursework.review_received')
 
         self.assertEqual(delivery.recipient_email, 'ada@test.com')
-        self.assertEqual(subject, 'A peer reviewed your project Attempt 1')
-        self.assertIn(f'href="{PROJECTS}"', html)
+        self.assertEqual(context['projects_url'], PROJECTS)
 
     def test_review_window_expired_is_delivered_to_an_unsubscribed_reviewer(self):
         # Transactional: the newsletter opt-out does not suppress it.
@@ -153,8 +134,7 @@ class CourseworkMailTest(TestCase):
 
         notifications.send_review_expired_notification(self.ada_reviews_bob)
 
-        delivery, subject, html = _deliver_latest('coursework.review_window_expired')
+        delivery, context = _deliver_latest('coursework.review_window_expired')
 
         self.assertEqual(delivery.recipient_email, 'ada@test.com')
-        self.assertEqual(subject, 'Your review window for Attempt 1 has closed')
-        self.assertIn(f'href="{PROJECTS}"', html)
+        self.assertEqual(context['projects_url'], PROJECTS)

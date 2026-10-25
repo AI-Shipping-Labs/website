@@ -75,12 +75,9 @@ class IcsJoinUrlOverrideTest(TestCase):
 @override_settings(
     SITE_BASE_URL='https://env.example.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
-    AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
     # Issue #509: opt in so the registration email actually hits the boto3
-    # mock instead of short-circuiting via the SES_ENABLED kill-switch.
-    SES_ENABLED=True,
 )
 class RegistrationEmailJoinUrlOverrideTest(TestCase):
     """Registration confirmation email join URL tracks the override."""

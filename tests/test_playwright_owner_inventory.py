@@ -902,12 +902,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_maven_attention_1566.py::"
         "test_staff_reaches_old_exhausted_occurrence_with_attention_filter_preserved",
     })
-    issue_1567_owners = frozenset({
-        "playwright_tests/test_plain_text_email_1567.py::"
-        "test_staff_edits_previews_and_test_sends_maven_welcome",
-        "playwright_tests/test_plain_text_email_1567.py::"
-        "test_staff_previews_and_test_sends_markdown_campaign",
-    })
+    issue_1567_owners = frozenset()
     issue_1568_owners = frozenset({
         "playwright_tests/test_maven_occurrences_api_1568.py::"
         "test_staff_finds_alias_linked_failure_and_reads_the_step_ledger",
@@ -1178,20 +1173,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_go_back_uses_history_from_this_site_else_homepage",
     })
 
-    template_comment_guard_owners = frozenset({
-        "playwright_tests/test_studio_email_template_comment_guard.py::"
-        "TestStudioEmailTemplateCommentGuard::"
-        "test_split_note_is_rejected_then_accepted_once_rewritten",
-        "playwright_tests/test_studio_email_template_comment_guard.py::"
-        "TestStudioEmailTemplateCommentGuard::"
-        "test_single_line_note_saves",
-        "playwright_tests/test_studio_email_template_comment_guard.py::"
-        "TestStudioEmailTemplateCommentGuard::"
-        "test_rejected_save_leaves_the_stored_copy_untouched",
-        "playwright_tests/test_studio_email_template_comment_guard.py::"
-        "TestStudioEmailTemplateCommentGuard::"
-        "test_reset_to_default_still_works_after_a_rejected_save",
-    })
+    template_comment_guard_owners = frozenset()
 
     device_login_owners = frozenset({
         "playwright_tests/test_device_login.py::test_staff_device_login_browser_flow",

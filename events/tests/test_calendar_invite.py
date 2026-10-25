@@ -349,13 +349,8 @@ class MembersOnlySummaryAudienceTest(TestCase):
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
-    AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
-    # Issue #509: this suite asserts on the SES wire-format (boto3 mocked).
-    # The SES_ENABLED kill-switch defaults False under TESTING, so we have to
-    # opt in here to exercise the send path.
-    SES_ENABLED=True,
 )
 class SendRegistrationConfirmationTest(TestCase):
     """Tests for sending registration confirmation emails."""
@@ -663,10 +658,8 @@ class SendRegistrationConfirmationTest(TestCase):
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
-    AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
-    SES_ENABLED=True,
 )
 class RegistrationApiEmailTest(TestCase):
     """Test that the registration API sends confirmation emails."""

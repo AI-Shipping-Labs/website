@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from community_base.mail.relay import RelaySendResult
 
-from email_app.relay_versions import RELAY_V2_TEMPLATE_KEYS
+from email_app.relay_versions import RELAY_TEMPLATE_KEYS
 
 
 @contextlib.contextmanager
@@ -38,24 +38,30 @@ class StubRelayClient:
 
 
 class StubRelayTemplateClient:
-    """Offline Relay template API boundary with no local rendering."""
+    """Stateful offline Relay template API boundary with no local rendering."""
 
-    def templates(self):
-        return tuple(
-            {
-                "key": key,
-                "name": key.replace("_", " ").replace(".", " ").title(),
-                "subject": "Test Subject",
-                "latest_version": 2,
-                "updated_at": "",
-            }
-            for key in sorted(RELAY_V2_TEMPLATE_KEYS)
-        )
+    def __init__(self):
+        self.calls = []
+        self.fail_operations = set()
+        self._templates = {
+            key: self._default_template(key)
+            for key in sorted(RELAY_TEMPLATE_KEYS)
+        }
 
-    def template(self, template_key):
+    def _maybe_fail(self, operation):
+        self.calls.append(operation)
+        if operation in self.fail_operations:
+            from email_app.services.relay_templates import (  # noqa: PLC0415
+                RelayTemplateError,
+            )
+
+            raise RelayTemplateError(f"stub_{operation}_failed")
+
+    @staticmethod
+    def _default_template(template_key):
         return {
             "key": template_key,
-            "name": template_key,
+            "name": template_key.replace("_", " ").replace(".", " ").title(),
             "description": "",
             "subject": "Test Subject",
             "html_body": "",
@@ -67,26 +73,64 @@ class StubRelayTemplateClient:
             "default_sender_id": "",
             "markdown_layout_context": True,
             "is_active": True,
-            "latest_version": 2,
+            "latest_version": 1,
+            "updated_at": "",
         }
 
+    def templates(self):
+        self._maybe_fail("templates")
+        return tuple(dict(template) for template in self._templates.values())
+
+    def template(self, template_key):
+        self._maybe_fail("template")
+        return dict(self._templates.setdefault(
+            template_key, self._default_template(template_key),
+        ))
+
     def save_draft(self, template_key, draft):
-        return {"key": template_key, **draft}
+        self._maybe_fail("save_draft")
+        saved = {"key": template_key, **draft}
+        saved.setdefault("latest_version", self.template(template_key)["latest_version"])
+        self._templates[template_key] = saved
+        return dict(saved)
 
     def publish(self, template_key):
-        return 2
+        self._maybe_fail("publish")
+        template = self._templates.setdefault(
+            template_key, self._default_template(template_key),
+        )
+        template["latest_version"] += 1
+        return template["latest_version"]
 
     def versions(self, template_key):
-        return ({"template_key": template_key, "version": 2},)
+        self._maybe_fail("versions")
+        latest = self._templates.setdefault(
+            template_key, self._default_template(template_key),
+        )["latest_version"]
+        return tuple(
+            {"template_key": template_key, "version": version}
+            for version in range(1, latest + 1)
+        )
 
     def preview(self, template_key, context, *, version=None, draft=False):
+        self._maybe_fail("preview")
+        self.calls.append({
+            "operation": "preview",
+            "template_key": template_key,
+            "context": dict(context),
+            "version": version,
+            "draft": draft,
+        })
+        template = self._templates.setdefault(
+            template_key, self._default_template(template_key),
+        )
         subject = str(context.get("subject") or "Test Subject")
         return {
-            "subject": subject,
+            "subject": template.get("subject") or subject,
             "html_body": "<!doctype html><html><body><p>Relay preview</p></body></html>",
             "text_body": "Relay preview",
             "template_key": template_key,
-            "template_version": version or 2,
+            "template_version": version or template["latest_version"],
             "published": not draft,
             "missing_context": [],
         }

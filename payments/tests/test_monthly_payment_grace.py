@@ -457,7 +457,6 @@ class ConfigurationAndCopyTest(GraceBase):
             self.assertEqual(service.safe_portal_url(), "")
 
     @override_settings(
-        SES_ENABLED=False,
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
     )
@@ -481,7 +480,7 @@ class ConfigurationAndCopyTest(GraceBase):
             rendered["team@aishippinglabs.com"]["user_email"], user.email,
         )
 
-    @override_settings(SES_ENABLED=False, DEBUG=False)
+    @override_settings(DEBUG=False)
     def test_explicit_blank_team_recipient_records_error_and_keeps_member_path(self):
         package_set("PAYMENT_FAILURE_TEAM_EMAIL", "", actor_ref="test:payment-grace")
         self.make_user()
@@ -499,7 +498,6 @@ class ConfigurationAndCopyTest(GraceBase):
         )
 
     @override_settings(
-        SES_ENABLED=False,
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
         PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",
@@ -579,7 +577,6 @@ class ConfigurationAndCopyTest(GraceBase):
         )
 
     @override_settings(
-        SES_ENABLED=False,
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
     )
@@ -626,7 +623,6 @@ class ConfigurationAndCopyTest(GraceBase):
 
     @override_settings(
         STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
-        SES_ENABLED=False,
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
     )
@@ -657,7 +653,7 @@ class ConfigurationAndCopyTest(GraceBase):
 
 
 class DiscoveryAndAuditTest(GraceBase):
-    @override_settings(SES_ENABLED=False, DEBUG=False)
+    @override_settings(DEBUG=False)
     def test_missed_webhook_discovery_anchors_once_to_invoice_created(self):
         user = self.make_user()
         run = Run.objects.create(
@@ -692,7 +688,7 @@ class DiscoveryAndAuditTest(GraceBase):
         self.assertEqual(Grace.objects.count(), 1)
         self.assertEqual(Delivery.objects.count(), 2)
 
-    @override_settings(SES_ENABLED=False, DEBUG=False)
+    @override_settings(DEBUG=False)
     def test_audit_is_secret_free_even_when_payload_contains_secrets(self):
         self.make_user()
         unsafe_invoice = invoice()
@@ -859,7 +855,6 @@ class QaRegressionAndScenarioTest(GraceBase):
 
     @override_settings(
         STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
-        SES_ENABLED=False,
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
     )

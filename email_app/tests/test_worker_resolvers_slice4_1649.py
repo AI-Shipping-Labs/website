@@ -23,7 +23,7 @@ from accounts.models import User
 from accounts.utils.tokens import JWT_ALGORITHM
 from email_app.hooks import STUDIO_TEST_SEND_CATEGORY
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -33,11 +33,9 @@ BASE_URL = "https://site.test"
 def _drain_context(delivery):
     """Deliver one row through the worker and return Relay's resolved context."""
 
-    from email_app.testing import relay_test_backend
 
     stub = StubRelayClient()
     with (
-        relay_test_backend(),
         patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
@@ -53,7 +51,7 @@ def _drain_context(delivery):
 def _drain_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=StubRelayClient(),
     ):

@@ -25,7 +25,7 @@ from accounts.utils.tokens import (
 )
 from email_app.package_mail import send_package_mail
 from email_app.services.campaign_audience import eligible_campaign_recipients
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from integrations.models import IntegrationSetting
 from integrations.services.maven import _welcome_context
 from payments.models import Tier
@@ -56,7 +56,7 @@ def welcome_opt_in_url(user):
         user, "maven_welcome", _welcome_context("Course"),
     )
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):

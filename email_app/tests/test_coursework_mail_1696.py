@@ -23,7 +23,7 @@ from django.test import TestCase, override_settings
 from content.models import Cohort, Course
 from content.services.coursework_bridge import ensure_curriculum_enrollment
 from email_app.services.context_guard import ensure_no_rendered_urls
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 
 User = get_user_model()
 
@@ -38,7 +38,7 @@ def _deliver_latest(purpose):
     ensure_no_rendered_urls(purpose, delivery.context_data)
     stub = StubRelayClient()
     with (
-        relay_test_backend(), patch(
+        patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ),

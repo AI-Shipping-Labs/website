@@ -23,7 +23,7 @@ from accounts.tasks.remind_unverified_users import (
     SUBSCRIBE_REMINDER_TEMPLATE_NAME,
 )
 from email_app.models import EmailLog
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 
 # Issue #767: the reminder template is now picked per user based on the
 # slug of the most recent verification EmailLog. The default for tests
@@ -45,7 +45,7 @@ class RemindUnverifiedUsersTest(TestCase):
     def test_reminder_sent_when_expiry_within_24h(self):
         user = self._make_user("soon@example.com", expires_offset_hours=12)
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

@@ -34,7 +34,7 @@ from email_app.services.email_classification import (
     classify_email_type,
     get_sender_for_email_type,
 )
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from payments.models import Tier, TierOverride
 from questionnaires.models import Questionnaire, Response
 from tests.fixtures import set_membership
@@ -103,7 +103,7 @@ class OnboardingReminderSweepTest(TestCase):
     def test_reminder_hands_member_and_site_context_to_relay(self):
         member = self._make_member("render@example.com", "basic")
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -356,7 +356,7 @@ class SendOnboardingRemindersCommandTest(TestCase):
         out = StringIO()
         call_command("send_onboarding_reminders", stdout=out)
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

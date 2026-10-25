@@ -12,7 +12,6 @@ from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from email_app.testing import relay_test_backend
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import assign_accountability_partners
 from plans.services.partner_intro_emails import (
@@ -97,7 +96,7 @@ class PartnerIntroGreetingTest(TestCase):
         from email_app.testing import StubRelayClient
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

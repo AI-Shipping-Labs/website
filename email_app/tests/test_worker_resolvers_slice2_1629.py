@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from payments.models import (
     MonthlyPaymentGrace as Grace,
 )
@@ -34,11 +34,9 @@ BASE_URL = "https://site.test"
 def _drain_context(delivery):
     """Deliver one delivery through the real worker; return Relay context."""
 
-    from email_app.testing import relay_test_backend
 
     stub = StubRelayClient()
     with (
-        relay_test_backend(),
         patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
@@ -54,7 +52,7 @@ def _drain_context(delivery):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=StubRelayClient(),
     ):

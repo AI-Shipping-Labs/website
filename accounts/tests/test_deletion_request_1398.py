@@ -17,7 +17,7 @@ from email_app.services.email_classification import (
     classify_email_type,
 )
 from email_app.services.footer_context import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from tests.fixtures import TierSetupMixin, set_membership
 
 
@@ -54,7 +54,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -120,7 +120,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
         stub = StubRelayClient()
 
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -158,7 +158,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.client.force_login(user)
         stub = StubRelayClient()
 
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -196,7 +196,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                 self.client.force_login(user)
                 stub = StubRelayClient()
 
-                with relay_test_backend(), patch(
+                with patch(
                     "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):
@@ -296,7 +296,7 @@ class AccountDeletionRequestFailureTest(TestCase):
         stub = StubRelayClient()
         with (
             patch("accounts.services.privacy.get_config", return_value="team@aishippinglabs.com"),
-            relay_test_backend(), patch(
+            patch(
                 "community_base.mail.backends.relay.configured_client",
                 return_value=stub,
             ),
@@ -337,7 +337,7 @@ class AccountDeletionRequestFailureTest(TestCase):
         # member did their part) with no EmailLog receipt.
         stub = _FailingRelayClient(RelayMailError("private_relay_rejection"))
 
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

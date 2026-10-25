@@ -20,7 +20,7 @@ from django.utils import timezone
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from email_app.models import EmailLog
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.models import Notification
@@ -63,7 +63,7 @@ class FlakyThenHealthyRelayClient(StubRelayClient):
 
 
 def _drain_one(delivery, client):
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=client,
     ):

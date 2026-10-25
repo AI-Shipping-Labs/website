@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from freezegun import freeze_time
 
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from events.models import Event, EventRegistration, EventSeries
 from events.services.host_registration import maybe_register_host_as_attendee
 from notifications.models import EventReminderLog, Notification
@@ -160,7 +160,7 @@ class CheckEventRemindersTest(TestCase):
                 self.assertEqual(notification.url, event.get_absolute_url())
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -216,7 +216,7 @@ class CheckEventRemindersTest(TestCase):
         self.assertEqual(notification.notification_type, 'event_reminder')
         self.assertEqual(notification.url, event.get_absolute_url())
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -815,7 +815,7 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -857,7 +857,7 @@ class CheckEventRemindersTest(TestCase):
             check_event_reminders()
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -902,7 +902,7 @@ class CheckEventRemindersTest(TestCase):
         )
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -941,7 +941,7 @@ class CheckEventRemindersTest(TestCase):
         )
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

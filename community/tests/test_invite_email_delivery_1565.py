@@ -17,7 +17,7 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.staff_notifications import _build_removal_context
 from community.tasks.hooks import community_invite_task
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from payments.models import Tier
@@ -50,7 +50,7 @@ class PaidCheckoutInviteEmailTest(TestCase):
         self, _lookup,
     ):
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

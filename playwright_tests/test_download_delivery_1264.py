@@ -6,7 +6,6 @@ from urllib.parse import quote
 import pytest
 from playwright.sync_api import expect
 
-from email_app.testing import relay_test_backend
 from playwright_tests.conftest import (
     DEFAULT_PASSWORD,
     auth_context,
@@ -84,9 +83,8 @@ class TestDownloadDelivery1264:
         page.goto(f'{django_server}{download.get_absolute_url()}')
         form = page.get_by_test_id('download-request-form')
         form.locator('input[name="email"]').fill('real-mailbox@example.com')
-        with relay_test_backend():
-            form.get_by_test_id('download-request-submit').click()
-            expect(page.get_by_test_id('download-request-success')).to_be_visible()
+        form.get_by_test_id('download-request-submit').click()
+        expect(page.get_by_test_id('download-request-success')).to_be_visible()
         assert len(relay.calls) == 1
         call = relay.calls[0]
         delivery = call['delivery']
@@ -147,9 +145,8 @@ class TestDownloadDelivery1264:
         page.goto(f'{django_server}{download.get_absolute_url()}')
         form = page.get_by_test_id('download-request-form')
         form.locator('input[name="email"]').fill(user.email)
-        with relay_test_backend():
-            form.get_by_test_id('download-request-submit').click()
-            expect(page.get_by_test_id('download-request-success')).to_be_visible()
+        form.get_by_test_id('download-request-submit').click()
+        expect(page.get_by_test_id('download-request-success')).to_be_visible()
         assert len(relay.calls) == 1
         call = relay.calls[0]
         delivery = call['delivery']

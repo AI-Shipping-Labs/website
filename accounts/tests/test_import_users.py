@@ -22,7 +22,6 @@ from accounts.services.import_users import (
 )
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from email_app.testing import relay_test_backend
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -509,7 +508,7 @@ class WelcomeImportedEmailTaskTest(TestCase):
                     "MAIL_BACKEND": "relay",
                 }
             ),
-            relay_test_backend(), patch(
+            patch(
                 "community_base.mail.backends.relay.configured_client",
                 return_value=stub,
             ),

@@ -28,7 +28,6 @@ from unittest.mock import patch
 
 import pytest
 
-from email_app.testing import relay_test_backend
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
@@ -51,7 +50,7 @@ def _capture_send(user, template_name, context):
     from email_app.testing import StubRelayClient
 
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):

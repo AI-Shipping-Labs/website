@@ -8,7 +8,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Article, Course, Download, Workshop
-from email_app.testing import deliver_pending_mail, relay_test_backend
+from email_app.testing import deliver_pending_mail
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
@@ -611,7 +611,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
             )
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

@@ -36,7 +36,6 @@ import os
 import pytest
 from django.utils import timezone
 
-from email_app.testing import relay_test_backend
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -426,7 +425,7 @@ class TestSubscribePageDiscloseAccount:
         from email_app.testing import StubRelayClient
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

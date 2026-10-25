@@ -28,7 +28,7 @@ from bookclub.summary_notifications import (
     notify_summary_published,
 )
 from content.access import LEVEL_MAIN
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from notifications.models import Notification
 from payments.models import Tier
 from tests.fixtures import set_membership
@@ -426,7 +426,7 @@ class WorkerDeliveryContextTest(SummaryNotificationsFixture):
 
     def _drain(self):
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

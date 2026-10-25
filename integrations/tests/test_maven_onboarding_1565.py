@@ -18,7 +18,7 @@ from django.test import TestCase
 
 from content.models import Cohort, Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import MavenResult, _welcome_context
@@ -44,7 +44,7 @@ def _deliver_all():
     that assert on the provider-visible email drain the worker first.
     """
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
@@ -59,7 +59,7 @@ def _drain_welcome_context(user, course):
         user, "maven_welcome", _welcome_context(course),
     )
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
@@ -452,7 +452,7 @@ class MavenCourseFallbackTest(MavenWebhookMixin):
             user, "maven_welcome", _welcome_context(course),
         )
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

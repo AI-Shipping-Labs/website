@@ -23,7 +23,6 @@ from django.test import override_settings  # noqa: E402
 from django.utils import timezone  # noqa: E402
 from playwright.sync_api import expect  # noqa: E402
 
-from email_app.testing import relay_test_backend
 from tests.fixtures import create_user_with_membership
 
 pytestmark = pytest.mark.local_only
@@ -138,7 +137,6 @@ class TestMonthlyPaymentGrace1413:
         _reset()
         user = _member()
         with (
-            relay_test_backend(),
             override_settings(
                 DEBUG=False,
                 PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",

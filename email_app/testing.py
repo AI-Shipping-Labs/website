@@ -2,18 +2,9 @@
 
 from __future__ import annotations
 
-import contextlib
-from types import SimpleNamespace
-
 from community_base.mail.relay import RelaySendResult
 
 from email_app.relay_versions import RELAY_TEMPLATE_KEYS
-
-
-@contextlib.contextmanager
-def relay_test_backend():
-    """Keep compatibility suites on the already-installed offline Relay."""
-    yield
 
 
 class StubRelayClient:
@@ -22,10 +13,10 @@ class StubRelayClient:
     def __init__(self, message_id="relay-test-noop"):
         self.message_id = message_id
         self.calls = []
+        self.preview_calls = []
 
     def send(self, delivery, *, context=None):
         self.calls.append({"delivery": delivery, "context": context})
-        _record_send(delivery, context or {}, self.message_id)
         return RelaySendResult(
             message_id=self.message_id,
             status="provider_accepted",
@@ -35,6 +26,19 @@ class StubRelayClient:
 
     def messages_since(self, since):
         return ()
+
+    def preview_template(self, template_key, context, *, version=None):
+        self.preview_calls.append({
+            "template_key": template_key,
+            "context": dict(context),
+            "version": version,
+        })
+        subject = context.get("subject") or "Test Subject"
+        return {
+            "subject": subject,
+            "html_body": "<p>Relay preview</p>",
+            "text_body": "Relay preview",
+        }
 
 
 class StubRelayTemplateClient:
@@ -138,21 +142,6 @@ class StubRelayTemplateClient:
             "published": not draft,
             "missing_context": [],
         }
-
-
-def _record_send(delivery, context, message_id):
-    from community_base.kernel.hooks import resolve  # noqa: PLC0415
-    from django.conf import settings  # noqa: PLC0415
-
-    recorder_hook = settings.COMMUNITY_BASE.get("MAIL_SEND_RECORDER")
-    if not recorder_hook:
-        return
-    recorder = recorder_hook
-    if isinstance(recorder_hook, str):
-        recorder = resolve(recorder_hook)
-    rendered = SimpleNamespace(subject=context.get("subject", "Test Subject"))
-    result = SimpleNamespace(message_id=message_id)
-    recorder(delivery, rendered, result)
 
 
 _relay_patchers = []

@@ -44,10 +44,9 @@ BASE_URL = "https://site.test"
 def _drain_context(delivery):
     """Deliver one delivery through the real worker; return Relay context."""
 
-    from email_app.testing import relay_test_backend
 
     stub = StubRelayClient()
-    with relay_test_backend(), patch_configured_client(stub):
+    with patch_configured_client(stub):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1
     call = stub.calls[0]
@@ -67,9 +66,8 @@ def patch_configured_client(stub):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    from email_app.testing import relay_test_backend
 
-    with relay_test_backend(), patch_configured_client(StubRelayClient()):
+    with patch_configured_client(StubRelayClient()):
         with test.assertRaises(PermanentJobError) as caught:
             deliver_job(None, {"delivery_id": str(delivery.id)})
     test.assertEqual(caught.exception.code, reason)

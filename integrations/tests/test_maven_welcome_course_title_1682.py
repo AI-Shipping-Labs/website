@@ -17,7 +17,7 @@ from django.test import TestCase
 
 from content.models import Cohort, Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven import run_occurrence_steps
 from tests.fixtures import create_user_with_membership
@@ -35,7 +35,7 @@ def _drain(delivery):
     """Deliver one delivery through the real worker; return Relay context."""
 
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):

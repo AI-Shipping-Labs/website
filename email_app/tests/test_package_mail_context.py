@@ -28,7 +28,7 @@ from accounts.services.email_change import (
     hash_email_change_token,
     request_email_change,
 )
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 
 TEST_PURPOSE = "email_verification_signup"
 
@@ -38,7 +38,7 @@ def _drain(deliveries):
 
     stub = StubRelayClient()
     with (
-        relay_test_backend(), patch(
+        patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ),
@@ -215,7 +215,7 @@ class EmailChangeWorkerMintTest(TestCase):
         for reason, delivery in cases:
             with self.subTest(reason=reason):
                 stub = StubRelayClient()
-                with relay_test_backend(), patch(
+                with patch(
                     "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):
@@ -229,7 +229,7 @@ class EmailChangeWorkerMintTest(TestCase):
             expires_at=timezone.now() - timedelta(minutes=1),
         )
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -518,7 +518,7 @@ class NotificationWorkerMintTest(TestCase):
                     related_object_id="999999",
                 )
                 stub = StubRelayClient()
-                with relay_test_backend(), patch(
+                with patch(
                     "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):

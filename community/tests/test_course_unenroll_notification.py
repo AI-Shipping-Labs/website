@@ -11,7 +11,7 @@ from django.utils import timezone
 from accounts.models import User
 from community.services.staff_notifications import notify_course_unenroll
 from content.models import Cohort, CohortEnrollment, Course, Enrollment
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -21,7 +21,7 @@ PURPOSE = 'course_unenroll_notification'
 def _drain(delivery):
     """Deliver one delivery through the real worker and return its Relay call."""
     stub = StubRelayClient()
-    with relay_test_backend(), patch(
+    with patch(
         'community_base.mail.backends.relay.configured_client',
         return_value=stub,
     ):

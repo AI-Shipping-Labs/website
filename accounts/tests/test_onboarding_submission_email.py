@@ -11,7 +11,7 @@ from django.urls import reverse
 from accounts.tests.test_onboarding_booking_ctas import _basic_tier
 from booking.models import BookingHost
 from community.models import CallHost
-from email_app.testing import StubRelayClient, relay_test_backend
+from email_app.testing import StubRelayClient
 from questionnaires.models import Response
 from tests.fixtures import set_membership
 
@@ -79,7 +79,7 @@ class OnboardingSubmissionEmailTest(TestCase):
         self.assertEqual(delivery.related_object_id, str(response.id))
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
@@ -167,7 +167,7 @@ class OnboardingSubmissionEmailTest(TestCase):
             recipient_user=self.member,
         ).first()
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

@@ -25,7 +25,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 
 User = get_user_model()
 
@@ -972,7 +972,6 @@ class EmailVerificationTemplateCopyTest(TestCase):
 
         stub = StubRelayClient()
         with (
-            relay_test_backend(),
             patch(
                 "community_base.mail.backends.relay.configured_client",
                 return_value=stub,
@@ -1009,7 +1008,6 @@ class EmailVerificationTemplateCopyTest(TestCase):
 
         stub = StubRelayClient()
         with (
-            relay_test_backend(),
             mock_patch(
                 "community_base.mail.backends.relay.configured_client",
                 return_value=stub,

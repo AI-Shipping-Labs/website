@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from bookclub.models import Book, Chapter, ChapterRead, Note
 from content.models import Cohort, CohortEnrollment, Course, Module, Unit
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from events.models import Event, EventRegistration, EventSeries
 from events.services.event_recap_notification import (
     notify_recap_ready,
@@ -198,7 +198,7 @@ class RecapAudienceTest(TestCase):
 
     def _rendered_html(self):
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
@@ -261,7 +261,7 @@ class RecapEmailLinkByAudienceTest(TestCase):
 
     def _html_by_recipient(self):
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

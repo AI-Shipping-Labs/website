@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course, CourseAccess
 from email_app.models import EmailLog
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from payments.models import (
     CheckoutAccountBinding,
     CheckoutFulfillment,
@@ -177,8 +177,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             deliveries.get().idempotency_key,
             "checkout-payment-failed:cs_delayed",
         )
-        with relay_test_backend():
-            deliver_pending_mail()
+        deliver_pending_mail()
         logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
         self.assertEqual(logs.count(), 1)
         self.assertEqual(
@@ -286,7 +285,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
 
                 raise RelayMailError("relay_timeout", retryable=True)
 
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=TimedOutRelayClient(),
         ):
@@ -296,7 +295,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(delivery.state, EmailDelivery.State.RETRYABLE)
 
         # The retried worker job completes the provider send.
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=StubRelayClient(),
         ):

@@ -16,7 +16,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
-from email_app.testing import deliver_pending_mail, relay_test_backend
+from email_app.testing import deliver_pending_mail
 from events.models import Event, EventRegistration
 from events.services.event_recap_notification import (
     EventRecapNotReady,
@@ -146,7 +146,7 @@ class EventRecapNotificationServiceTest(TestCase):
         from email_app.testing import StubRelayClient
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):

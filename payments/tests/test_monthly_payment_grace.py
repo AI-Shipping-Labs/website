@@ -31,7 +31,6 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
-from email_app.testing import relay_test_backend
 from payments.models import Membership, Tier, TierOverride
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
@@ -93,7 +92,7 @@ class GraceBase(TestCase):
         from email_app.testing import StubRelayClient
 
         stub = StubRelayClient()
-        with relay_test_backend(), patch(
+        with patch(
             "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):

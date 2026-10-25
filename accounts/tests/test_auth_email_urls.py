@@ -13,7 +13,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from accounts.models import User
-from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -57,8 +57,7 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        with relay_test_backend():
-            deliver_pending_mail()
+        deliver_pending_mail()
         context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/verify-email?token=',
@@ -86,8 +85,7 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        with relay_test_backend():
-            deliver_pending_mail()
+        deliver_pending_mail()
         context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/verify-email?token=',
@@ -115,8 +113,7 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        with relay_test_backend():
-            deliver_pending_mail()
+        deliver_pending_mail()
         context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/password-reset?token=',
@@ -140,8 +137,7 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        with relay_test_backend():
-            deliver_pending_mail()
+        deliver_pending_mail()
         context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/password-reset?token=',

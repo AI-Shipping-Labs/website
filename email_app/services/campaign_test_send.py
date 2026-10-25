@@ -45,8 +45,18 @@ def _test_message(campaign, user, recipient, subject):
     if campaign.audience_verification == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY:
         return _repermission_message(campaign, user, subject)
     if user is not None:
-        return prepare_campaign_message(
+        message = prepare_campaign_message(
             user, subject, campaign.body, email_type="campaign",
+        )
+        if message.skip_reason is None:
+            return message
+        # An explicit operator test is allowed to target a controlled
+        # unsubscribed account. Keep it detached from subscription actions so
+        # the probe neither advertises nor exercises an unsubscribe URL.
+        return CampaignMessage(
+            recipient=recipient,
+            subject=subject,
+            body_markdown=campaign.body,
         )
     return CampaignMessage(
         recipient=recipient,

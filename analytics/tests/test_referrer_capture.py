@@ -5,7 +5,6 @@ scenario maps to one BDD-style block in the issue spec.
 """
 
 import json
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -47,13 +46,12 @@ def signup_email_password(client, email='new@test.com', password='pw1234ABcd'):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LinkedInFirstTouchStickyTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
-    def test_first_linkedin_visit_writes_ft_ref_cookie(self, _ses):
+    def test_first_linkedin_visit_writes_ft_ref_cookie(self):
         c = make_browser_client()
         resp = c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc')
         cookie = resp.cookies.get(FIRST_TOUCH_REFERRER_COOKIE)
@@ -63,14 +61,14 @@ class LinkedInFirstTouchStickyTest(TestCase):
         self.assertEqual(payload['source'], 'linkedin')
         self.assertIn('ts', payload)
 
-    def test_first_linkedin_visit_seeds_session_last_touch(self, _ses):
+    def test_first_linkedin_visit_seeds_session_last_touch(self):
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc')
         last = c.session.get(SESSION_LAST_TOUCH_REFERRER)
         self.assertIsNotNone(last)
         self.assertEqual(last['source'], 'linkedin')
 
-    def test_second_linkedin_visit_does_not_overwrite_ft_ref_cookie(self, _ses):
+    def test_second_linkedin_visit_does_not_overwrite_ft_ref_cookie(self):
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc')
         original = c.cookies[FIRST_TOUCH_REFERRER_COOKIE].value
@@ -80,7 +78,7 @@ class LinkedInFirstTouchStickyTest(TestCase):
         # Cookie value still equals the original.
         self.assertEqual(c.cookies[FIRST_TOUCH_REFERRER_COOKIE].value, original)
 
-    def test_signup_copies_linkedin_to_user_attribution(self, _ses):
+    def test_signup_copies_linkedin_to_user_attribution(self):
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc')
         c.get('/pricing', HTTP_REFERER='https://www.linkedin.com/in/foo')
@@ -97,18 +95,17 @@ class LinkedInFirstTouchStickyTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class DirectLandingTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
-    def test_direct_landing_does_not_write_ft_ref_cookie(self, _ses):
+    def test_direct_landing_does_not_write_ft_ref_cookie(self):
         c = make_browser_client()
         resp = c.get('/')
         self.assertNotIn(FIRST_TOUCH_REFERRER_COOKIE, resp.cookies)
 
-    def test_direct_signup_has_empty_host_and_direct_source(self, _ses):
+    def test_direct_signup_has_empty_host_and_direct_source(self):
         c = make_browser_client()
         c.get('/')
         resp = signup_email_password(c, email='direct@test.com')
@@ -125,13 +122,12 @@ class DirectLandingTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class SameOriginSkipTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
-    def test_same_origin_referrer_does_not_overwrite_first_touch(self, _ses):
+    def test_same_origin_referrer_does_not_overwrite_first_touch(self):
         c = make_browser_client()
         # Land from Google.
         c.get('/blog', HTTP_REFERER='https://www.google.com/search?q=ai+ship',
@@ -146,7 +142,7 @@ class SameOriginSkipTest(TestCase):
         self.assertEqual(last['source'], 'google')
 
     def test_signup_after_same_origin_clicks_preserves_google_first_touch(
-        self, _ses
+        self,
     ):
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='https://www.google.com/search?q=ai+ship',
@@ -159,7 +155,7 @@ class SameOriginSkipTest(TestCase):
         self.assertEqual(attr.first_touch_referrer_source, 'google')
         self.assertEqual(attr.last_touch_referrer_source, 'google')
 
-    def test_same_origin_only_then_signup_has_direct_source(self, _ses):
+    def test_same_origin_only_then_signup_has_direct_source(self):
         """User who only had same-origin referrers gets direct attribution."""
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='http://testserver/', HTTP_HOST='testserver')
@@ -177,14 +173,13 @@ class SameOriginSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LastTouchOverwriteTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
     def test_youtube_then_chatgpt_signup_shows_youtube_first_chatgpt_last(
-        self, _ses
+        self,
     ):
         c = make_browser_client()
         c.get('/blog', HTTP_REFERER='https://www.youtube.com/watch?v=foo')
@@ -226,13 +221,12 @@ class BotReferrerSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LoginPageReferrerSkipTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
-    def test_register_page_referrer_does_not_overwrite_first_touch(self, _ses):
+    def test_register_page_referrer_does_not_overwrite_first_touch(self):
         c = make_browser_client()
         # 1. Land from LinkedIn on /blog.
         c.get('/blog', HTTP_REFERER='https://www.linkedin.com/feed/abc',
@@ -257,13 +251,12 @@ class LoginPageReferrerSkipTest(TestCase):
 # ---------------------------------------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class MalformedReferrerCookieTest(TestCase):
 
     def setUp(self):
         cache.clear()
 
-    def test_malformed_ft_ref_cookie_does_not_crash_signup(self, _ses):
+    def test_malformed_ft_ref_cookie_does_not_crash_signup(self):
         c = make_browser_client()
         c.cookies[FIRST_TOUCH_REFERRER_COOKIE] = 'not-json{{'
         resp = signup_email_password(c, email='broken-ref@test.com')

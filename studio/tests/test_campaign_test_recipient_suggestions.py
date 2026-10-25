@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
 from email_app.models import EmailCampaign
+from email_app.services.campaign_test_send import send_campaign_test_recipient
 
 User = get_user_model()
 
@@ -140,6 +141,32 @@ class CampaignRecentTestRecipientsTest(TestCase):
         )
 
     pass
+
+
+class CampaignTestRecipientPolicyTest(TestCase):
+    def test_unsubscribed_controlled_user_gets_clean_explicit_test(self):
+        user = User.objects.create_user(
+            email="controlled-unsubscribed@test.com",
+            unsubscribed=True,
+        )
+        campaign = EmailCampaign.objects.create(subject="Probe", body="Hello")
+        captured = {}
+
+        def send(*, message, campaign_id):
+            captured.update(message=message, campaign_id=campaign_id)
+            return "relay-test-id"
+
+        result = send_campaign_test_recipient(campaign, user.email, send=send)
+
+        self.assertEqual(result, "relay-test-id")
+        self.assertEqual(captured["campaign_id"], campaign.pk)
+        message = captured["message"]
+        self.assertEqual(message.recipient, user.email)
+        self.assertEqual(message.subject, "[TEST] Probe")
+        self.assertEqual(message.body_markdown, "Hello")
+        self.assertEqual(message.unsubscribe_url, "")
+        self.assertEqual(message.footer_note, "")
+        self.assertIsNone(message.skip_reason)
 
     pass
 

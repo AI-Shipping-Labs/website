@@ -24,7 +24,7 @@ class CampaignMessage:
     footer_note: str = ""
     unsubscribe_url: str = ""
     verify_email_url: str = ""
-    skip_reason: str = ""
+    skip_reason: str | None = None
 
 
 def prepare_campaign_message(user, subject, body_markdown, *, email_type, footer_note=""):

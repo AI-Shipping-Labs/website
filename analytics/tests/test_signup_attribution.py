@@ -107,11 +107,10 @@ def signup_newsletter(client, email='subscriber@test.com'):
 # --- Email + password signup -------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class EmailPasswordSignupAttributionTest(TestCase):
     """Scenario: email/password signup snapshots UTMs from cookie + session."""
 
-    def test_full_utms_creates_attribution_with_correct_fields(self, _ses):
+    def test_full_utms_creates_attribution_with_correct_fields(self):
         c = make_browser_client()
         anon_id = set_anon_id_cookie(c)
         ts_iso = '2026-01-01T12:00:00+00:00'
@@ -158,11 +157,10 @@ class NewsletterSignupAttributionTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class NoUtmSignupTest(TestCase):
     """Scenario: signup with no UTMs creates an empty row, not nothing, not error."""
 
-    def test_signup_without_any_utm_creates_empty_row(self, _ses):
+    def test_signup_without_any_utm_creates_empty_row(self):
         c = make_browser_client()
         response = signup_email_password(c, email='nobody@test.com')
         self.assertEqual(response.status_code, 201)
@@ -182,11 +180,10 @@ class NoUtmSignupTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class FirstTouchOnlyTest(TestCase):
     """Scenario: first-touch cookie only, no session — first-touch fields populated."""
 
-    def test_first_touch_only_records_first_touch_leaves_last_empty(self, _ses):
+    def test_first_touch_only_records_first_touch_leaves_last_empty(self):
         c = make_browser_client()
         set_first_touch_cookie(
             c, source='newsletter', medium='email',
@@ -207,11 +204,10 @@ class FirstTouchOnlyTest(TestCase):
 
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class LastTouchOnlyTest(TestCase):
     """Scenario: session has last-touch but no first-touch cookie."""
 
-    def test_last_touch_only_records_last_touch_leaves_first_empty(self, _ses):
+    def test_last_touch_only_records_last_touch_leaves_first_empty(self):
         c = make_browser_client()
         seed_last_touch_session(
             c, source='twitter', medium='social', campaign='summer_drop',
@@ -235,7 +231,6 @@ class LastTouchOnlyTest(TestCase):
 # --- Campaign FK resolution ---------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class CampaignFkResolutionTest(TestCase):
 
     def setUp(self):
@@ -246,7 +241,7 @@ class CampaignFkResolutionTest(TestCase):
             default_utm_medium='email',
         )
 
-    def test_first_touch_fk_resolves_when_campaign_exists(self, _ses):
+    def test_first_touch_fk_resolves_when_campaign_exists(self):
         c = make_browser_client()
         set_first_touch_cookie(c, campaign='launch_april2026')
         signup_email_password(c, email='ella@test.com')
@@ -254,7 +249,7 @@ class CampaignFkResolutionTest(TestCase):
         self.assertEqual(attr.first_touch_campaign_id, self.campaign.pk)
         self.assertEqual(attr.first_touch_utm_campaign, 'launch_april2026')
 
-    def test_first_touch_fk_null_when_no_matching_campaign(self, _ses):
+    def test_first_touch_fk_null_when_no_matching_campaign(self):
         c = make_browser_client()
         set_first_touch_cookie(c, campaign='unknown_slug')
         signup_email_password(c, email='frank@test.com')
@@ -262,7 +257,7 @@ class CampaignFkResolutionTest(TestCase):
         self.assertIsNone(attr.first_touch_campaign_id)
         self.assertEqual(attr.first_touch_utm_campaign, 'unknown_slug')
 
-    def test_last_touch_fk_resolves_when_campaign_exists(self, _ses):
+    def test_last_touch_fk_resolves_when_campaign_exists(self):
         c = make_browser_client()
         seed_last_touch_session(c, campaign='launch_april2026')
         signup_email_password(c, email='grace@test.com')
@@ -273,11 +268,10 @@ class CampaignFkResolutionTest(TestCase):
 # --- Backfill of CampaignVisit ------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class BackfillCampaignVisitTest(TestCase):
     """Scenario: anonymous CampaignVisit rows get attached to the new user."""
 
-    def test_backfill_links_anonymous_visits_to_new_user(self, _ses):
+    def test_backfill_links_anonymous_visits_to_new_user(self):
         anon_id = str(uuid.uuid4())
         # 3 prior anonymous visits with this anon_id
         for path in ('/blog', '/courses', '/pricing'):
@@ -308,7 +302,7 @@ class BackfillCampaignVisitTest(TestCase):
             0,
         )
 
-    def test_backfill_does_not_steal_visits_belonging_to_other_users(self, _ses):
+    def test_backfill_does_not_steal_visits_belonging_to_other_users(self):
         # Existing user with an existing visit
         other = User.objects.create_user(email='owner@test.com', password='pw1234ABcd')
         anon_id = str(uuid.uuid4())
@@ -331,7 +325,7 @@ class BackfillCampaignVisitTest(TestCase):
             'Existing visit was reassigned to the new signup',
         )
 
-    def test_backfill_skipped_silently_when_no_anonymous_id(self, _ses):
+    def test_backfill_skipped_silently_when_no_anonymous_id(self):
         # Existing visit with some other anon_id — must not be touched.
         unrelated = CampaignVisit.objects.create(
             anonymous_id='some-other-id',
@@ -575,11 +569,10 @@ class SignalRobustnessTest(TestCase):
 # --- Edge: malformed cookie ---------------------------------------------
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
-@patch('email_app.services.email_service.EmailService._send_relay', return_value='ses-id')
 class MalformedCookieTest(TestCase):
     """Bad first-touch JSON must not crash the signup."""
 
-    def test_malformed_first_touch_cookie_creates_empty_first_touch(self, _ses):
+    def test_malformed_first_touch_cookie_creates_empty_first_touch(self):
         c = make_browser_client()
         c.cookies[FIRST_TOUCH_COOKIE] = 'not-json{{'
         response = signup_email_password(c, email='junk@test.com')

@@ -160,37 +160,25 @@
   ]
  },
  {
-  "name": "ses",
-  "label": "Email (SES)",
+  "name": "relay",
+  "label": "Email (Relay)",
   "keys": [
-   {
-    "key": "AWS_ACCESS_KEY_ID",
-    "is_secret": true,
-    "description": "AWS access key for an IAM user with SES send + suppression-list permissions.",
-    "docs_url": "_docs/integrations/ses.md#aws_access_key_id"
-   },
-   {
-    "key": "AWS_SECRET_ACCESS_KEY",
-    "is_secret": true,
-    "description": "AWS secret key paired with the access key above. Without these no email is sent.",
-    "docs_url": "_docs/integrations/ses.md#aws_secret_access_key"
-   },
    {
     "key": "SES_TRANSACTIONAL_FROM_EMAIL",
     "is_secret": false,
-    "description": "Sender address for required account and service email. Must be verified in SES.",
+    "description": "Sender address for required account and service email. Must match a registered Relay sender.",
     "docs_url": "_docs/integrations/ses.md#ses_transactional_from_email"
    },
    {
     "key": "SES_PROMOTIONAL_FROM_EMAIL",
     "is_secret": false,
-    "description": "Sender address for campaigns, newsletters, and marketing email. Must be verified in SES.",
+    "description": "Sender address for campaigns, newsletters, and marketing email. Must match a registered Relay sender.",
     "docs_url": "_docs/integrations/ses.md#ses_promotional_from_email"
    },
    {
     "key": "SES_WELCOME_FROM_EMAIL",
     "is_secret": false,
-    "description": "Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must be verified in SES.",
+    "description": "Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must match a registered Relay sender.",
     "docs_url": "_docs/integrations/ses.md#ses_welcome_from_email"
    },
    {
@@ -201,20 +189,6 @@
     "default": "welcome@aishippinglabs.com",
     "description": "Reply-To address set on welcome emails so a member who replies reaches a monitored, team-forwarded inbox instead of the send-only welcome/noreply mailbox. Defaults to welcome@aishippinglabs.com (forwarded to the founders by the inbound email-forwarder Lambda). Leave blank to send welcome emails with no Reply-To header.",
     "docs_url": "_docs/integrations/ses.md#ses_welcome_reply_to_email"
-   },
-   {
-    "key": "SES_WEBHOOK_VALIDATION_ENABLED",
-    "is_secret": false,
-    "is_boolean": true,
-    "description": "Set true to verify SNS bounce/complaint signatures (recommended in production).",
-    "docs_url": "_docs/integrations/ses.md#ses_webhook_validation_enabled"
-   },
-   {
-    "key": "SES_WEBHOOK_SHARED_SECRET",
-    "is_secret": true,
-    "optional": true,
-    "description": "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. Set in prod and inject from the infra-side Lambda forwarder. Leave blank locally to allow runserver replay.",
-    "docs_url": "_docs/integrations/ses.md#ses_webhook_shared_secret"
    },
    {
     "key": "EMAIL_BATCH_SIZE",
@@ -229,14 +203,14 @@
     "is_secret": false,
     "optional": true,
     "default": "3",
-    "description": "Maximum SES attempts for a failed campaign delivery before it stays failed and the campaign needs attention. Default 3; invalid, zero, or negative overrides fall back to 3. Ambiguous outcomes are never auto-retried.",
+    "description": "Maximum Relay attempts for a failed campaign delivery before it stays failed and the campaign needs attention. Default 3; invalid, zero, or negative overrides fall back to 3. Ambiguous outcomes are never auto-retried.",
     "docs_url": "_docs/integrations/ses.md#campaign_delivery_max_attempts"
    },
    {
     "key": "CAMPAIGN_BATCH_INTERVAL_SECONDS",
     "is_secret": false,
     "optional": true,
-    "description": "Seconds to stagger campaign send batches apart so the fan-out does not burst past the SES send-rate limit (issue #922). Batch i is scheduled at now + i * this interval; the first batch fires immediately. Default 60. Set to 0 to send all batches at once (no stagger).",
+    "description": "Seconds to stagger campaign send batches apart so the fan-out does not burst past the Relay delivery-rate limit (issue #922). Batch i is scheduled at now + i * this interval; the first batch fires immediately. Default 60. Set to 0 to send all batches at once (no stagger).",
     "docs_url": "_docs/integrations/ses.md#campaign_batch_interval_seconds"
    },
    {
@@ -259,6 +233,26 @@
     "optional": true,
     "description": "Default markdown body pre-filled into the \"recording available\" campaign draft (issue #1076). Placeholders: ``{event_title}``, ``{recording_url}``, and ``{workshop_writeup}`` (the linked workshop write-up, or a short generic line when the event has no linked workshop). Pre-fill only \u2014 never auto-sent.",
     "docs_url": "_docs/integrations/ses.md#recording_available_body_template"
+   }
+  ]
+ },
+ {
+  "name": "ses",
+  "label": "SES event ingest",
+  "keys": [
+   {
+    "key": "SES_WEBHOOK_VALIDATION_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "description": "Set true to verify SNS bounce/complaint signatures (recommended in production).",
+    "docs_url": "_docs/integrations/ses.md#ses_webhook_validation_enabled"
+   },
+   {
+    "key": "SES_WEBHOOK_SHARED_SECRET",
+    "is_secret": true,
+    "optional": true,
+    "description": "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. Set in prod and inject from the infra-side Lambda forwarder. Leave blank locally to allow runserver replay.",
+    "docs_url": "_docs/integrations/ses.md#ses_webhook_shared_secret"
    }
   ]
  },
@@ -316,6 +310,18 @@
   "name": "s3_content",
   "label": "S3 Content Images",
   "keys": [
+   {
+    "key": "AWS_ACCESS_KEY_ID",
+    "is_secret": true,
+    "description": "AWS access key for content, recordings, and download storage.",
+    "docs_url": "_docs/integrations/ses.md#aws_access_key_id"
+   },
+   {
+    "key": "AWS_SECRET_ACCESS_KEY",
+    "is_secret": true,
+    "description": "AWS secret key paired with the access key for S3 storage.",
+    "docs_url": "_docs/integrations/ses.md#aws_secret_access_key"
+   },
    {
     "key": "AWS_S3_CONTENT_BUCKET",
     "is_secret": false,

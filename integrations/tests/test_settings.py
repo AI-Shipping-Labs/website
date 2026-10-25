@@ -145,7 +145,7 @@ class PackageSettingsPageTest(TestCase):
     def test_invalid_package_value_does_not_create_override(self):
         self.client.login(email=self.staff.email, password="testpass")
         response = self.client.post(
-            reverse("studio_settings_save", kwargs={"group": "ses"}),
+            reverse("studio_settings_save", kwargs={"group": "relay"}),
             {"EMAIL_BATCH_SIZE": "not-an-integer"},
         )
 

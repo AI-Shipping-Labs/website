@@ -24,7 +24,7 @@ LINKS = {
 }
 KEYS = {
     "stripe": "STRIPE_PAYMENT_LINKS",
-    "ses": "EMAIL_BATCH_SIZE",
+    "relay": "EMAIL_BATCH_SIZE",
     "llm": "LLM_MAX_RETRIES",
 }
 
@@ -33,7 +33,7 @@ class RuntimeSettingsRegistryTest(SimpleTestCase):
     def test_registry_metadata_and_documentation_anchors(self):
         expectations = {
             "stripe": ("STRIPE_PAYMENT_LINKS", "stripe.md", True, None),
-            "ses": ("EMAIL_BATCH_SIZE", "ses.md", False, "200"),
+            "relay": ("EMAIL_BATCH_SIZE", "ses.md", False, "200"),
             "llm": ("LLM_MAX_RETRIES", "llm.md", False, "6"),
         }
         for group_name, (key, filename, multiline, default) in expectations.items():

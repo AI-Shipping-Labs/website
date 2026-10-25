@@ -1,7 +1,9 @@
-# Email (SES) integration setup
+# Email delivery and SES event ingest settings
 
 This page documents every SES-related setting declared in
-`integrations/settings_keys.py` (the `ses` group). Each section
+`integrations/settings_keys.py`. The `ses` group contains event-ingest
+settings only; sending settings live in `relay`, and AWS storage credentials
+live in `s3_content`. Existing sender key names are retained to preserve overrides. Each section
 follows the same template — Purpose, Without it, Where to find it,
 Prereqs, Rotation, Test vs live — so an operator can answer "do I need
 to set this right now, or can I defer it?" without leaving the page.
@@ -65,12 +67,12 @@ Rotation: Safe to rotate.
    "Create access key". AWS allows two active keys per user during the
    transition window.
 2. Update both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` via
-   Studio (Integration settings > Email (SES)) or via
+   Studio (Integration settings > S3 Content Images) or via
    `PUT /api/v1/settings/<key>`.
 3. Once the platform is using the new pair, delete the old key from
    the same IAM console screen.
 4. Window of impact: between the moment you start the rotation and the
-   moment you save both new values together, in-flight outbound email
+   moment you save both new values together, in-flight S3 requests
    may fail with `SignatureDoesNotMatch` if the old key was already
    deleted. Keep the old key active until the new pair is saved.
 

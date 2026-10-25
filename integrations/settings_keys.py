@@ -39,7 +39,8 @@ GROUP_LABELS = {
     "s3_content": "S3 Content Images",
     "s3_downloads": "S3 Downloads",
     "s3_recordings": "S3 Recordings",
-    "ses": "Email (SES)",
+    "ses": "SES event ingest",
+    "relay": "Email (Relay)",
     "site": "Site",
     "slack": "Slack",
     "stripe": "Stripe",
@@ -50,6 +51,7 @@ GROUP_LABELS = {
 _GROUP_ORDER = (
     "stripe",
     "zoom",
+    "relay",
     "ses",
     "s3_recordings",
     "s3_content",
@@ -147,7 +149,7 @@ _KEY_ORDER = {
         "MAVEN_REMOVAL_STUDENT_EMAIL",
     ),
     "observability": ("LOGFIRE_ENABLED", "LOGFIRE_TOKEN", "LOGFIRE_ENVIRONMENT"),
-    "s3_content": ("AWS_S3_CONTENT_BUCKET", "AWS_S3_CONTENT_REGION", "CONTENT_CDN_BASE", "S3_ENABLED"),
+    "s3_content": ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_S3_CONTENT_BUCKET", "AWS_S3_CONTENT_REGION", "CONTENT_CDN_BASE", "S3_ENABLED"),
     "s3_downloads": (
         "AWS_S3_DOWNLOADS_BUCKET",
         "AWS_S3_DOWNLOADS_REGION",
@@ -162,21 +164,13 @@ _KEY_ORDER = {
         "RECORDING_TRANSCRIPT_INGEST_ENABLED",
         "RECORDING_RECAP_AUTO_DRAFT_ENABLED",
     ),
-    "ses": (
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "SES_TRANSACTIONAL_FROM_EMAIL",
-        "SES_PROMOTIONAL_FROM_EMAIL",
-        "SES_WELCOME_FROM_EMAIL",
-        "SES_WELCOME_REPLY_TO_EMAIL",
-        "SES_WEBHOOK_VALIDATION_ENABLED",
-        "SES_WEBHOOK_SHARED_SECRET",
-        "EMAIL_BATCH_SIZE",
-        "CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
-        "CAMPAIGN_BATCH_INTERVAL_SECONDS",
-        "CAMPAIGN_TEST_RECIPIENTS",
-        "RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
-        "RECORDING_AVAILABLE_BODY_TEMPLATE",
+    "ses": ("SES_WEBHOOK_VALIDATION_ENABLED", "SES_WEBHOOK_SHARED_SECRET"),
+    "relay": (
+        "SES_TRANSACTIONAL_FROM_EMAIL", "SES_PROMOTIONAL_FROM_EMAIL",
+        "SES_WELCOME_FROM_EMAIL", "SES_WELCOME_REPLY_TO_EMAIL",
+        "EMAIL_BATCH_SIZE", "CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
+        "CAMPAIGN_BATCH_INTERVAL_SECONDS", "CAMPAIGN_TEST_RECIPIENTS",
+        "RECORDING_AVAILABLE_SUBJECT_TEMPLATE", "RECORDING_AVAILABLE_BODY_TEMPLATE",
     ),
     "site": (
         "SITE_BASE_URL",
@@ -586,9 +580,9 @@ ZOOM_AUTO_RECORDING = declare(
 # --- Email (SES) (ses) ---
 AWS_ACCESS_KEY_ID = declare(
     key="AWS_ACCESS_KEY_ID",
-    group="ses",
+    group="s3_content",
     label="Aws Access Key ID",
-    description="AWS access key for an IAM user with SES send + suppression-list permissions.",
+    description="AWS access key for content, recordings, and download storage.",
     value_type="str",
     default="",
     secret=True,
@@ -596,9 +590,9 @@ AWS_ACCESS_KEY_ID = declare(
 )
 AWS_SECRET_ACCESS_KEY = declare(
     key="AWS_SECRET_ACCESS_KEY",
-    group="ses",
+    group="s3_content",
     label="Aws Secret Access Key",
-    description="AWS secret key paired with the access key above. Without these no email is sent.",
+    description="AWS secret key paired with the access key for S3 storage.",
     value_type="str",
     default="",
     secret=True,
@@ -606,9 +600,9 @@ AWS_SECRET_ACCESS_KEY = declare(
 )
 SES_TRANSACTIONAL_FROM_EMAIL = declare(
     key="SES_TRANSACTIONAL_FROM_EMAIL",
-    group="ses",
+    group="relay",
     label="SES Transactional From Email",
-    description="Sender address for required account and service email. Must be verified in SES.",
+    description="Sender address for required account and service email. Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
@@ -617,9 +611,9 @@ SES_TRANSACTIONAL_FROM_EMAIL = declare(
 )
 SES_PROMOTIONAL_FROM_EMAIL = declare(
     key="SES_PROMOTIONAL_FROM_EMAIL",
-    group="ses",
+    group="relay",
     label="SES Promotional From Email",
-    description="Sender address for campaigns, newsletters, and marketing email. Must be verified in SES.",
+    description="Sender address for campaigns, newsletters, and marketing email. Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
@@ -628,9 +622,9 @@ SES_PROMOTIONAL_FROM_EMAIL = declare(
 )
 SES_WELCOME_FROM_EMAIL = declare(
     key="SES_WELCOME_FROM_EMAIL",
-    group="ses",
+    group="relay",
     label="SES Welcome From Email",
-    description="Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must be verified in SES.",
+    description="Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
@@ -639,7 +633,7 @@ SES_WELCOME_FROM_EMAIL = declare(
 )
 SES_WELCOME_REPLY_TO_EMAIL = declare(
     key="SES_WELCOME_REPLY_TO_EMAIL",
-    group="ses",
+    group="relay",
     label="SES Welcome Reply To Email",
     description="Reply-To address set on welcome emails so a member who replies reaches a monitored, team-forwarded inbox instead of the send-only welcome/noreply mailbox. Defaults to welcome@aishippinglabs.com (forwarded to the founders by the inbound email-forwarder Lambda). Leave blank to send welcome emails with no Reply-To header.",
     value_type="str",
@@ -672,7 +666,7 @@ SES_WEBHOOK_SHARED_SECRET = declare(
 )
 EMAIL_BATCH_SIZE = declare(
     key="EMAIL_BATCH_SIZE",
-    group="ses",
+    group="relay",
     label="Email Batch Size",
     description="Positive number of recipients placed in each campaign send task. Default 200; invalid, zero, or negative overrides safely fall back to 200.",
     value_type="int",
@@ -683,9 +677,9 @@ EMAIL_BATCH_SIZE = declare(
 )
 CAMPAIGN_DELIVERY_MAX_ATTEMPTS = declare(
     key="CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
-    group="ses",
+    group="relay",
     label="Campaign Delivery Max Attempts",
-    description="Maximum SES attempts for a failed campaign delivery before it stays failed and the campaign needs attention. Default 3; invalid, zero, or negative overrides fall back to 3. Ambiguous outcomes are never auto-retried.",
+    description="Maximum Relay attempts for a failed campaign delivery before it stays failed and the campaign needs attention. Default 3; invalid, zero, or negative overrides fall back to 3. Ambiguous outcomes are never auto-retried.",
     value_type="int",
     default="3",
     secret=False,
@@ -694,9 +688,9 @@ CAMPAIGN_DELIVERY_MAX_ATTEMPTS = declare(
 )
 CAMPAIGN_BATCH_INTERVAL_SECONDS = declare(
     key="CAMPAIGN_BATCH_INTERVAL_SECONDS",
-    group="ses",
+    group="relay",
     label="Campaign Batch Interval Seconds",
-    description="Seconds to stagger campaign send batches apart so the fan-out does not burst past the SES send-rate limit (issue #922). Batch i is scheduled at now + i * this interval; the first batch fires immediately. Default 60. Set to 0 to send all batches at once (no stagger).",
+    description="Seconds to stagger campaign send batches apart so the fan-out does not burst past the Relay delivery-rate limit (issue #922). Batch i is scheduled at now + i * this interval; the first batch fires immediately. Default 60. Set to 0 to send all batches at once (no stagger).",
     value_type="int",
     default=0,
     secret=False,
@@ -705,7 +699,7 @@ CAMPAIGN_BATCH_INTERVAL_SECONDS = declare(
 )
 CAMPAIGN_TEST_RECIPIENTS = declare(
     key="CAMPAIGN_TEST_RECIPIENTS",
-    group="ses",
+    group="relay",
     label="Campaign Test Recipients",
     description="Comma/space/semicolon/newline-separated list of common test-send addresses surfaced as click-to-fill chips beneath the Test Recipients field on the campaign detail page (issue #921). Lets operators one-click-fill the mailboxes they repeatedly test to (a teammate, a QA seed inbox) instead of retyping. Invalid entries are silently dropped. Leave blank to show only the operator's own email and recently-sent addresses.",
     value_type="str",
@@ -716,7 +710,7 @@ CAMPAIGN_TEST_RECIPIENTS = declare(
 )
 RECORDING_AVAILABLE_SUBJECT_TEMPLATE = declare(
     key="RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
-    group="ses",
+    group="relay",
     label="Recording Available Subject Template",
     description='Default subject pre-filled into the "recording available" campaign draft an operator reaches from the host recording-ready email or the Studio event page (issue #1076). ``{event_title}`` is substituted with the event title. Pre-fill only — the operator reviews and edits the draft before sending, so a blank/odd setting can never auto-broadcast.',
     value_type="str",
@@ -727,7 +721,7 @@ RECORDING_AVAILABLE_SUBJECT_TEMPLATE = declare(
 )
 RECORDING_AVAILABLE_BODY_TEMPLATE = declare(
     key="RECORDING_AVAILABLE_BODY_TEMPLATE",
-    group="ses",
+    group="relay",
     label="Recording Available Body Template",
     description='Default markdown body pre-filled into the "recording available" campaign draft (issue #1076). Placeholders: ``{event_title}``, ``{recording_url}``, and ``{workshop_writeup}`` (the linked workshop write-up, or a short generic line when the event has no linked workshop). Pre-fill only — never auto-sent.',
     value_type="str",

@@ -88,7 +88,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
         self.assertEqual(_normalize(INTEGRATION_GROUPS), _normalize(donor))
 
     def test_group_and_key_counts(self):
-        self.assertEqual(len(INTEGRATION_GROUPS), 20)
+        self.assertEqual(len(INTEGRATION_GROUPS), 21)
         self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 174)
 
 
@@ -162,3 +162,32 @@ class SiteOptionalAdditionsTest(SimpleTestCase):
 
         for key in SITE_OPTIONAL_ADDITIONS:
             self.assertTrue(getattr(settings_keys, key).optional, key)
+
+
+class RelaySettingsGroupsTest(SimpleTestCase):
+    def test_ses_group_contains_only_event_ingest_settings(self):
+        from integrations.settings_registry import get_group_by_name
+
+        group = get_group_by_name("ses")
+        self.assertEqual({item["key"] for item in group["keys"]}, {
+            "SES_WEBHOOK_VALIDATION_ENABLED", "SES_WEBHOOK_SHARED_SECRET",
+        })
+
+    def test_sender_settings_and_storage_credentials_remain_available(self):
+        from integrations.settings_keys import (
+            AWS_ACCESS_KEY_ID,
+            AWS_SECRET_ACCESS_KEY,
+            SES_PROMOTIONAL_FROM_EMAIL,
+            SES_TRANSACTIONAL_FROM_EMAIL,
+            SES_WELCOME_FROM_EMAIL,
+            SES_WELCOME_REPLY_TO_EMAIL,
+        )
+
+        for definition in (
+            SES_TRANSACTIONAL_FROM_EMAIL, SES_PROMOTIONAL_FROM_EMAIL,
+            SES_WELCOME_FROM_EMAIL, SES_WELCOME_REPLY_TO_EMAIL,
+        ):
+            with self.subTest(key=definition.key):
+                self.assertEqual(definition.group, "relay")
+        self.assertEqual(AWS_ACCESS_KEY_ID.group, "s3_content")
+        self.assertEqual(AWS_SECRET_ACCESS_KEY.group, "s3_content")

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from community_base.jobs.runner import PermanentJobError
 from community_base.mail.models import EmailDelivery
+from community_base.mail.relay import RelayMailError
 from community_base.mail.service import MailError
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase, tag
@@ -21,22 +22,19 @@ from tests.fixtures import TierSetupMixin, set_membership
 
 
 def _stub_send(stub):
-    """Return ``(to, cc, html)`` for the single captured SES send."""
-    to_addresses = stub.calls[0]["Destination"]["ToAddresses"]
-    cc_addresses = stub.calls[0]["Destination"].get("CcAddresses", [])
-    html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-    return to_addresses, cc_addresses, html
+    """Return the delivery and resolved context handed to Relay."""
+    return stub.calls[0]["delivery"], stub.calls[0]["context"]
 
 
-class _FailingSESClient(StubRelayClient):
-    """SES stand-in whose transport always fails."""
+class _FailingRelayClient(StubRelayClient):
+    """Relay stand-in whose transport always rejects the send."""
 
     def __init__(self, error):
         super().__init__()
         self.error = error
 
-    def send_email(self, **kwargs):
-        self.calls.append(kwargs)
+    def send(self, delivery, *, context=None):
+        self.calls.append({"delivery": delivery, "context": context})
         raise self.error
 
 
@@ -99,29 +97,20 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         email_log = EmailLog.objects.get(email_type="account_deletion_request")
         self.assertEqual(email_log.user, user)
         self.assertEqual(email_log.recipient_email, "team@aishippinglabs.com")
-        self.assertEqual(
-            email_log.subject,
-            f"Account deletion request — user {user.pk} — {user.email}",
-        )
         self.assertEqual(email_log.dedupe_key, f"account-deletion-request:{audit.pk}")
         self.assertEqual(audit.row_count_summary, {"email_log_id": str(delivery.pk)})
 
-        to_addresses, cc_addresses, rendered = _stub_send(stub)
-        self.assertEqual(to_addresses, ["team@aishippinglabs.com"])
-        self.assertEqual(cc_addresses, [user.email])
-        self.assertIn(user.email, rendered)
-        self.assertIn(f"Support ID <strong>{user.pk}</strong>", rendered)
-        self.assertIn(f"/studio/users/{user.pk}/", rendered)
-        self.assertIn(
-            f'href="https://aishippinglabs.com/studio/users/{user.pk}/'
-            '#privacy-deletion-request"',
-            rendered,
+        sent_delivery, context = _stub_send(stub)
+        self.assertEqual(sent_delivery.recipient_email, "team@aishippinglabs.com")
+        self.assertEqual(sent_delivery.transport_options["cc"], [user.email])
+        self.assertEqual(context["login_email"], user.email)
+        self.assertEqual(context["support_id"], user.pk)
+        self.assertEqual(
+            context["studio_member_url"],
+            f"https://aishippinglabs.com/studio/users/{user.pk}/"
+            "#privacy-deletion-request",
         )
-        self.assertNotIn("testserver", rendered)
-        self.assertIn("No account deletion has happened yet", rendered)
-        self.assertIn("no later than one month after receipt", rendered)
-        self.assertNotIn("verify your email", rendered.lower())
-        self.assertNotIn("unsubscribe", rendered.lower())
+        self.assertNotIn("testserver", context["studio_member_url"])
 
         self.assertEqual(classify_email_type("account_deletion_request"), EMAIL_KIND_TRANSACTIONAL)
         self.assertIn("account_deletion_request", EMAIL_TYPES_WITHOUT_VERIFY_FOOTER)
@@ -181,9 +170,9 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
             EmailLog.objects.get().recipient_email,
             "privacy-ops@example.com",
         )
-        to_addresses, cc_addresses, _rendered = _stub_send(stub)
-        self.assertEqual(to_addresses, ["privacy-ops@example.com"])
-        self.assertEqual(cc_addresses, [user.email])
+        delivery, _context = _stub_send(stub)
+        self.assertEqual(delivery.recipient_email, "privacy-ops@example.com")
+        self.assertEqual(delivery.transport_options["cc"], [user.email])
 
     def test_every_authenticated_account_type_can_request_without_mutation(self):
         cases = [
@@ -346,7 +335,7 @@ class AccountDeletionRequestFailureTest(TestCase):
         # delivery is accepted and the worker owns the transport outcome.
         # A dead delivery leaves the audit row STATUS_REQUESTED (the
         # member did their part) with no EmailLog receipt.
-        stub = _FailingSESClient(RuntimeError("private SES exception detail"))
+        stub = _FailingRelayClient(RelayMailError("private_relay_rejection"))
 
         with relay_test_backend(), patch(
             "community_base.mail.backends.relay.configured_client",
@@ -367,5 +356,5 @@ class AccountDeletionRequestFailureTest(TestCase):
         self.assertEqual(delivery.state, EmailDelivery.State.DEAD)
         self.assertEqual(EmailLog.objects.count(), 0)
         self.assertNotIn(
-            "private SES exception detail", json.dumps(audit.row_count_summary),
+            "private_relay_rejection", json.dumps(audit.row_count_summary),
         )

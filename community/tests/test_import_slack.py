@@ -258,7 +258,7 @@ class SlackImportAdapterTest(TestCase):
 
 
 class SlackImportWelcomeEmailTest(TestCase):
-    def test_slack_welcome_copy_explains_workspace_context(self):
+    def test_slack_welcome_hands_workspace_context_and_links_to_relay(self):
         from community_base.mail.jobs import deliver as deliver_job
         from community_base.mail.models import EmailDelivery
 
@@ -290,12 +290,9 @@ class SlackImportWelcomeEmailTest(TestCase):
             ).count(),
             1,
         )
-        html_body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("AI Shipping Labs Slack workspace", html_body)
-        self.assertIn("Free account", html_body)
-        self.assertIn("does not grant paid membership", html_body)
-        self.assertIn("Set your password", html_body)
-        self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertNotIn("/api/unsubscribe?token=", html_body)
-        self.assertNotIn("unsubscribe link below", html_body)
-        self.assertIn("account deletion", html_body)
+        context = stub.calls[0]["context"]
+        self.assertTrue(context["is_slack_import"])
+        self.assertFalse(context["is_course_db_import"])
+        self.assertEqual(context["import_tags"], "slack-member")
+        self.assertIn("/api/password-reset?token=", context["password_reset_url"])
+        self.assertTrue(context["sign_in_url"].endswith("/login/"))

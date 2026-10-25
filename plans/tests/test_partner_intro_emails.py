@@ -181,14 +181,20 @@ class PartnerIntroEmailServiceTest(TestCase):
             'https://app.slack.com/client/TTEAM/UBOB',
         )
 
-        htmls = self._drain_and_collect()
-        self.assertEqual(len(htmls), 2)
-        html = htmls['alice@test.com']
-        self.assertIn('Hi there,', html)
-        self.assertIn('Bobby Slack', html)
-        self.assertIn('https://app.slack.com/client/TTEAM/UBOB', html)
-        self.assertIn('https://example.test/sprints/may-sprint/board', html)
-        self.assertNotIn('/studio/', html)
+        contexts = self._drain_and_collect()
+        self.assertEqual(len(contexts), 2)
+        context = contexts['alice@test.com']
+        self.assertEqual(context['member_name'], 'there')
+        self.assertEqual(context['partners'][0]['name'], 'Bobby Slack')
+        self.assertEqual(
+            context['partners'][0]['slack_profile_url'],
+            'https://app.slack.com/client/TTEAM/UBOB',
+        )
+        self.assertEqual(
+            context['board_url'],
+            'https://example.test/sprints/may-sprint/board',
+        )
+        self.assertNotIn('/studio/', str(context))
         self.assertEqual(
             EmailLog.objects.filter(user=alice, email_type='sprint_partner_intro').count(),
             1,
@@ -197,7 +203,7 @@ class PartnerIntroEmailServiceTest(TestCase):
     def _drain_and_collect(self):
         """Drain every pending delivery with a local stub.
 
-        Returns ``{recipient_email: body_html}`` — delivery ids are
+        Returns ``{recipient_email: resolved_context}`` — delivery ids are
         UUIDs, so callers must key on the recipient, never list order.
         """
 
@@ -215,8 +221,7 @@ class PartnerIntroEmailServiceTest(TestCase):
             ).order_by('recipient_email'):
                 deliver_job(None, {'delivery_id': str(delivery.id)})
         return {
-            call['Destination']['ToAddresses'][0]:
-                call['Content']['Simple']['Body']['Html']['Data']
+            call['delivery'].recipient_email: call['context']
             for call in stub.calls
         }
 

@@ -5,7 +5,7 @@ A1.2 slice 4: the email goes out as a durable ``EmailDelivery`` through
 (issue #1613) and writes the ``EmailLog`` audit row after provider
 acceptance. Tests drain pending deliveries with
 ``email_app.testing.deliver_pending_mail`` and assert on the rows and the
-rendered payload captured by the stub SES client.
+resolved context captured by the Relay stub.
 """
 
 import datetime
@@ -36,8 +36,8 @@ def _drain_with_stub():
     return stub
 
 
-def _rendered_html(stub):
-    return stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+def _relay_context(stub):
+    return stub.calls[0]['context']
 
 
 @tag('core')
@@ -99,21 +99,20 @@ class CreatePlanSharedTest(TestCase):
         self.assertEqual(log.email_type, 'plan_shared')
         self.assertEqual(log.dedupe_key, delivery.idempotency_key)
 
-    def test_plan_shared_email_copy_mentions_review_and_edit(self):
+    def test_plan_shared_worker_resolves_sprint_and_member_workspace_link(self):
         from integrations.config import site_base_url
 
         NotificationService.create_plan_shared(self.plan)
         stub = _drain_with_stub()
 
         self.assertEqual(len(stub.calls), 1)
-        body_html = _rendered_html(stub)
+        context = _relay_context(stub)
 
-        self.assertIn('ready for you to review and edit', body_html)
-        self.assertIn(
+        self.assertEqual(context['sprint_name'], 'May 2026')
+        self.assertEqual(
+            context['plan_url'],
             f'{site_base_url()}/sprints/may-2026/plan/{self.plan.pk}',
-            body_html,
         )
-        self.assertIn('Review and edit your plan', body_html)
 
     def test_reshare_creates_second_notification_and_email(self):
         """Re-share is allowed: each call creates a NEW bell + a NEW

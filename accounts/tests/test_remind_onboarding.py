@@ -100,7 +100,7 @@ class OnboardingReminderSweepTest(TestCase):
             ).exists()
         )
 
-    def test_reminder_template_renders_link_and_subject(self):
+    def test_reminder_hands_member_and_site_context_to_relay(self):
         member = self._make_member("render@example.com", "basic")
         stub = StubRelayClient()
         with relay_test_backend(), patch(
@@ -111,11 +111,10 @@ class OnboardingReminderSweepTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
-        simple = stub.calls[0]["Content"]["Simple"]
-        subject = simple["Subject"]["Data"]
-        body_html = simple["Body"]["Html"]["Data"]
-        self.assertTrue(subject.strip())
-        self.assertIn("/onboarding/", body_html)
+        call = stub.calls[0]
+        self.assertEqual(call["delivery"].purpose, REMINDER_EMAIL_TYPE)
+        self.assertEqual(call["delivery"].recipient_user, member)
+        self.assertTrue(call["context"]["site_url"].startswith("http"))
 
     # -- Scenario: already onboarded is left alone -----------------------
 
@@ -312,7 +311,9 @@ class SendOnboardingRemindersCommandTest(TestCase):
         )
 
     def _due_member(self):
-        member = User.objects.create_user(email="cmd-due@example.com", password="pw")
+        member = User.objects.create_user(
+            email="cmd-due@example.com", password="pw", first_name="Ada",
+        )
         set_membership(member, tier=_tier("main"))
         log = EmailLog.objects.create(
             user=member, email_type="cofounder_welcome", ses_message_id="w",
@@ -354,7 +355,12 @@ class SendOnboardingRemindersCommandTest(TestCase):
 
         out = StringIO()
         call_command("send_onboarding_reminders", stdout=out)
-        deliver_pending_mail()
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=stub,
+        ):
+            deliver_pending_mail()
 
         output = out.getvalue()
         self.assertIn("sent=1", output)
@@ -362,3 +368,4 @@ class SendOnboardingRemindersCommandTest(TestCase):
         self.assertEqual(
             EmailLog.objects.filter(email_type=REMINDER_EMAIL_TYPE).count(), 1,
         )
+        self.assertEqual(stub.calls[0]["context"]["user_name"], "Ada")

@@ -19,20 +19,14 @@ PURPOSE = 'course_unenroll_notification'
 
 
 def _drain(delivery):
-    """Deliver one delivery through the real worker; return (to, subject, html)."""
+    """Deliver one delivery through the real worker and return its Relay call."""
     stub = StubRelayClient()
     with relay_test_backend(), patch(
         'community_base.mail.backends.relay.configured_client',
         return_value=stub,
     ):
         deliver_job(None, {'delivery_id': str(delivery.id)})
-    call = stub.calls[0]
-    simple = call['Content']['Simple']
-    return (
-        call['Destination']['ToAddresses'],
-        simple['Subject']['Data'],
-        simple['Body']['Html']['Data'],
-    )
+    return stub.calls[0]
 
 
 @tag('core')
@@ -73,25 +67,24 @@ class NotifyCourseUnenrollTest(TestCase):
             cohort_id=self.cohort.pk, cause='staff', actor_id=self.staff.pk,
         ))
 
-        to, subject, html = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
-        self.assertEqual(to, ['staff@example.com'])
-        self.assertEqual(subject, 'Lee Ver left AI Engineering Buildcamp')
-        self.assertIn(
-            'Lee Ver (leaver@example.com) unenrolled from AI Engineering '
-            'Buildcamp, cohort Cohort 4. Removed by ops@example.com. '
-            'Now 1 enrolled.',
-            html,
+        call = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
+        self.assertEqual(call['delivery'].recipient_email, 'staff@example.com')
+        self.assertEqual(
+            call['context']['studio_user_url'],
+            f'https://aishippinglabs.com/studio/users/{self.learner.pk}/',
         )
-        self.assertIn(f'/studio/users/{self.learner.pk}/', html)
+        self.assertEqual(call['context']['name'], 'Lee Ver')
+        self.assertEqual(call['context']['course'], 'AI Engineering Buildcamp')
+        self.assertEqual(call['context']['cohort'], 'Cohort 4')
+        self.assertEqual(call['context']['cause_sentence'], 'Removed by ops@example.com.')
+        self.assertEqual(call['context']['enrolled_count'], 1)
 
     def test_self_unenroll_without_cohort_names_only_the_course(self):
         notify_course_unenroll(self.learner.pk, self.course.pk, cause='self')
 
-        _to, _subject, html = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
-        self.assertIn(
-            'unenrolled from AI Engineering Buildcamp. They did it themselves.',
-            html,
-        )
+        call = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
+        self.assertEqual(call['context']['cohort'], '')
+        self.assertEqual(call['context']['cause_sentence'], 'They did it themselves.')
 
     def test_skips_when_staff_mailbox_blank(self):
         IntegrationSetting.objects.filter(key='STAFF_SIGNUP_NOTIFY_EMAIL').delete()

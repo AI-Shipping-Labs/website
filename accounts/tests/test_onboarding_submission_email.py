@@ -86,12 +86,13 @@ class OnboardingSubmissionEmailTest(TestCase):
             deliver_job(None, {"delivery_id": str(delivery.id)})
 
         self.assertEqual(len(stub.calls), 1)
-        simple = stub.calls[0]["Content"]["Simple"]
-        body_html = simple["Body"]["Html"]["Data"]
-        self.assertIn("Ada", body_html)
-        self.assertIn("Thanks for completing onboarding", body_html)
-        self.assertIn("1-2 business days", body_html)
-        self.assertIn("https://aishippinglabs.com/book/alexey", body_html)
+        call = stub.calls[0]
+        self.assertEqual(call["delivery"].purpose, "onboarding_submitted")
+        self.assertEqual(call["context"]["user_name"], "Ada")
+        self.assertEqual(
+            call["context"]["booking_url"].rstrip("/"),
+            "https://aishippinglabs.com/book/alexey",
+        )
 
     def test_edit_submission_sends_no_additional_delivery(self):
         response = self._start_draft_response()
@@ -172,8 +173,7 @@ class OnboardingSubmissionEmailTest(TestCase):
         ):
             deliver_job(None, {"delivery_id": str(delivery.id)})
 
-        simple = stub.calls[0]["Content"]["Simple"]
-        body_html = simple["Body"]["Html"]["Data"]
-        self.assertIn(
-            "https://calendly.com/dtc-alexey/ai-shipping-labs-call", body_html
+        self.assertEqual(
+            stub.calls[0]["context"]["booking_url"],
+            "https://calendly.com/dtc-alexey/ai-shipping-labs-call",
         )

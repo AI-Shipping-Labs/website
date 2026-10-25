@@ -258,7 +258,7 @@ class CourseDbImportCommandTest(TestCase):
 
 
 class CourseDbWelcomeEmailTest(TestCase):
-    def test_course_db_welcome_copy_explains_datatalks_context(self):
+    def test_course_db_welcome_hands_course_context_and_links_to_relay(self):
         from community_base.mail.jobs import deliver as deliver_job
         from community_base.mail.models import EmailDelivery
 
@@ -288,12 +288,13 @@ class CourseDbWelcomeEmailTest(TestCase):
             ):
                 deliver_job(None, {"delivery_id": str(delivery.id)})
         self.assertEqual(len(stub.calls), 1)
-        html_body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("DataTalks course history", html_body)
-        self.assertIn("data-engineering-zoomcamp", html_body)
-        self.assertIn("ml-zoomcamp", html_body)
-        self.assertIn("Set your password", html_body)
-        self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertNotIn("/api/unsubscribe?token=", html_body)
-        self.assertNotIn("unsubscribe link below", html_body)
-        self.assertIn("account deletion", html_body)
+        call = stub.calls[0]
+        self.assertEqual(call["delivery"].purpose, "welcome_imported")
+        context = call["context"]
+        self.assertTrue(context["is_course_db_import"])
+        self.assertEqual(
+            context["course_slugs"],
+            ["data-engineering-zoomcamp", "ml-zoomcamp"],
+        )
+        self.assertIn("/api/password-reset?token=", context["password_reset_url"])
+        self.assertTrue(context["sign_in_url"].endswith("/login/"))

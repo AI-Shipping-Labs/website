@@ -62,8 +62,8 @@ class RemindUnverifiedUsersTest(TestCase):
         delivery = EmailDelivery.objects.get(purpose=REMINDER_TEMPLATE_NAME)
         self.assertNotIn("verify_url", delivery.context_data)
         self.assertEqual(len(stub.calls), 1)
-        body_html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("/api/verify-email?token=", body_html)
+        context = stub.calls[0]["context"]
+        self.assertIn("/api/verify-email?token=", context["verify_url"])
 
         user.refresh_from_db()
         self.assertIsNotNone(user.verification_reminder_sent_at)

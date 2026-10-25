@@ -278,17 +278,17 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             EmailLog.objects.filter(email_type="checkout_payment_failed").exists(),
         )
 
-        class TimedOutSESClient(StubRelayClient):
-            """A transport whose first call times out (worker retry)."""
+        class TimedOutRelayClient(StubRelayClient):
+            """A Relay transport whose call asks the worker to retry."""
 
-            def send_email(self, **kwargs):
-                from botocore.exceptions import ConnectTimeoutError
+            def send(self, delivery, *, context=None):
+                from community_base.mail.relay import RelayMailError
 
-                raise ConnectTimeoutError(endpoint_url="https://ses.test")
+                raise RelayMailError("relay_timeout", retryable=True)
 
         with relay_test_backend(), patch(
             "community_base.mail.backends.relay.configured_client",
-            return_value=TimedOutSESClient(),
+            return_value=TimedOutRelayClient(),
         ):
             with self.assertRaises(RetryableJobError):
                 deliver_job(None, {"delivery_id": str(delivery.id)})

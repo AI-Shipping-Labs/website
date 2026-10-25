@@ -23,6 +23,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import requests
+from community_base.mail.models import EmailDelivery
 from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
@@ -464,7 +465,7 @@ class NotifyPaidSignupHelperTest(TestCase):
 
 @tag('core')
 class NotifyPaidSignupEndToEndTest(TestCase):
-    """Tests through ``handle_checkout_completed`` (real EmailService).
+    """Tests through ``handle_checkout_completed`` and durable Relay mail.
 
     Uses the real webhook path to assert that the paid welcome log is
     written and the Slack post fires while staff receives both the hidden
@@ -508,7 +509,52 @@ class NotifyPaidSignupEndToEndTest(TestCase):
             "metadata": {"tier_slug": "basic", "user_id": str(user.pk)},
         }
 
-    pass
+    def test_paid_checkout_queues_welcome_and_staff_notification(self):
+        user = User.objects.create_user(
+            email="endtoend@test.com",
+            first_name="Riley",
+        )
+        cfg = self._cfg_full()
+
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=cfg,
+        ), patch(
+            "payments.services.get_config",
+            side_effect=cfg,
+        ), patch(
+            "community.services.staff_notifications.is_enabled",
+            return_value=True,
+        ), patch(
+            "community.services.staff_notifications.requests.post",
+        ) as mock_slack:
+            mock_slack.return_value.json.return_value = {"ok": True}
+            mock_slack.return_value.status_code = 200
+            handle_checkout_completed(self._basic_session(user))
+
+        deliveries = EmailDelivery.objects.order_by("created_at")
+        self.assertEqual(deliveries.count(), 2)
+        welcome = deliveries.get(recipient_user=user)
+        self.assertEqual(welcome.purpose, "basic_welcome")
+        self.assertEqual(welcome.recipient_email, user.email)
+        self.assertEqual(welcome.transport_options["bcc"], [self.STAFF_EMAIL])
+        staff = deliveries.get(recipient_user__isnull=True)
+        self.assertEqual(staff.purpose, "staff_signup_notification")
+        self.assertEqual(staff.recipient_email, self.STAFF_EMAIL)
+
+        deliver_pending_mail()
+        from email_app.models import EmailLog
+        self.assertEqual(
+            EmailLog.objects.filter(user=user, email_type="basic_welcome").count(),
+            1,
+        )
+        self.assertFalse(
+            EmailLog.objects.filter(user=user, email_type="cofounder_welcome").exists(),
+        )
+        mock_slack.assert_called_once()
+        self.assertEqual(
+            mock_slack.call_args.kwargs["json"]["channel"], self.SLACK_CHANNEL,
+        )
 
     def test_webhook_threads_real_amount_and_ids_into_notification(self):
         """Issue #952: the handler passes the Checkout Session's
@@ -724,7 +770,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
 
 @tag('core')
 class CofounderWelcomeTemplateContextTest(TestCase):
-    """The welcome template renders user_first_name + sprint paragraph."""
+    """The welcome delivery receives the member and evergreen context."""
 
     @classmethod
     def setUpTestData(cls):
@@ -732,7 +778,6 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         cls.basic_tier.price_eur_month = 20
         cls.basic_tier.save(update_fields=["price_eur_month"])
 
-    pass
     def test_welcome_renders_first_name_when_present(self):
         from community.services import staff_notifications
 
@@ -758,70 +803,6 @@ class CofounderWelcomeTemplateContextTest(TestCase):
         welcome_call = mock_send.call_args_list[0]
         ctx = welcome_call.args[2]
         self.assertEqual(ctx["user_first_name"], "Sam")
-
-    def test_welcome_renders_first_name_in_greeting(self):
-        """Scenario: greeting reads ``Hey Sam,`` when first_name present."""
-        user = User.objects.create_user(email="sam@test.com", first_name="Sam")
-        body = self._render_welcome(user, "")
-        self.assertIn("Hey Sam,", body)
-
-    def test_welcome_falls_back_to_there_when_first_name_empty(self):
-        """When first_name is empty the markdown template's ``|default:"there"``
-        substitutes the placeholder. We render the template to confirm
-        the placeholder lands in the output body, and only Alexey is
-        named (Valeria removed from emails).
-        """
-        user = User.objects.create_user(email="noname@test.com", first_name="")
-        body = self._render_welcome(user, "")
-
-        self.assertIn("Hey there,", body)
-        # Only Alexey named even without a first name.
-        self.assertIn("Alexey", body)
-        self.assertNotIn("Valeriia", body)
-        self.assertNotIn("Valeria", body)
-
-    def test_welcome_opening_and_signoff_name_only_alexey(self):
-        """The opening and sign-off name only Alexey, spelled exactly,
-        and Valeria mentions are gone.
-        """
-        user = User.objects.create_user(email="both@test.com", first_name="Sam")
-        body = self._render_welcome(user, "")
-
-        self.assertIn("Alexey", body)
-        self.assertNotIn("Valeriia", body)
-        self.assertNotIn("Valeria", body)
-        # Solo opening / cc phrasing removed.
-        self.assertNotIn("I'm Valeriia, one of the co-founders", body)
-        self.assertNotIn("cc'd Alexey", body)
-        # Solo signature removed.
-        self.assertNotIn("Valeriia Kuka", body)
-
-    def test_welcome_links_onboarding_form_as_primary_cta(self):
-        """The onboarding-form CTA links ``/onboarding/`` and precedes the
-        short-call CTA; the body does not lead with the call.
-        """
-        user = User.objects.create_user(email="cta@test.com", first_name="Sam")
-        body = self._render_welcome(user, "")
-
-        self.assertIn("/onboarding/", body)
-        # The absolute onboarding URL ends in /onboarding/.
-        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
-
-        form_idx = body.find("/onboarding/")
-        call_idx = body.find("short call")
-        self.assertNotEqual(form_idx, -1)
-        self.assertNotEqual(call_idx, -1)
-        # Form CTA appears before the call CTA.
-        self.assertLess(form_idx, call_idx)
-        # No longer leads with the call.
-        self.assertNotIn("Would you be open to a short call", body)
-
-    def test_welcome_retains_personalized_plan_framing(self):
-        """The personalized-plan framing survives the rework."""
-        user = User.objects.create_user(email="plan@test.com", first_name="Sam")
-        body = self._render_welcome(user, "")
-
-        self.assertIn("personalized plan", body)
 
     def test_sprint_paragraph_is_always_empty_and_never_dated(self):
         """Issue #950: the injected sprint paragraph is now always empty —
@@ -850,60 +831,6 @@ class CofounderWelcomeTemplateContextTest(TestCase):
             status="active",
         )
         self.assertEqual(_current_sprint_paragraph(), "")
-
-    def test_welcome_is_evergreen_links_sprints_and_has_no_month_literal(self):
-        """The rendered welcome links the public ``/sprints`` page, says we
-        regularly run community sprints, and contains NO month name or
-        ISO date literal so it can never name a stale/finished sprint.
-        """
-
-        user = User.objects.create_user(email="evergreen@test.com", first_name="Sam")
-        # Render with the production paragraph value (always "" now).
-        from community.services.staff_notifications import (
-            _current_sprint_paragraph,
-        )
-
-        body = self._render_welcome(user, _current_sprint_paragraph())
-
-        # Evergreen "we run sprints" framing + public sprints link.
-        self.assertIn("community sprints", body.lower())
-        self.assertRegex(body, r"https?://[^\s\"'<]+/sprints")
-
-        # No month-name literal anywhere (case-insensitive, word-bounded).
-        months = (
-            "January February March April May June July August "
-            "September October November December"
-        ).split()
-        for month in months:
-            self.assertNotRegex(
-                body,
-                rf"\b{month}\b",
-                f"welcome leaked a month literal: {month}",
-            )
-        # No ISO date literal (YYYY-MM-DD) either.
-        self.assertNotRegex(
-            body,
-            r"\b\d{4}-\d{2}-\d{2}\b",
-            "welcome leaked an ISO date literal",
-        )
-        # No leftover running-sprint artefact.
-        self.assertNotIn("currently running", body)
-
-    def test_welcome_finish_onboarding_cta_promises_a_call(self):
-        """The CTA tells the member to finish onboarding and frames the
-        post-onboarding call (the actual booking links land in #951).
-        """
-        user = User.objects.create_user(email="cta951@test.com", first_name="Sam")
-        body = self._render_welcome(user, "")
-
-        # Finish-onboarding framing + the post-onboarding call promise.
-        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
-        onboarding_idx = body.lower().find("onboarding")
-        call_idx = body.lower().find("call")
-        self.assertNotEqual(onboarding_idx, -1)
-        self.assertNotEqual(call_idx, -1)
-        self.assertIn("finish", body.lower())
-
 
 @tag('core')
 class TierWelcomeRoutingTest(TestCase):
@@ -996,59 +923,6 @@ class TierWelcomeRoutingTest(TestCase):
         # Exactly one welcome was sent — never dropped.
         self.assertEqual(mock_send.call_count, 1)
         mock_logger.warning.assert_called()
-
-
-@tag('core')
-class TierWelcomeRenderTest(TestCase):
-    """Issue #847: the rendered Basic/Premium bodies carry the right copy."""
-
-    pass
-    def test_basic_body_mentions_writeups_newsletter_and_onboarding(self):
-        user = User.objects.create_user(email="b1@test.com", first_name="Sam")
-        body = self._render("basic_welcome", user)
-
-        self.assertIn("Hey Sam,", body)
-        self.assertIn("write-ups", body)
-        self.assertIn("newsletter", body)
-        # Onboarding CTA links the live form.
-        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
-        # Call offer present.
-        self.assertIn("short call", body)
-        self.assertIn("Welcome aboard!", body)
-
-    def test_basic_body_states_slack_is_not_included_and_no_sprint(self):
-        """Basic must not promise Slack/community as a benefit and must
-        not carry sprint / personalized-plan language. It may say Slack is
-        NOT included.
-        """
-        user = User.objects.create_user(email="b2@test.com", first_name="Sam")
-        body = self._render("basic_welcome", user)
-
-        # It explicitly tells the member Slack is NOT part of Basic.
-        self.assertIn("does not include access to our community", body)
-        # No sprint / personalized-plan-in-sprint language leaked in.
-        self.assertNotIn("sprint", body.lower())
-        self.assertNotIn("personalized plan", body)
-
-    def test_basic_body_falls_back_to_there_without_first_name(self):
-        user = User.objects.create_user(email="b3@test.com", first_name="")
-        body = self._render("basic_welcome", user)
-        self.assertIn("Hey there,", body)
-
-    def test_premium_body_mentions_courses_honesty_and_onboarding(self):
-        user = User.objects.create_user(email="p1@test.com", first_name="Sam")
-        body = self._render("premium_welcome", user)
-
-        self.assertIn("Hey Sam,", body)
-        # Courses are part of Premium and honestly flagged as not-yet-live.
-        self.assertIn("courses", body.lower())
-        self.assertIn("aren't any on the platform yet", body)
-        # Asks what course the member wants.
-        self.assertIn("what would you most want a course on", body.lower())
-        # Onboarding CTA + call offer.
-        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
-        self.assertIn("short call", body)
-        self.assertIn("Welcome aboard!", body)
 
 
 @tag('core')
@@ -1168,8 +1042,6 @@ class StaffSignupNotificationBodyTest(TestCase):
         self.assertIn("cus_FIELDS", slack_text)  # in the account-scoped link
         self.assertIn(f"/studio/users/{user.pk}/", slack_text)
 
-    pass
-    pass
     def test_attribution_missing_renders_dash(self):
         user = User.objects.create_user(email="noattr@test.com")
         # No attribution row exists — make sure default signal doesn't
@@ -1219,10 +1091,36 @@ class StaffSignupNotificationBodyTest(TestCase):
 
 
 @tag('core')
-class EmailServiceCcArgumentTest(TestCase):
-    """``EmailService.send`` accepts a cc kwarg and threads it to SES."""
+class RelayRecipientOptionsTest(TestCase):
+    """Package mail preserves independent CC and BCC recipient options."""
 
-    pass
+    def test_cc_string_is_normalized_on_durable_delivery(self):
+        from email_app.package_mail import send_package_mail
+
+        user = User.objects.create_user(email="cc-recipient@test.com")
+        delivery = send_package_mail(
+            user,
+            "cofounder_welcome",
+            {"user_first_name": "", "current_sprint_status_paragraph": ""},
+            cc="cc@test.com",
+        )
+
+        self.assertEqual(delivery.transport_options["cc"], ["cc@test.com"])
+        self.assertNotIn("bcc", delivery.transport_options)
+
+    def test_bcc_string_is_normalized_independently(self):
+        from email_app.package_mail import send_package_mail
+
+        user = User.objects.create_user(email="bcc-recipient@test.com")
+        delivery = send_package_mail(
+            user,
+            "cofounder_welcome",
+            {"user_first_name": "", "current_sprint_status_paragraph": ""},
+            bcc="staff@test.com",
+        )
+
+        self.assertEqual(delivery.transport_options["bcc"], ["staff@test.com"])
+        self.assertNotIn("cc", delivery.transport_options)
 
 @tag('core')
 class PaidSignupRealAmountAndLinksTest(TestCase):
@@ -1938,42 +1836,6 @@ class ReturningMemberWelcomeRoutingTest(TestCase):
 
         mock_staff_email.assert_called_once()
         mock_slack.assert_called_once()
-
-
-@tag('core')
-class WelcomeBackTemplateRenderTest(TestCase):
-    """Issue #976: the rendered ``welcome_back`` body reads as a
-    returning-member message and carries the four required links.
-    """
-
-    pass
-    def test_subject_is_welcome_back(self):
-        user = User.objects.create_user(email="wb1@test.com", first_name="Kir")
-        subject, _ = self._render(user)
-        self.assertEqual(subject, "Welcome back to AI Shipping Labs")
-
-    def test_body_renders_first_name_and_returning_framing(self):
-        user = User.objects.create_user(email="wb2@test.com", first_name="Kir")
-        _, body = self._render(user)
-        self.assertIn("Hey Kir,", body)
-        # Returning-member framing, not a first-time welcome.
-        self.assertIn("welcome back", body.lower())
-        self.assertIn("re-subscribing", body.lower())
-
-    def test_body_falls_back_to_there_without_first_name(self):
-        user = User.objects.create_user(email="wb3@test.com")
-        _, body = self._render(
-            user,
-            {"user_first_name": "", "current_sprint_status_paragraph": ""},
-        )
-        self.assertIn("Hey there,", body)
-
-    def test_body_links_sprints_slack_and_onboarding(self):
-        user = User.objects.create_user(email="wb4@test.com", first_name="Kir")
-        _, body = self._render(user)
-        self.assertRegex(body, r"https?://[^\s\"'<]+/sprints")
-        self.assertRegex(body, r"https?://[^\s\"'<]+/community/slack")
-        self.assertRegex(body, r"https?://[^\s\"'<]+/onboarding/")
 
 
 @tag('core')

@@ -2,11 +2,9 @@
 helper so a Studio override changes verification + password-reset
 URLs (issue #435).
 
-A1.2: the auth helpers send through the package mail app, so rendering
-happens in the delivery worker. These tests drain the pending
-deliveries with ``deliver_pending_mail`` and inspect the HTML body the
-stubbed SES client captured — that's where the verify/reset URL
-actually appears.
+A1.2: the auth helpers send through the package mail app, so link
+resolution happens in the delivery worker. These tests drain the pending
+deliveries and inspect the context handed to Relay.
 """
 
 import json
@@ -34,9 +32,9 @@ class _AuthEmailUrlBase(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _captured_email_html(self, stub):
-        self.assertEqual(len(stub.calls), 1, 'Expected exactly one SES send')
-        return stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+    def _captured_context(self, stub):
+        self.assertEqual(len(stub.calls), 1, 'Expected exactly one Relay send')
+        return stub.calls[0]['context']
 
 
 @override_settings(SITE_BASE_URL='https://env.example.com')
@@ -61,12 +59,14 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
         self.assertEqual(resp.status_code, 201)
         with relay_test_backend():
             deliver_pending_mail()
-        html = self._captured_email_html(client_factory.return_value)
+        context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/verify-email?token=',
-            html,
+            context['verify_url'],
         )
-        self.assertNotIn('https://env.example.com/api/verify-email', html)
+        self.assertNotIn(
+            'https://env.example.com/api/verify-email', context['verify_url'],
+        )
 
     @patch(
         "community_base.mail.backends.relay.configured_client",
@@ -88,10 +88,10 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
         self.assertEqual(resp.status_code, 201)
         with relay_test_backend():
             deliver_pending_mail()
-        html = self._captured_email_html(client_factory.return_value)
+        context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/verify-email?token=',
-            html,
+            context['verify_url'],
         )
 
 
@@ -117,12 +117,14 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
         self.assertEqual(resp.status_code, 200)
         with relay_test_backend():
             deliver_pending_mail()
-        html = self._captured_email_html(client_factory.return_value)
+        context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://override.example.com/api/password-reset?token=',
-            html,
+            context['reset_url'],
         )
-        self.assertNotIn('https://env.example.com/api/password-reset', html)
+        self.assertNotIn(
+            'https://env.example.com/api/password-reset', context['reset_url'],
+        )
 
     @patch(
         "community_base.mail.backends.relay.configured_client",
@@ -140,8 +142,8 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
         self.assertEqual(resp.status_code, 200)
         with relay_test_backend():
             deliver_pending_mail()
-        html = self._captured_email_html(client_factory.return_value)
+        context = self._captured_context(client_factory.return_value)
         self.assertIn(
             'https://env.example.com/api/password-reset?token=',
-            html,
+            context['reset_url'],
         )

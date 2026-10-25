@@ -167,18 +167,17 @@ class CheckEventRemindersTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 2)
-        rendered_by_email = {
-            call['Destination']['ToAddresses'][0]:
-                call['Content']['Simple']['Body']['Html']['Data']
+        contexts_by_email = {
+            call['delivery'].recipient_email: call['context']
             for call in stub.calls
         }
         self.assertIn(
             'March 30, 2026, 01:30 Europe/Berlin',
-            rendered_by_email[self.user.email],
+            contexts_by_email[self.user.email]['event_datetime'],
         )
         self.assertIn(
             'March 29, 2026, 19:30 America/New_York',
-            rendered_by_email[self.user2.email],
+            contexts_by_email[self.user2.email]['event_datetime'],
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -226,7 +225,7 @@ class CheckEventRemindersTest(TestCase):
         self.assertEqual(len(stub.calls), 1)
         self.assertIn(
             'August 10, 2026, 17:00 Europe/Berlin',
-            stub.calls[0]['Content']['Simple']['Body']['Html']['Data'],
+            stub.calls[0]['context']['event_datetime'],
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -823,17 +822,12 @@ class CheckEventRemindersTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
-        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+        context = stub.calls[0]['context']
 
         base = site_base_url()
         # Single CTA: event_url is the platform-side join redirect.
-        self.assertIn(f'{base}{event.get_join_url()}', html_body)
-        # The detail page URL must not leak into the reminder body as a
-        # standalone link. Issue #1082: the join URL legitimately has the
-        # detail path as a prefix, so check the detail URL is never the
-        # href target (followed by the closing quote), only the join URL.
-        self.assertNotIn(f'{base}{event.get_absolute_url()}"', html_body)
-        self.assertNotIn(f"{base}{event.get_absolute_url()}'", html_body)
+        self.assertEqual(context['event_url'], f'{base}{event.get_join_url()}')
+        self.assertNotEqual(context['event_url'], f'{base}{event.get_absolute_url()}')
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_email_body_renders_event_datetime_in_user_timezone(
@@ -870,18 +864,17 @@ class CheckEventRemindersTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 2)
-        rendered_by_email = {
-            call['Destination']['ToAddresses'][0]:
-                call['Content']['Simple']['Body']['Html']['Data']
+        contexts_by_email = {
+            call['delivery'].recipient_email: call['context']
             for call in stub.calls
         }
         self.assertIn(
             '18:00 Europe/Berlin',
-            rendered_by_email['testuser@example.com'],
+            contexts_by_email['testuser@example.com']['event_datetime'],
         )
         self.assertIn(
             '12:00 America/New_York',
-            rendered_by_email['testuser2@example.com'],
+            contexts_by_email['testuser2@example.com']['event_datetime'],
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -916,11 +909,12 @@ class CheckEventRemindersTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
-        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+        context = stub.calls[0]['context']
         base = site_base_url()
-        self.assertIn('Set your timezone', html_body)
+        self.assertIn('Set your timezone', context['timezone_help'])
         self.assertIn(
-            f'href="{base}/account/#display-preferences-section"', html_body,
+            f'{base}/account/#display-preferences-section',
+            context['timezone_help'],
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -954,9 +948,9 @@ class CheckEventRemindersTest(TestCase):
             deliver_pending_mail()
 
         self.assertEqual(len(stub.calls), 1)
-        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
-        self.assertIn('Change your timezone', html_body)
-        self.assertNotIn('Set your timezone', html_body)
+        timezone_help = stub.calls[0]['context']['timezone_help']
+        self.assertIn('Change your timezone', timezone_help)
+        self.assertNotIn('Set your timezone', timezone_help)
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')

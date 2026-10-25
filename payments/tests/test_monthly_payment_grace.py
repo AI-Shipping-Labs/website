@@ -85,7 +85,7 @@ class GraceBase(TestCase):
     def _drain_and_collect(self):
         """Drain pending deliveries with a local stub.
 
-        Returns ``{recipient_email: (subject, body_html)}`` — delivery ids
+        Returns ``{recipient_email: resolved_context}`` — delivery ids
         are UUIDs, so callers key on the recipient, never list order.
         """
         from community_base.mail.jobs import deliver as deliver_job
@@ -102,10 +102,7 @@ class GraceBase(TestCase):
             ).order_by("recipient_email"):
                 deliver_job(None, {"delivery_id": str(delivery.id)})
         return {
-            call["Destination"]["ToAddresses"][0]: (
-                call["Content"]["Simple"]["Subject"]["Data"],
-                call["Content"]["Simple"]["Body"]["Html"]["Data"],
-            )
+            call["delivery"].recipient_email: call["context"]
             for call in stub.calls
         }
 
@@ -464,14 +461,7 @@ class ConfigurationAndCopyTest(GraceBase):
         DEBUG=False,
         STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
     )
-    def test_initial_member_template_has_approved_subject_and_no_threat_copy(self):
-        """The worker-rendered member mail keeps the approved copy contract.
-
-        The delivery flows through the real grace worker: the durable
-        context is scalar-only and the resolver mints the portal link at
-        delivery time, so the drained SES body is exactly what a member
-        receives.
-        """
+    def test_initial_member_worker_resolves_safe_portal_url(self):
         user = self.make_user()
         with patch.object(service, "_audit"):
             grace, _ = service.start_grace_from_failure(
@@ -482,16 +472,14 @@ class ConfigurationAndCopyTest(GraceBase):
         service.process_due_deliveries(grace_ids=[grace.pk], initial_only=True)
         rendered = self._drain_and_collect()
 
-        subject, html = rendered[user.email]
-        self.assertEqual(subject, "Payment failed — please retry your AI Shipping Labs payment")
-        lowered = html.lower()
-        for forbidden in ["grace", "deadline", "losing access", "downgrade", "free membership"]:
-            self.assertNotIn(forbidden, lowered)
-        self.assertIn("https://billing.stripe.com/p/login/safe", html)
-        # The team variant gets no verify-email footer either (the CTA
-        # body text renders only when the footer is appended).
-        _team_subject, team_html = rendered["team@aishippinglabs.com"]
-        self.assertNotIn("Your email is not verified", team_html)
+        self.assertEqual(
+            rendered[user.email]["recovery_url"],
+            "https://billing.stripe.com/p/login/safe",
+        )
+        self.assertEqual(rendered[user.email]["user_email"], user.email)
+        self.assertEqual(
+            rendered["team@aishippinglabs.com"]["user_email"], user.email,
+        )
 
     @override_settings(SES_ENABLED=False, DEBUG=False)
     def test_explicit_blank_team_recipient_records_error_and_keeps_member_path(self):
@@ -538,11 +526,11 @@ class ConfigurationAndCopyTest(GraceBase):
         ).count(), 2)
         rendered = self._drain_and_collect()
         self.assertEqual(
-            {subject for subject, _html in rendered.values()},
-            {
-                "Payment failed — please retry your AI Shipping Labs payment",
-                "[Payments] Member payment failed",
-            },
+            set(rendered), {"member@example.com", "team@aishippinglabs.com"},
+        )
+        self.assertEqual(
+            set(EmailDelivery.objects.values_list("purpose", flat=True)),
+            {"payment_grace_failure_member", "payment_grace_failure_team"},
         )
         self.assertEqual(EmailLog.objects.count(), 2)
         service.process_due_deliveries(grace_ids=[grace.pk], initial_only=True)
@@ -793,27 +781,25 @@ class QaRegressionAndScenarioTest(GraceBase):
         ):
             service.process_due_deliveries(grace_ids=[grace.pk])
             rendered = self._drain_and_collect()
-        member_subject, member_html = rendered[grace.user.email]
-        team_subject, team_html = rendered["team@aishippinglabs.com"]
+        member_context = rendered[grace.user.email]
+        team_context = rendered["team@aishippinglabs.com"]
         self.assertEqual(
-            member_subject,
-            "Payment failed — please retry your AI Shipping Labs payment",
+            member_context["recovery_url"],
+            "https://billing.stripe.com/p/login/safe",
         )
-        self.assertIn("recent AI Shipping Labs membership payment failed", member_html)
-        self.assertIn("https://billing.stripe.com/p/login/safe", member_html)
-        for forbidden in [
-            "grace", "deadline", "losing access", "downgrade",
-            "free membership", "free account",
-        ]:
-            self.assertNotIn(forbidden, member_html.lower())
-        self.assertEqual(team_subject, "[Payments] Member payment failed")
-        for safe_value in [
-            grace.user.email, "cus_grace", "sub_grace", "in_grace",
-            "2026-08-12 10:00 UTC", "month x 1",
-            f"/studio/users/{grace.user_id}/",
+        self.assertEqual(team_context["user_email"], grace.user.email)
+        self.assertEqual(team_context["stripe_customer_id"], "cus_grace")
+        self.assertEqual(team_context["stripe_subscription_id"], "sub_grace")
+        self.assertEqual(team_context["stripe_invoice_id"], "in_grace")
+        self.assertEqual(team_context["failure_time"], "2026-08-12 10:00 UTC")
+        self.assertEqual(team_context["interval"], "month x 1")
+        self.assertIn(
+            f"/studio/users/{grace.user_id}/", team_context["studio_member_url"],
+        )
+        self.assertIn(
             "/studio/payments/subscription-reconciliation/",
-        ]:
-            self.assertIn(safe_value, team_html)
+            team_context["studio_report_url"],
+        )
 
     @override_settings(STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce")
     def test_scenario_3_recovery_suppresses_later_work(self):
@@ -864,11 +850,12 @@ class QaRegressionAndScenarioTest(GraceBase):
         ):
             service.process_due_deliveries(grace_ids=[grace.pk])
             rendered = self._drain_and_collect()
-        subject, html = rendered[grace.user.email]
-        self.assertEqual(subject, "Payment needed to keep your paid membership")
-        self.assertIn("2026-08-19 10:00 UTC", html)
-        self.assertIn("paid base membership will change to Free", html)
-        self.assertIn("https://billing.stripe.com/p/login/safe", html)
+        context = rendered[grace.user.email]
+        self.assertEqual(context["deadline_utc"], "2026-08-19 10:00 UTC")
+        self.assertEqual(context["base_tier"], "Main")
+        self.assertEqual(
+            context["recovery_url"], "https://billing.stripe.com/p/login/safe",
+        )
 
     @override_settings(
         STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
@@ -901,13 +888,13 @@ class QaRegressionAndScenarioTest(GraceBase):
         # the worker drain below.
         self.assertIsNotNone(delivery.email_delivery)
         rendered = self._drain_and_collect()
-        subject, html = rendered[grace.user.email]
-        self.assertEqual(subject, "Your AI Shipping Labs account is now Free")
-        self.assertIn("always welcome to continue with your Free account", html)
-        self.assertIn("rejoin a paid tier", html)
-        self.assertIn("https://billing.stripe.com/p/login/safe", html)
+        context = rendered[grace.user.email]
+        self.assertEqual(context["effective_tier"], "Free")
+        self.assertEqual(
+            context["recovery_url"], "https://billing.stripe.com/p/login/safe",
+        )
         log = EmailLog.objects.get(email_type="payment_grace_expired_member")
-        self.assertEqual(log.subject, "Your AI Shipping Labs account is now Free")
+        self.assertEqual(log.dedupe_key, delivery.email_delivery.idempotency_key)
 
     def test_scenario_6_strongest_override_is_authority(self):
         user = self.make_user()

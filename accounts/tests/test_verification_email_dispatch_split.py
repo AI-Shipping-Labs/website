@@ -12,6 +12,9 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
+from accounts.models import User
+from email_app.models import EmailLog
+
 
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
@@ -48,6 +51,36 @@ class SignupPathDispatchesSignupVerificationTemplate(TestCase):
 class SubscribePathDispatchesRelayVerification(TestCase):
     """``POST /api/subscribe`` must dispatch Relay's double opt-in (A6.2)."""
 
-    pass
+    def test_subscribe_api_dispatches_relay_verification(self):
+        from community_base.jobs.models import JobIntent
 
-    pass
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "subscribe-dispatch@example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.json()["status"], "ok")
+        self.assertTrue(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification",
+            ).exists(),
+        )
+        self.assertFalse(EmailLog.objects.exists())
+
+    def test_subscribe_creates_durable_verification_intent_for_new_user(self):
+        from community_base.jobs.models import JobIntent
+
+        resp = self.client.post(
+            "/api/subscribe",
+            data=json.dumps({"email": "subscribe-log@example.com"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.json()["status"], "ok")
+        user = User.objects.get(email="subscribe-log@example.com")
+        intent = JobIntent.objects.get(
+            handler="email_app.relay_sync.request_contact_verification",
+        )
+        self.assertEqual(intent.payload, {"user_id": user.pk})
+        self.assertFalse(EmailLog.objects.filter(user=user).exists())

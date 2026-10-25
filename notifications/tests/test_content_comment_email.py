@@ -323,11 +323,6 @@ class ContentCommentEmailTest(TestCase):
 
         self.assertEqual(context['user_name'], 'Ada')
 
-    pass
-
-    pass
-
-
 @tag('core')
 class HomeworkStepCommentEmailTest(TestCase):
     """Issue #1895 follows the #1897 owner fan-out for homework steps."""

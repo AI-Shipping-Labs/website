@@ -46,20 +46,20 @@ from tests.fixtures import TierSetupMixin, create_user_with_membership
 User = get_user_model()
 
 
-class FlakyThenHealthySESClient(StubRelayClient):
-    """A transport that times out once, then recovers (worker retry)."""
+class FlakyThenHealthyRelayClient(StubRelayClient):
+    """A Relay transport that times out once, then recovers."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.timeout_calls = 0
 
-    def send_email(self, **kwargs):
+    def send(self, delivery, *, context=None):
         if self.timeout_calls == 0:
             self.timeout_calls += 1
-            from botocore.exceptions import ConnectTimeoutError
+            from community_base.mail.relay import RelayMailError
 
-            raise ConnectTimeoutError(endpoint_url="https://ses.test")
-        return super().send_email(**kwargs)
+            raise RelayMailError("relay_timeout", retryable=True)
+        return super().send(delivery, context=context)
 
 
 def _drain_one(delivery, client):
@@ -268,7 +268,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         delivery = EmailDelivery.objects.get()
         self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
 
-        flaky = FlakyThenHealthySESClient()
+        flaky = FlakyThenHealthyRelayClient()
         with self.assertRaises(RetryableJobError):
             _drain_one(delivery, flaky)
         delivery.refresh_from_db()

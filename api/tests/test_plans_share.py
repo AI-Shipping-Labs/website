@@ -2,7 +2,9 @@
 
 import datetime
 import json
+from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
@@ -95,7 +97,20 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             1,
         )
 
-    pass
+    def test_patch_shared_at_null_clears_silently(self):
+        """Un-sharing clears the timestamp without notifying the member."""
+        from django.utils import timezone
+
+        self.plan.shared_at = timezone.now()
+        self.plan.save(update_fields=['shared_at'])
+
+        response = self._patch({'shared_at': None})
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertIsNone(self.plan.shared_at)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
     def test_patch_shared_at_from_non_staff_bearer_is_rejected(self):
         """Only staff bearers can flip ``shared_at``.
@@ -149,4 +164,19 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             2,
         )
 
-    pass
+    @patch('api.views.plans.logger.exception')
+    @patch(
+        'notifications.services.notification_service.'
+        'NotificationService.create_plan_shared'
+    )
+    def test_helper_failure_does_not_unwind_shared_at_save(
+        self, mock_helper, mock_log_exc,
+    ):
+        mock_helper.side_effect = Exception('boom')
+
+        response = self._patch({'shared_at': '2026-05-20T10:00:00Z'})
+
+        self.assertEqual(response.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertIsNotNone(self.plan.shared_at)
+        mock_log_exc.assert_called_once()

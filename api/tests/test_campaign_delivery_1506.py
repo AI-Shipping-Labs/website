@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
-from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
@@ -164,4 +164,31 @@ class CampaignDeliveryApi1506Test(TierSetupMixin, TestCase):
         self.assertEqual(conflict.status_code, 409)
         self.assertEqual(conflict.json()["code"], "delivery_conflict")
 
-    pass
+    @patch("email_app.tasks.send_campaign._send_campaign_transport")
+    def test_assume_sent_never_sends_or_fabricates_log(self, transport):
+        campaign, _user, delivery = self._snapshotted(
+            state=CampaignDelivery.State.AMBIGUOUS,
+            email="assume-api@test.com",
+        )
+
+        response = self.client.post(
+            f"/api/campaigns/{campaign.pk}/recipients/{delivery.pk}/assume-sent",
+            **self._auth(),
+        )
+        conflict = self.client.post(
+            f"/api/campaigns/{campaign.pk}/recipients/{delivery.pk}/assume-sent",
+            **self._auth(),
+        )
+
+        delivery.refresh_from_db()
+        campaign.refresh_from_db()
+        body = response.json()
+        self.assertEqual(body["delivery_state"], "assumed_sent")
+        self.assertEqual(body["campaign_status"], "sent")
+        self.assertEqual(body["sent_count"], 0)
+        self.assertEqual(delivery.state, CampaignDelivery.State.ASSUMED_SENT)
+        self.assertEqual(campaign.sent_count, 0)
+        self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
+        transport.assert_not_called()
+        self.assertEqual(conflict.status_code, 409)
+        self.assertEqual(conflict.json()["code"], "delivery_conflict")

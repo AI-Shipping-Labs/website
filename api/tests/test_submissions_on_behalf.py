@@ -9,6 +9,7 @@ the member unless ``notify``.
 
 import datetime
 import json
+from unittest.mock import patch
 
 from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
@@ -36,6 +37,7 @@ from content.models.homework import (
     Submission,
 )
 from content.services.homework_submissions import save_submission
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from notifications.models import Notification
 
 User = get_user_model()
@@ -299,7 +301,32 @@ class HomeworkDryRunTest(OnBehalfBase):
 
 
 class NotifyTest(OnBehalfBase):
-    pass
+    def test_notify_creates_bell_and_email_with_learner_link(self):
+        response = self.post(self.homework_body(notify=True))
+
+        self.assertEqual(response.status_code, 201, response.content)
+        bell = Notification.objects.get(user=self.member)
+        expected_path = f'{self.unit.get_absolute_url()}?cohort=1'
+        self.assertEqual(bell.notification_type, 'submission_recorded')
+        self.assertEqual(bell.url, expected_path)
+        delivery = EmailDelivery.objects.get(purpose='submission_recorded')
+        self.assertEqual(delivery.recipient_email, 'member@test.com')
+        self.assertEqual(
+            response.json()['notification']['email_delivery_id'], str(delivery.pk),
+        )
+
+        stub = StubRelayClient()
+        with patch(
+            'community_base.mail.backends.relay.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
+        context = stub.calls[0]['context']
+        self.assertEqual(context['unit_title'], 'Week 2 homework')
+        self.assertEqual(context['user_name'], 'Ada')
+        self.assertTrue(context['submission_url'].endswith(expected_path))
 
 
 class ValidationTest(OnBehalfBase):

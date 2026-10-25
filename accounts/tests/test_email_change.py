@@ -371,17 +371,16 @@ class EmailChangeConfirmServiceTest(TestCase):
             deliver_pending_mail()
 
         self.assertTrue(result.success)
-        # A1.2: rendering happens in the delivery worker; the notice is
-        # the only send on this path and is asserted via the captured SES
-        # payload plus the durable delivery row.
+        # A1.2: link resolution happens in the delivery worker; the notice is
+        # the only send on this path and is asserted at the Relay boundary.
         delivery = EmailDelivery.objects.get(purpose=EMAIL_CHANGED_NOTICE_TEMPLATE)
         self.assertEqual(delivery.recipient_email, "old-member@test.com")
         stub = client_factory.return_value
         self.assertEqual(len(stub.calls), 1)
-        notice_html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("new-member@test.com", notice_html)
-        self.assertNotIn("change-email/confirm", notice_html)
-        self.assertNotIn("token=", notice_html)
+        context = stub.calls[0]["context"]
+        self.assertEqual(context["new_email"], "new-member@test.com")
+        self.assertTrue(context["account_url"].endswith("/account/"))
+        self.assertNotIn("confirm_url", context)
 
     def test_confirmation_clears_slack_checked_at_but_preserves_slack_identity(self):
         _request_obj, token = request_email_change(
@@ -518,12 +517,12 @@ class EmailChangeConfirmServiceTest(TestCase):
             )
             deliver_pending_mail()
 
-        # A1.2: rendering happens in the delivery worker; the confirm mail
-        # is the only send on this path.
+        # A1.2: the worker resolves the secret confirmation link immediately
+        # before handing the context to Relay.
         delivery = EmailDelivery.objects.get(purpose=EMAIL_CHANGE_CONFIRM_TEMPLATE)
         self.assertEqual(delivery.recipient_email, "new-member@test.com")
         stub = client_factory.return_value
         self.assertEqual(len(stub.calls), 1)
-        confirm_html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("change-email/confirm", confirm_html)
-        self.assertNotIn("/api/verify-email", confirm_html)
+        context = stub.calls[0]["context"]
+        self.assertIn("/account/change-email/confirm?token=", context["confirm_url"])
+        self.assertNotIn("verify_email_url", context)

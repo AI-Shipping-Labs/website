@@ -8,7 +8,6 @@ removals processed before this existed.
 """
 
 import json
-import re
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -48,15 +47,14 @@ def configure(**values):
 
 
 def _drain(delivery):
-    """Deliver one delivery through the real worker; return (subject, html)."""
+    """Deliver one delivery through the real worker; return Relay context."""
     stub = StubRelayClient()
     with relay_test_backend(), patch(
         "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
-    simple = stub.calls[0]["Content"]["Simple"]
-    return simple["Subject"]["Data"], simple["Body"]["Html"]["Data"]
+    return stub.calls[0]["context"]
 
 
 class MavenRemovalAutomationTest(TestCase):
@@ -179,8 +177,8 @@ class MavenRemovalAutomationTest(TestCase):
             "Kept main access: still enrolled in Other Course on Maven.",
             self._summary(notify),
         )
-        _subject, html = _drain(self._student_deliveries().get())
-        self.assertIn("so your access to the course has ended.", html)
+        context = _drain(self._student_deliveries().get())
+        self.assertEqual(context["course_name"], "AI Engineering Buildcamp")
 
     @patch(NOTIFY)
     def test_stale_old_key_row_for_the_same_cohort_keeps_nothing(self, notify):
@@ -326,31 +324,25 @@ class MavenRemovalAutomationTest(TestCase):
     def test_student_email_names_course_and_deletion_steps(self, notify):
         retry_occurrence_step(self._removed(), "removal")
 
-        subject, html = _drain(self._student_deliveries().get())
+        context = _drain(self._student_deliveries().get())
 
-        self.assertEqual(subject, "Your access to AI Engineering Buildcamp has ended")
-        self.assertIn(
-            "You're no longer enrolled in AI Engineering Buildcamp, so your access",
-            html.replace("&#x27;", "'").replace("&#39;", "'"),
+        self.assertEqual(context["course_name"], "AI Engineering Buildcamp")
+        self.assertEqual(
+            context["account_deletion_url"],
+            "https://aishippinglabs.com/account/#privacy-data-section",
         )
-        self.assertIn("/account/#privacy-data-section", html)
-        self.assertIn("Request account deletion", html)
-        self.assertIn("team@aishippinglabs.com", html)
+        self.assertEqual(context["privacy_email"], "team@aishippinglabs.com")
 
     def test_staff_email_lists_only_what_changed(self):
         configure(STAFF_SIGNUP_NOTIFY_EMAIL="staff@example.com")
 
         retry_occurrence_step(self._removed(), "removal")
 
-        subject, html = _drain(
+        context = _drain(
             EmailDelivery.objects.get(purpose="maven_cohort_removal_notification"),
         )
         self.assertEqual(
-            subject, "Maven removal: Ada (AI Engineering Buildcamp, cohort cohort-5)",
-        )
-        items = re.findall(r"<li>(.*?)</li>", html)
-        self.assertEqual(
-            items,
+            context["summary_lines"],
             [
                 "Revoked access to AI Engineering Buildcamp.",
                 "Removed from cohort cohort-5.",
@@ -358,7 +350,8 @@ class MavenRemovalAutomationTest(TestCase):
                 "Sent them the removal email.",
             ],
         )
-        self.assertNotIn("Stripe", html)
+        self.assertEqual(context["removed_user_name"], "Ada")
+        self.assertNotIn("Stripe", str(context))
 
 
 class MavenRemovalStaffSummaryTest(TestCase):
@@ -396,16 +389,14 @@ class MavenRemovalStaffSummaryTest(TestCase):
             None, "5", "Buildcamp", email="ghost@example.com",
         )
 
-        subject, html = _drain(
+        context = _drain(
             EmailDelivery.objects.get(purpose="maven_cohort_removal_notification"),
         )
-        self.assertEqual(subject, "Maven removal: ghost@example.com (Buildcamp, cohort 5)")
-        self.assertIn(
-            "ghost@example.com was removed from cohort 5 of Buildcamp on Maven. "
-            "No account uses this email, so there was nothing to do.",
-            html,
-        )
-        self.assertNotIn("<li>", html)
+        self.assertEqual(context["removed_user_email"], "ghost@example.com")
+        self.assertEqual(context["course"], "Buildcamp")
+        self.assertEqual(context["cohort"], "5")
+        self.assertFalse(context["user_known"])
+        self.assertEqual(context["summary_lines"], [])
 
 
 class MavenRemovalReapplyApiTest(TestCase):

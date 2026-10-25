@@ -7,7 +7,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from django_q.models import Schedule
 
@@ -436,7 +436,21 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(batch.users_updated, 1)
         self.assertEqual(conflicts(batch), [])
 
-    pass
+    @override_settings(IMPORT_WELCOME_EMAILS_PER_HOUR=50)
+    def test_large_import_queues_throttled_schedules_without_delivering_mail(self):
+        import_rows = [ImportRow(email=f"user{i}@example.com") for i in range(1000)]
+
+        batch = run_import_batch("slack", rows(*import_rows))
+
+        self.assertEqual(batch.users_created, 1000)
+        self.assertEqual(batch.emails_queued, 1000)
+        self.assertEqual(Schedule.objects.count(), 1000)
+        self.assertEqual(EmailLog.objects.count(), 0)
+        first = Schedule.objects.order_by("next_run").first()
+        fiftieth = Schedule.objects.order_by("next_run")[50]
+        self.assertGreaterEqual(
+            (fiftieth.next_run - first.next_run).total_seconds(), 3600,
+        )
 
 
 class QueueImportedWelcomeEmailsTest(TestCase):
@@ -533,11 +547,10 @@ class WelcomeImportedEmailTaskTest(TestCase):
 
         stub = self._drain()
         self.assertEqual(len(stub.calls), 1)
-        html_body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("Set your password", html_body)
-        self.assertIn("/api/password-reset?token=", html_body)
-        self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertNotIn("/api/unsubscribe?token=", html_body)
+        context = stub.calls[0]["context"]
+        self.assertIn("/api/password-reset?token=", context["password_reset_url"])
+        self.assertTrue(context["sign_in_url"].endswith("/login/"))
+        self.assertEqual(context["import_tags"], "slack-member")
         self.assertEqual(
             EmailLog.objects.filter(
                 user=user, email_type="welcome_imported",

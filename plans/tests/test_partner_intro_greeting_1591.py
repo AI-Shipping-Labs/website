@@ -88,13 +88,7 @@ class PartnerIntroGreetingTest(TestCase):
         )
 
     @override_settings(SITE_BASE_URL='https://example.test')
-    def test_rendered_body_greets_hi_there_and_still_lists_the_partner(self):
-        """The worker-rendered body carries the #1591 greeting rule.
-
-        The greeting is persisted as a scalar on the durable delivery and
-        rendered by the package worker, so this fails if either side
-        regresses to the email handle or drops the fallback.
-        """
+    def test_relay_context_uses_safe_greeting_and_lists_the_partner(self):
         _row, _context = self._context_for(self.member)
 
         send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
@@ -111,16 +105,12 @@ class PartnerIntroGreetingTest(TestCase):
                 state=EmailDelivery.State.PENDING,
             ):
                 deliver_job(None, {'delivery_id': str(delivery.id)})
-        body = next(
-            call['Content']['Simple']['Body']['Html']['Data']
+        context = next(
+            call['context']
             for call in stub.calls
-            if call['Destination']['ToAddresses'] == [
-                'nameless.member@test.com',
-            ]
+            if call['delivery'].recipient_email == 'nameless.member@test.com'
         )
 
-        self.assertIn('Hi there,', body)
-        self.assertNotIn('Hi nameless.member,', body)
-        self.assertNotIn('Hi ,', body)
-        self.assertIn('p.artner', body)
-        self.assertIn('p.artner@test.com', body)
+        self.assertEqual(context['member_name'], 'there')
+        self.assertEqual(context['partners'][0]['name'], 'p.artner')
+        self.assertEqual(context['partners'][0]['email'], 'p.artner@test.com')

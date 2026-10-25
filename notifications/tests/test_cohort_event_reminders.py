@@ -131,16 +131,18 @@ class CohortEventRemindersTest(TestCase):
             return_value=stub,
         ):
             deliver_pending_mail()
-        html = {
-            call['Destination']['ToAddresses'][0]: call['Content']['Simple']['Body']['Html']['Data']
+        contexts = {
+            call['delivery'].recipient_email: call['context']
             for call in stub.calls
         }
         unit_url = f'https://aishippinglabs.com{self.unit_path}'
         join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
-        self.assertIn(f'href="{unit_url}"', html['member@test.com'])
-        self.assertNotIn(join_url, html['member@test.com'])
-        self.assertIn(f'href="{join_url}"', html['registrant@test.com'])
-        self.assertNotIn(self.unit.get_absolute_url(), html['registrant@test.com'])
+        self.assertEqual(contexts['member@test.com']['event_url'], unit_url)
+        self.assertNotEqual(contexts['member@test.com']['event_url'], join_url)
+        self.assertEqual(contexts['registrant@test.com']['event_url'], join_url)
+        self.assertNotIn(
+            self.unit.get_absolute_url(), contexts['registrant@test.com']['event_url'],
+        )
 
     def test_toggle_off_reminds_registrants_only(self):
         IntegrationSetting.objects.create(

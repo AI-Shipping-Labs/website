@@ -619,12 +619,12 @@ class NotificationServiceWorkshopEmailTest(TestCase):
 
         self.assertEqual(len(stub.calls), 3)
         for call in stub.calls:
-            html = call['Content']['Simple']['Body']['Html']['Data']
-            self.assertIn('Build a RAG App', html)
-            self.assertIn('Hands-on workshop', html)
-            self.assertIn(
-                f'href="{site_base_url()}/workshops/build-a-rag-app"',
-                html,
+            context = call['context']
+            self.assertEqual(context['workshop_title'], 'Build a RAG App')
+            self.assertEqual(context['workshop_description'], 'Hands-on workshop')
+            self.assertEqual(
+                context['workshop_url'],
+                f'{site_base_url()}/workshops/build-a-rag-app',
             )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')

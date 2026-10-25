@@ -226,4 +226,17 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(result['ready_email']['status'], 'eligible')
         self.assertTrue(result['ready_email']['eligible'])
 
-    pass
+    def test_dry_run_after_success_reports_already_sent(self):
+        self._run()
+
+        result = self._run(dry_run=True)
+
+        ready = result['ready_email']
+        self.assertEqual(ready['status'], 'already_sent')
+        self.assertTrue(ready['dry_run'])
+        self.assertFalse(ready['requested'])
+        self.assertEqual(EmailDelivery.objects.count(), 1)
+        deliver_pending_mail()
+        self.assertEqual(
+            EmailLog.objects.filter(email_type='plan_shared').count(), 1,
+        )

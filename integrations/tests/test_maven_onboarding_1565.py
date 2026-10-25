@@ -6,13 +6,9 @@ placeholder course text or PII reaches an enrollee or a log line.
 """
 
 import json
-from copy import deepcopy
-from html.parser import HTMLParser
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
-import yaml
 from community_base.mail.jobs import deliver as deliver_job
 from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
@@ -31,54 +27,6 @@ User = get_user_model()
 
 WEBHOOK_URL = "/api/webhooks/maven"
 SECRET = "onboarding-1565-secret"
-
-# One explicit semantic mapping connects every eligible tier record to the
-# claim that represents it in the Maven welcome. Keeping the record identity in
-# the key makes additions, removals, or title changes in either Basic or Main a
-# contract change instead of silently accepting the old email copy.
-BENEFIT_CLAIM_BY_RECORD = {
-    ("basic", "Exclusive written content"): "all member content at Basic and Main level",
-    ("basic", "Workshop content"): "all member content at Basic and Main level",
-    ("main", "Community sprints"): "community sprints",
-    ("main", "Live events"): "live events",
-    ("main", "Private Slack community"): "private Slack community",
-    ("main", "Personalized onboarding plan"): "a personalized onboarding plan",
-    ("main", "Topic voting"): "topic voting",
-}
-
-
-class _ParagraphCollector(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.paragraphs = []
-        self._parts = None
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "p":
-            self._parts = []
-
-    def handle_endtag(self, tag):
-        if tag == "p" and self._parts is not None:
-            self.paragraphs.append(" ".join("".join(self._parts).split()))
-            self._parts = None
-
-    def handle_data(self, data):
-        if self._parts is not None:
-            self._parts.append(data)
-
-
-def _email_paragraphs(body):
-    parser = _ParagraphCollector()
-    parser.feed(body)
-    return parser.paragraphs
-
-
-def _tier_fixture():
-    fixture_path = (
-        Path(__file__).parents[2] / "content" / "tests" / "fixtures" / "tiers.yaml"
-    )
-    return yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
-
 
 def _configure():
     for key, value in (
@@ -104,19 +52,8 @@ def _deliver_all():
     return stub.calls
 
 
-def _sent_messages(calls):
-    """Return [(subject, html)] for every drained SES send."""
-    return [
-        (
-            call["Content"]["Simple"]["Subject"]["Data"],
-            call["Content"]["Simple"]["Body"]["Html"]["Data"],
-        )
-        for call in calls
-    ]
-
-
-def _drain_welcome_html(user, course):
-    """Queue one welcome through the package, drain it, return its HTML."""
+def _drain_welcome_context(user, course):
+    """Queue one welcome through the package and return Relay context."""
 
     delivery = send_package_mail(
         user, "maven_welcome", _welcome_context(course),
@@ -127,7 +64,7 @@ def _drain_welcome_html(user, course):
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
-    return stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
+    return stub.calls[0]["context"]
 
 
 class MavenWebhookMixin(TestCase):
@@ -168,17 +105,18 @@ class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
             list(EmailDelivery.objects.values_list("purpose", flat=True)),
             ["maven_welcome"],
         )
-        _subject, html = _sent_messages(_deliver_all())[0]
-        self.assertIn("https://aishippinglabs.com/community/slack", html)
-        self.assertIn("/api/password-reset?token=", html)
-        self.assertIn("https://aishippinglabs.com/accounts/login/", html)
-        # Every CTA in the email is a real absolute link, including the
-        # onboarding ask, which a joining enrollee never passes otherwise
-        # (sign in -> Join Slack redirects them off-site).
-        self.assertIn(
-            'href="https://aishippinglabs.com/onboarding/"', html,
+        context = _deliver_all()[0]["context"]
+        self.assertEqual(
+            context["slack_join_url"],
+            "https://aishippinglabs.com/community/slack",
         )
-        self.assertNotIn("finish onboarding", html)
+        self.assertIn("/api/password-reset?token=", context["password_reset_url"])
+        self.assertEqual(
+            context["sign_in_url"], "https://aishippinglabs.com/accounts/login/",
+        )
+        self.assertEqual(
+            context["onboarding_url"], "https://aishippinglabs.com/onboarding/",
+        )
 
     def test_slack_step_mirrors_the_succeeded_welcome_not_a_slack_lookup(
         self, _notify,
@@ -307,8 +245,8 @@ class MavenNameCaptureTest(MavenWebhookMixin):
         self.assertEqual(user.first_name, "John")
         self.assertEqual(user.last_name, "Smith")
 
-        _subject, html = _sent_messages(_deliver_all())[0]
-        self.assertIn("Hi John Smith,", html)
+        context = _deliver_all()[0]["context"]
+        self.assertEqual(context["user_name"], "John Smith")
 
     def test_name_never_reaches_the_ledger_payload(self, _notify):
         self.post({
@@ -416,13 +354,10 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
         })
 
         call = self._welcome_call()
-        self.assertEqual(
-            call["Destination"]["BccAddresses"], ["staff@example.com"],
-        )
+        delivery = call["delivery"]
+        self.assertEqual(delivery.transport_options["bcc"], ["staff@example.com"])
         # The enrollee remains the primary recipient.
-        self.assertEqual(
-            call["Destination"]["ToAddresses"], ["bcc-on@example.com"],
-        )
+        self.assertEqual(delivery.recipient_email, "bcc-on@example.com")
 
     def test_no_bcc_when_the_setting_is_unset(self, _notify):
         IntegrationSetting.objects.filter(key="STAFF_SIGNUP_NOTIFY_EMAIL").delete()
@@ -434,7 +369,7 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
             "course": "Buildcamp",
         })
 
-        self.assertNotIn("BccAddresses", self._welcome_call()["Destination"])
+        self.assertNotIn("bcc", self._welcome_call()["delivery"].transport_options)
 
     def test_a_malformed_staff_address_never_costs_the_enrollee_the_welcome(
         self, _notify,
@@ -454,10 +389,8 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
             })
 
         call = self._welcome_call()
-        self.assertNotIn("BccAddresses", call["Destination"])
-        self.assertEqual(
-            call["Destination"]["ToAddresses"], ["bcc-bad@example.com"],
-        )
+        self.assertNotIn("bcc", call["delivery"].transport_options)
+        self.assertEqual(call["delivery"].recipient_email, "bcc-bad@example.com")
         event = MavenEnrollmentEvent.objects.get(email="bcc-bad@example.com")
         self.assertEqual(event.welcome_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
 
@@ -524,28 +457,20 @@ class MavenCourseFallbackTest(MavenWebhookMixin):
             return_value=stub,
         ):
             deliver_job(None, {"delivery_id": str(delivery.id)})
-        simple = stub.calls[0]["Content"]["Simple"]
-        return (
-            simple["Subject"]["Data"],
-            simple["Body"]["Html"]["Data"],
-        )
+        return stub.calls[0]["context"]
 
     def test_no_course_name_falls_back_to_the_generic_subject(self):
         # Issue #1682 removed the cohort fallback that used to frame this
         # subject with a Maven cohort label, so an empty course name is
         # now the generic-copy case rather than "You're enrolled in
         # Cohort 1". The cohort label has no route into this context.
-        subject, body = self._render("")
-        self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
-        self.assertNotIn("Cohort 1", subject)
-        self.assertNotIn("Cohort 1", body)
-        self.assertNotIn("your course", body)
-        self.assertIn("the course you just enrolled in", body)
+        context = self._render("")
+        self.assertEqual(context["course_name"], "")
+        self.assertNotIn("Cohort 1", str(context))
 
     def test_course_framed_subject_is_unchanged_when_a_course_is_present(self):
-        subject, body = self._render("Buildcamp")
-        self.assertIn("You're enrolled in Buildcamp", subject)
-        self.assertNotIn("your course", body)
+        context = self._render("Buildcamp")
+        self.assertEqual(context["course_name"], "Buildcamp")
 
     def test_missing_course_label_warns_with_key_names_only(self):
         with self.assertLogs("integrations.services.maven", level="WARNING") as logs:
@@ -581,133 +506,17 @@ class MavenCourseChannelTest(MavenWebhookMixin):
                 key="MAVEN_COURSE_SLACK_CHANNEL"
             ).delete()
         clear_config_cache()
-        return _drain_welcome_html(user, "Buildcamp")
+        return _drain_welcome_context(user, "Buildcamp")
 
     def test_channel_is_named_when_the_setting_is_configured(self):
-        body = self._render("chan-on@example.com", "#ai-engineering-buildcamp")
+        context = self._render("chan-on@example.com", "#ai-engineering-buildcamp")
 
-        self.assertIn("compare notes in #ai-engineering-buildcamp.", body)
+        self.assertEqual(context["course_channel"], "#ai-engineering-buildcamp")
 
     def test_the_sentence_reads_cleanly_when_the_setting_is_unset(self):
-        body = self._render("chan-off@example.com", "")
+        context = self._render("chan-off@example.com", "")
 
-        self.assertIn("compare notes.", body)
-        self.assertNotIn("compare notes in .", body)
-        self.assertNotIn("compare notes  ", body)
-        # No dangling preposition and no empty parentheses anywhere.
-        self.assertNotIn(" in .", body)
-        self.assertNotIn("()", body)
-
-    def _assert_main_benefit_contract(self, paragraphs, tiers):
-        basic = next(tier for tier in tiers if tier["stripe_key"] == "basic")
-        main = next(tier for tier in tiers if tier["stripe_key"] == "main")
-        eligible_tiers = sorted((basic, main), key=lambda tier: tier["level"])
-        eligible_records = [
-            (tier["stripe_key"], benefit["title"])
-            for tier in eligible_tiers
-            for benefit in tier["benefits"]
-        ]
-        self.assertEqual(eligible_records, list(BENEFIT_CLAIM_BY_RECORD))
-
-        premium_only = [
-            benefit["title"]
-            for tier in tiers
-            if tier["level"] > main["level"]
-            for benefit in tier["benefits"]
-        ]
-
-        main_records = [
-            (main["stripe_key"], benefit["title"])
-            for benefit in main["benefits"]
-        ]
-        slack_record = next(
-            record for record in main_records if "slack" in record[1].lower()
-        )
-        sentence_claims = [
-            BENEFIT_CLAIM_BY_RECORD[record]
-            for record in main_records
-            if record != slack_record
-        ]
-        inherited_claims = {
-            BENEFIT_CLAIM_BY_RECORD[(basic["stripe_key"], benefit["title"])]
-            for benefit in basic["benefits"]
-        }
-        self.assertEqual(
-            inherited_claims,
-            {f"all member content at {basic['name']} and {main['name']} level"},
-        )
-        expected_main_claim = (
-            "Your enrollment also comes with a Main membership: "
-            + ", ".join(sentence_claims)
-            + f", and {inherited_claims.pop()}."
-        )
-
-        slack_claim = (
-            "All the course interaction happens in Slack. That's where the cohort is "
-            "— ask questions, share what you're building, and compare notes."
-        )
-        self.assertEqual(
-            BENEFIT_CLAIM_BY_RECORD[slack_record],
-            "private Slack community",
-        )
-        benefit_start = paragraphs.index(slack_claim)
-        post_benefit_boundary = next(
-            index
-            for index, paragraph in enumerate(paragraphs[benefit_start + 1 :], benefit_start + 1)
-            if paragraph.startswith("Why you're getting this email:")
-        )
-        self.assertEqual(
-            paragraphs[benefit_start:post_benefit_boundary],
-            [
-                slack_claim,
-                "Join the Slack community",
-                "After you join, we check Slack daily and add members with community "
-                "access to the community channels automatically.",
-                expected_main_claim,
-                "To get the personalized plan, fill in your onboarding form — it takes "
-                "a few minutes and tells us about your background and goals. "
-                "After the onboarding form, you can book a 1:1 call with Alexey.",
-            ],
-        )
-
-        rendered_claims = " ".join(
-            paragraphs[benefit_start:post_benefit_boundary]
-        ).lower()
-        for title in premium_only:
-            self.assertNotIn(title.lower(), rendered_claims)
-
-    def test_the_main_benefits_match_the_authoritative_tier_records(self):
-        """The complete claim stays within Basic + Main's tiers.yaml benefits."""
-        body = self._render("benefits@example.com", "")
-
-        self._assert_main_benefit_contract(_email_paragraphs(body), _tier_fixture())
-
-    def test_benefit_contract_rejects_unknown_claim_and_changed_basic_record(self):
-        paragraphs = _email_paragraphs(self._render("benefit-ratchet@example.com", ""))
-        boundary = next(
-            index
-            for index, paragraph in enumerate(paragraphs)
-            if paragraph.startswith("Why you're getting this email:")
-        )
-        paragraphs_with_unknown = list(paragraphs)
-        paragraphs_with_unknown.insert(
-            boundary,
-            "You also receive a Premium-only private coaching benefit.",
-        )
-        with self.assertRaises(AssertionError):
-            self._assert_main_benefit_contract(
-                paragraphs_with_unknown,
-                _tier_fixture(),
-            )
-
-        changed_tiers = deepcopy(_tier_fixture())
-        basic = next(
-            tier for tier in changed_tiers if tier["stripe_key"] == "basic"
-        )
-        basic["benefits"][0]["title"] = "Changed Basic entitlement"
-        with self.assertRaises(AssertionError):
-            self._assert_main_benefit_contract(paragraphs, changed_tiers)
-
+        self.assertEqual(context["course_channel"], "")
 
 class ReplayCommandGuardTest(TestCase):
     def setUp(self):

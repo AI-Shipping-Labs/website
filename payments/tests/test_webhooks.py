@@ -828,7 +828,6 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
         # returns its no-op signal (False).
         self.assertFalse(mark_email_verified(user))
 
-    pass
     def test_billing_relay_does_not_cross_verify_real_account(self):
         """Only the entitled row flips; an unrelated real account stays unverified.
 

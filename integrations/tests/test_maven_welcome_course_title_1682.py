@@ -4,11 +4,8 @@ The producer (``_send_welcome``) resolves the enrollee's Course from the
 occurrence's ``course_key`` and attaches it to the durable delivery as its
 natural relation; the stored context persists no Maven course or cohort
 identifier. ``email_app.hooks._resolve_maven_welcome_context`` reads the
-title from that relation at delivery time, so the SES-bound subject and
-body carry the human title — or the template's generic course-free copy
-when no course resolves. These tests drain real ``EmailDelivery`` rows
-through the worker and assert on the exact SES payload (StubRelayClient),
-the same authoritative surface as the #960/#1647 welcome suites.
+title from that relation at delivery time. These tests drain real
+``EmailDelivery`` rows and assert on the context handed to Relay.
 """
 
 from unittest.mock import patch
@@ -35,7 +32,7 @@ COHORT_LABEL = "Cohort 1"
 
 
 def _drain(delivery):
-    """Deliver one delivery through the real worker; return (subject, html)."""
+    """Deliver one delivery through the real worker; return Relay context."""
 
     stub = StubRelayClient()
     with relay_test_backend(), patch(
@@ -44,8 +41,7 @@ def _drain(delivery):
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1, "maven_welcome was not delivered"
-    simple = stub.calls[0]["Content"]["Simple"]
-    return simple["Subject"]["Data"], simple["Body"]["Html"]["Data"]
+    return stub.calls[0]["context"]
 
 
 class _WelcomePipelineMixin:
@@ -110,16 +106,11 @@ class MavenWelcomeTitleRenderTest(_WelcomePipelineMixin, TestCase):
         self.assertEqual(delivery.related_object_type, "cb_curriculum.course")
         self.assertEqual(str(delivery.related_object_id), str(course.pk))
 
-        subject, html = _drain(delivery)
+        context = _drain(delivery)
 
-        self.assertIn(COURSE_TITLE, subject)
-        self.assertIn(COURSE_TITLE, html)
-        # The slug-like Maven label and the cohort label are integration
-        # identifiers; neither may reach member-facing copy.
-        self.assertNotIn(SLUG_LABEL, subject)
-        self.assertNotIn(SLUG_LABEL, html)
-        self.assertNotIn(COHORT_LABEL, subject)
-        self.assertNotIn(COHORT_LABEL, html)
+        self.assertEqual(context["course_name"], COURSE_TITLE)
+        self.assertNotIn(SLUG_LABEL, str(context))
+        self.assertNotIn(COHORT_LABEL, str(context))
 
     def test_worker_reads_the_title_at_delivery_time(self):
         course = self._course()
@@ -136,10 +127,9 @@ class MavenWelcomeTitleRenderTest(_WelcomePipelineMixin, TestCase):
         course.title = "Renamed Buildcamp"
         course.save()
 
-        subject, _html = _drain(delivery)
+        context = _drain(delivery)
 
-        self.assertIn("Renamed Buildcamp", subject)
-        self.assertNotIn(COURSE_TITLE, subject)
+        self.assertEqual(context["course_name"], "Renamed Buildcamp")
 
 
 class MavenWelcomeGenericFallbackTest(_WelcomePipelineMixin, TestCase):
@@ -162,14 +152,11 @@ class MavenWelcomeGenericFallbackTest(_WelcomePipelineMixin, TestCase):
         self.assertEqual(delivery.related_object_type, "")
         self.assertEqual(delivery.context_data, {"course_name": ""})
 
-        subject, html = _drain(delivery)
+        context = _drain(delivery)
 
-        self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
-        self.assertIn("Thanks for enrolling.", html)
-        self.assertNotIn(SLUG_LABEL, subject)
-        self.assertNotIn(SLUG_LABEL, html)
-        self.assertNotIn(COHORT_LABEL, subject)
-        self.assertNotIn(COHORT_LABEL, html)
+        self.assertEqual(context["course_name"], "")
+        self.assertNotIn(SLUG_LABEL, str(context))
+        self.assertNotIn(COHORT_LABEL, str(context))
 
     def test_deleted_course_relation_still_delivers_generic_copy(self):
         course = self._course()
@@ -184,12 +171,11 @@ class MavenWelcomeGenericFallbackTest(_WelcomePipelineMixin, TestCase):
         # fail closed into a PermanentJobError retry loop.
         course.delete()
 
-        subject, html = _drain(delivery)
+        context = _drain(delivery)
 
-        self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
-        self.assertIn("Thanks for enrolling.", html)
-        self.assertNotIn(SLUG_LABEL, html)
-        self.assertNotIn(COHORT_LABEL, html)
+        self.assertEqual(context["course_name"], "")
+        self.assertNotIn(SLUG_LABEL, str(context))
+        self.assertNotIn(COHORT_LABEL, str(context))
 
 
 class MavenWelcomeStoredContextHygieneTest(_WelcomePipelineMixin, TestCase):
@@ -227,10 +213,9 @@ class MavenWelcomeLegacyDeliveryTest(_WelcomePipelineMixin, TestCase):
         )
         self.assertEqual(delivery.related_object_type, "")
 
-        subject, html = _drain(delivery)
+        context = _drain(delivery)
 
-        self.assertIn("Legacy Buildcamp label", subject)
-        self.assertIn("Legacy Buildcamp label", html)
+        self.assertEqual(context["course_name"], "Legacy Buildcamp label")
 
 
 class MavenStaffSurfacesKeepRawLabelTest(_WelcomePipelineMixin, TestCase):

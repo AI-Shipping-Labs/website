@@ -1,4 +1,4 @@
-"""Slack invite email is actually delivered through SES (issue #1565).
+"""Slack invite email is actually delivered through Relay (issue #1565).
 
 Before this change ``_send_invite_email`` called ``django.core.mail.send_mail``
 with ``fail_silently=True``. ``EMAIL_BACKEND`` is unset, so it resolved to SMTP
@@ -59,14 +59,15 @@ class PaidCheckoutInviteEmailTest(TestCase):
             deliver_pending_mail()
 
         # The durable delivery exists for the member and the provider send
-        # (worker-rendered) carries the gated /community/slack link, not
-        # the raw join URL.
+        # carries only the gated site URL context, never the raw join URL.
         delivery = EmailDelivery.objects.get(purpose="community_invite")
         self.assertEqual(delivery.recipient_email, "paid@example.com")
         self.assertEqual(len(stub.calls), 1)
-        html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn("https://aishippinglabs.com/community/slack", html)
-        self.assertNotIn("https://join.slack.com/test", html)
+        call = stub.calls[0]
+        self.assertEqual(call["delivery"].template_key, "community_invite")
+        self.assertEqual(call["context"]["user_name"], "Ada")
+        self.assertEqual(call["context"]["site_url"], "https://aishippinglabs.com")
+        self.assertNotIn("join.slack.com", str(call["context"]))
 
         details = CommunityAuditLog.objects.get(user=self.user, action="invite").details
         self.assertIn('"status": "email_sent"', details)

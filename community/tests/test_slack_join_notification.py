@@ -11,12 +11,14 @@ Two layers:
 
 from unittest.mock import MagicMock, patch
 
+from community_base.mail.models import EmailDelivery
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import User
 from community.services import staff_notifications
 from community.tasks.slack_membership import refresh_slack_membership
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -221,7 +223,36 @@ class NotifySlackJoinHelperTest(TestCase):
         # Slack still fired even though the email path threw.
         mock_slack.assert_called_once()
 
-    pass
+    def test_staff_email_hands_join_context_to_relay(self):
+        stub = StubRelayClient()
+        with patch(
+            "community.services.staff_notifications.get_config",
+            side_effect=_cfg(),
+        ), patch(
+            "community.services.staff_notifications.site_base_url",
+            return_value="https://example.test",
+        ), patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=stub,
+        ):
+            context = staff_notifications._build_slack_join_context(self.user)
+            staff_notifications._send_slack_join_notification(
+                self.STAFF_EMAIL, context,
+            )
+            deliver_pending_mail()
+
+        delivery = EmailDelivery.objects.get(purpose="slack_join_notification")
+        self.assertEqual(delivery.recipient_email, self.STAFF_EMAIL)
+        self.assertEqual(len(stub.calls), 1)
+        relay_context = stub.calls[0]["context"]
+        self.assertEqual(relay_context["user_email"], "joiner@test.com")
+        self.assertEqual(relay_context["user_full_name"], "Alex Grigorev")
+        self.assertEqual(relay_context["tier_name"], _tier(20).name)
+        self.assertEqual(
+            relay_context["studio_user_url"],
+            f"https://example.test/studio/users/{self.user.pk}/",
+        )
+
     def test_slug_classified_transactional(self):
         from email_app.services.email_classification import (
             EMAIL_KIND_TRANSACTIONAL,

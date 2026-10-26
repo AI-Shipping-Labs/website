@@ -866,6 +866,7 @@ COMMUNITY_BASE = {
     'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
+    'MAIL_TEMPLATE_VERSION_RESOLVER': 'email_app.relay_versions.template_version_for',
     # Admin CLI device login (community_base.device_login): approval mints a
     # staff accounts.Token, the same credential operators used to copy by hand.
     'DEVICE_LOGIN_TOKEN_MINTER': 'accounts.device_login.mint_device_token',

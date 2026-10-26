@@ -14,8 +14,10 @@ from booking.services import booking_service
 from booking.services.calendar import (
     create_calendar_event,
     delete_calendar_event,
-    query_busy as calendar_query_busy,
     update_calendar_event,
+)
+from booking.services.calendar import (
+    query_busy as calendar_query_busy,
 )
 from booking.services.dapier import DapierNotConfigured, get_calendar_access_token
 from integrations.models import IntegrationSetting

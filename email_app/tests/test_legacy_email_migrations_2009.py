@@ -117,6 +117,13 @@ class LegacyEmailRemovalMigrationTest(TransactionTestCase):
                 "email_app_emailtemplateoverride",
                 connection.introspection.table_names(),
             )
+            with connection.cursor() as cursor:
+                constraints = connection.introspection.get_constraints(
+                    cursor, "email_app_emailtemplateoverride"
+                )
+            self.assertFalse(
+                any(info.get("foreign_key") for info in constraints.values())
+            )
             self.assertEqual(FailedOverride.objects.count(), 0)
         finally:
             MigrationExecutor(connection).migrate(latest_targets)

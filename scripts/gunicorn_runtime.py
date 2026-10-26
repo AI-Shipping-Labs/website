@@ -49,6 +49,12 @@ GRACEFUL_TIMEOUT_SECONDS = 20
 KEEP_ALIVE_SECONDS = 0
 DEFAULT_WEB_STATEMENT_TIMEOUT_MS = 10_000
 
+GUNICORN_ACCESS_LOG_FORMAT = (
+    '%(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)s '
+    'request_id="%({x-request-id}o)s" correlation_id="%({x-correlation-id}o)s"'
+)
+GUNICORN_LOGGER_CLASS = 'website.gunicorn_logging.RecipientTokenSafeLogger'
+
 
 def _int_env(name, default, *, minimum):
     """Return ``int(os.environ[name])`` or ``default`` when unset/invalid."""
@@ -97,6 +103,10 @@ def gunicorn_argv(workers, threads):
         "--graceful-timeout", str(GRACEFUL_TIMEOUT_SECONDS),
         "--keep-alive", str(KEEP_ALIVE_SECONDS),
         "--preload",
+        "--access-logfile", "-",
+        "--access-logformat", GUNICORN_ACCESS_LOG_FORMAT,
+        "--logger-class", GUNICORN_LOGGER_CLASS,
+        "--error-logfile", "-",
     ]
 
 

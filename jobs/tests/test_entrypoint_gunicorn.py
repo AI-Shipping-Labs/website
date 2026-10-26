@@ -115,6 +115,24 @@ class StartGunicornTest(SimpleTestCase):
         self.assertEqual(self._flag(argv, "--keep-alive"), "0")
         self.assertIn("--preload", argv)
 
+    def test_argv_logs_duration_and_request_id_without_pii(self):
+        order = self._start({})
+        argv = order[-1][1]
+        log_format = self._flag(argv, "--access-logformat")
+        self.assertEqual(self._flag(argv, "--access-logfile"), "-")
+        self.assertEqual(self._flag(argv, "--error-logfile"), "-")
+        self.assertEqual(
+            self._flag(argv, "--logger-class"),
+            "website.gunicorn_logging.RecipientTokenSafeLogger",
+        )
+        self.assertIn("%(D)s", log_format)
+        self.assertIn("%(U)s", log_format)
+        self.assertIn("x-request-id", log_format)
+        self.assertIn("x-correlation-id", log_format)
+        self.assertNotIn("%(q)s", log_format)
+        self.assertNotIn("%(r)s", log_format)
+        self.assertNotIn("%(h)s", log_format)
+
     def test_statement_timeout_is_applied_before_gunicorn_starts(self):
         order = self._start({"WEB_DB_STATEMENT_TIMEOUT_MS": "7000"})
 

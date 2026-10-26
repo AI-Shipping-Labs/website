@@ -257,6 +257,8 @@ MIDDLEWARE = [
     # ``private, no-store`` before it leaves the stack. See
     # website/middleware.py for the CDN contract.
     'website.middleware.PublicCachePolicyMiddleware',
+    # Opaque request/correlation IDs for the gunicorn access log.
+    'website.request_id_middleware.RequestIdMiddleware',
     # Outermost so every dev response and every production-private response,
     # including early responses, redirects, and errors, can receive the
     # applicable robots header.

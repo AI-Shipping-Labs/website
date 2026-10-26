@@ -59,7 +59,7 @@ def check_email_backend_selection(app_configs, **kwargs):
         return []
     return [Error(
         "Django EMAIL_BACKEND must route through Relay.",
-        hint="Set EMAIL_BACKEND = 'email_app.backends.relay.RelayEmailBackend'.",
+        hint="Restore the source-controlled Relay backend in website/settings.py.",
         id="email_app.E004",
     )]
 
@@ -73,6 +73,6 @@ def check_package_mail_backend_relay(app_configs, **kwargs):
         return []
     return [Error(
         "COMMUNITY_BASE['MAIL_BACKEND'] must route through Relay.",
-        hint="Set COMMUNITY_BASE_MAIL_BACKEND=relay in the deploy environment.",
+        hint="Restore the source-controlled package Relay backend in website/settings.py.",
         id="email_app.E005",
     )]

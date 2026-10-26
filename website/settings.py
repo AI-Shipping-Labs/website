@@ -671,10 +671,10 @@ SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_TEST_ANNOUNCEMENTS_C
 # mail_admins, EmailMessage) delivers through Relay's raw_transactional
 # template via RelayEmailBackend. Never falls back to Django SMTP default
 # or SES. In test runner, locmem backend is used unless overridden.
-EMAIL_BACKEND = os.environ.get(
-    'EMAIL_BACKEND',
-    'email_app.backends.relay.RelayEmailBackend' if not TESTING else 'django.core.mail.backends.locmem.EmailBackend',
-)
+if TESTING:
+    EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+else:
+    EMAIL_BACKEND = 'email_app.backends.relay.RelayEmailBackend'
 DEFAULT_FROM_EMAIL = 'AI Shipping Labs <noreply@aishippinglabs.com>'
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
@@ -859,10 +859,7 @@ COMMUNITY_BASE = {
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'COURSE_ACCESS_GRANTS': 'content.curriculum_grants.course_access_grants',
     'JOBS_BACKEND': 'django_q',
-    'MAIL_BACKEND': os.environ.get(
-        'COMMUNITY_BASE_MAIL_BACKEND',
-        'relay',
-    ),
+    'MAIL_BACKEND': 'relay',
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
     'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',

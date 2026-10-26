@@ -16,6 +16,9 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from accounts.models import Token
+from accounts.services.staff_api_throttle import reset_staff_api_throttle
+from integrations.config import reset_local_config_cache
+from integrations.shared_cache import reset_local_shared_cache_memo
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -220,6 +223,22 @@ class ListTierOverridesAuthTest(TierOverrideApiBase):
 
 
 class ListTierOverridesQueryBudgetTest(TierOverrideApiBase):
+    def setUp(self):
+        super().setUp()
+        # Process-global request-path caches are shared across TestCases in
+        # one parallel-CI worker (see #1103). A shard-mate that saved
+        # settings, touched redirects, or exercised the staff throttle can
+        # otherwise leave this worker's in-process caches warm, cold, or
+        # stale at warm-up time and move queries between the measurement
+        # phases. Reset to a known-cold state here (and leave it clean for
+        # the next test); the warm-up GET below repopulates deterministically.
+        reset_local_config_cache()
+        reset_local_shared_cache_memo()
+        reset_staff_api_throttle()
+        self.addCleanup(reset_local_config_cache)
+        self.addCleanup(reset_local_shared_cache_memo)
+        self.addCleanup(reset_staff_api_throttle)
+
     def _seed(self, count, offset):
         for index in range(count):
             member = User.objects.create_user(

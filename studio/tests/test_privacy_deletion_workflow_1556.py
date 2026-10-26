@@ -128,7 +128,7 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         template_client.return_value.preview.assert_called_once_with(
             "account_deletion_completed",
             ANY,
-            version=1,
+            version=2,
         )
 
     def test_user_callout_requires_an_accepted_request(self):

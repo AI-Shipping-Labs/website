@@ -33,12 +33,11 @@ RELAY_TEMPLATE_KEYS = frozenset(
 def template_version_for(template_key):
     """Return the immutable version verified for this website release.
 
-    Relay currently has only version 1 of the named templates. Campaigns use
-    the new version-2 context contract, so their release remains blocked until
-    that immutable version is published. A later website release must opt the
-    named templates into newer versions after live inventory and previews.
+    All 61 named Markdown templates and ``campaign-broadcast`` are verified at
+    version 2 with ``markdown_layout_context=true``. ``raw_transactional``,
+    internal forwarding, and unknown keys stay on version 1.
     """
 
-    if template_key == "campaign-broadcast":
+    if template_key in RELAY_TEMPLATE_KEYS or template_key == "campaign-broadcast":
         return 2
     return 1

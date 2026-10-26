@@ -10,15 +10,12 @@ templates in Studio at `/studio/email-templates/`; the list, draft save,
 publish, version history, and preview actions call Relay directly and have no
 local source or rendering fallback.
 
-The live named website templates currently remain pinned to immutable version
-1. Campaign delivery uses the new `campaign-broadcast` version-2 context and
-must not deploy until that version exists in Relay. The cleanup release is
-also blocked until every named version 2 is published, previewed with the
-approved layout context, and the website pin is advanced in the same release.
-`raw_transactional` remains a read-only version-1 compatibility template.
-Published Markdown templates use `markdown_layout_context=true`, which lets
-Relay render the validated `footer_note`, `verify_email_url`, and
-`unsubscribe_url` values and produce the matching plaintext part.
+All 61 named website templates and `campaign-broadcast` are pinned to immutable
+version 2 in `email_app/relay_versions.py`. `raw_transactional` remains a
+read-only version-1 compatibility template. Published Markdown templates use
+`markdown_layout_context=true`, which lets Relay render the validated
+`footer_note`, `verify_email_url`, and `unsubscribe_url` values and produce the
+matching plaintext part.
 
 ## RELAY_TRANSACTIONAL_FROM_EMAIL
 

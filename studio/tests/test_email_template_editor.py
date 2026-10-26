@@ -52,7 +52,8 @@ class RelayTemplateEditorTest(TestCase):
         self.assertContains(response, "raw_transactional")
         self.assertContains(response, "Compatibility template")
         self.assertNotContains(response, "relay-inbound-forward")
-        self.assertContains(response, "Sends use v1", count=2)
+        self.assertContains(response, "Sends use v2", count=1)
+        self.assertContains(response, "Sends use v1", count=1)
 
     @patch("studio.views.email_templates.configured_template_client")
     def test_save_updates_relay_draft_without_publishing(self, configured):
@@ -106,7 +107,7 @@ class RelayTemplateEditorTest(TestCase):
             reverse("studio_email_template_edit", args=["welcome"]),
         )
 
-        self.assertContains(response, "Website sends currently use immutable Relay v1")
+        self.assertContains(response, "Website sends currently use immutable Relay v2")
 
     @patch(
         "studio.views.email_templates.get_preview_context",

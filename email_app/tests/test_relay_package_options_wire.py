@@ -81,11 +81,16 @@ class WelcomeRelayWireTest(TestCase):
     def _seed_template(transport):
         transport.templates["basic_welcome"] = {
             "key": "basic_welcome",
-            "latest_version": 1,
+            "latest_version": 2,
             "versions": [
                 {
                     "template_key": "basic_welcome",
                     "version": 1,
+                    "status": "published",
+                },
+                {
+                    "template_key": "basic_welcome",
+                    "version": 2,
                     "status": "published",
                 },
             ],
@@ -98,6 +103,7 @@ class WelcomeRelayWireTest(TestCase):
         payload = request.kwargs["json"]
         self.assertEqual(payload["email"], self.member.email)
         self.assertEqual(payload["template_key"], "basic_welcome")
+        self.assertEqual(payload["template_version"], 2)
         self.assertEqual(payload["from_email"], "welcome")
         self.assertEqual(payload.get("reply_to"), reply_to)
         self.assertEqual(payload.get("bcc"), ["staff-audit@example.com"])

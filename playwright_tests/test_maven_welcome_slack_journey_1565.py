@@ -96,7 +96,7 @@ def test_enrollee_follows_the_welcome_email_into_slack(
 
     delivery, resolved = _resolve_welcome_context(user)
     assert delivery.purpose == "maven_welcome"
-    assert delivery.template_version == 1
+    assert delivery.template_version == 2
     join_path = urlparse(resolved["slack_join_url"]).path
     assert join_path == "/community/slack"
 

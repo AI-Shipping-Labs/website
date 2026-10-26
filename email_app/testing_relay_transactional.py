@@ -53,7 +53,7 @@ class StubRelayTransactionalTransport:
                     "id": message_id,
                     "status": "queued",
                     "template_key": json["template_key"],
-                    "template_version": 1,
+                    "template_version": json.get("template_version", 1),
                     "idempotency_key": idempotency_key,
                 },
                 "idempotent_replay": replay,

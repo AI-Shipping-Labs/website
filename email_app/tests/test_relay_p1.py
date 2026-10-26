@@ -161,7 +161,7 @@ class TestRelayPackageMailDelivery(TestCase):
         mock_client.send.return_value = RelaySendResult(
             message_id="relay-msg-999",
             status="sent",
-            template_version=1,
+            template_version=2,
             idempotent_replay=False,
         )
         mock_client.preview_template.return_value = {
@@ -185,7 +185,7 @@ class TestRelayPackageMailDelivery(TestCase):
         delivery.refresh_from_db()
         self.assertEqual(delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED)
         self.assertEqual(delivery.external_message_id, "relay-msg-999")
-        self.assertEqual(delivery.template_version, 1)
+        self.assertEqual(delivery.template_version, 2)
         self.assertEqual(
             EmailLog.objects.get(dedupe_key=delivery.idempotency_key).subject,
             "Distinct Relay package preview",
@@ -197,7 +197,7 @@ class TestRelayPackageMailDelivery(TestCase):
         mock_client.send.return_value = RelaySendResult(
             message_id="relay-msg-idemp",
             status="sent",
-            template_version=1,
+            template_version=2,
             idempotent_replay=True,
         )
         mock_configured_client.return_value = mock_client

@@ -51,7 +51,7 @@ def test_nameless_member_password_reset_uses_neutral_relay_context(
         delivery=delivery,
         context=dict(delivery.context_data),
     )
-    assert delivery.template_version == 1
+    assert delivery.template_version == 2
     assert resolved["user_name"] == "there"
     assert "nameless-reset" not in resolved["user_name"]
     assert "/api/password-reset" in resolved["reset_url"]

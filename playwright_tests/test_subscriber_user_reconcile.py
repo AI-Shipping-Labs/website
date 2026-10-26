@@ -438,5 +438,5 @@ class TestSubscribePageDiscloseAccount:
         assert stub.calls, "Worker crossed no Relay boundary"
         call = stub.calls[0]
         assert call["delivery"].purpose == "email_verification_subscribe"
-        assert call["delivery"].template_version == 1
+        assert call["delivery"].template_version == 2
         assert "/api/verify-email?token=" in call["context"]["verify_url"]

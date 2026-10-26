@@ -59,7 +59,7 @@ def _publish_and_assert_pin(page, relay):
     page.wait_for_load_state("domcontentloaded")
     expect(page.get_by_text(
         'Published "welcome" as Relay version 2. Website sends remain pinned '
-        "to v1 until a release changes the pin.",
+        "to v2 until a release changes the pin.",
         exact=True,
     )).to_be_visible()
     assert relay.template("welcome")["latest_version"] == 2
@@ -68,7 +68,7 @@ def _publish_and_assert_pin(page, relay):
         "Welcome from a Relay draft"
     )
     expect(page.get_by_test_id("active-send-version")).to_contain_text(
-        "Website sends currently use immutable Relay v1"
+        "Website sends currently use immutable Relay v2"
     )
     expect(page.locator('[name="version"] option[value="2"]')).to_have_text(
         "Published v2"

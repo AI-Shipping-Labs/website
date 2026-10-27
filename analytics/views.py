@@ -3,7 +3,9 @@
 import json
 
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.middleware.csrf import get_token
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_GET, require_POST
 
 from analytics.consent import (
     ANALYTICS_CONSENT_CHOICES,
@@ -16,6 +18,13 @@ from analytics.middleware import (
     SESSION_LAST_TOUCH_REFERRER,
     delete_analytics_cookies,
 )
+
+
+@require_GET
+@never_cache
+def analytics_consent_csrf(request):
+    """Issue a token on demand when a cached page reopens preferences."""
+    return JsonResponse({'csrf_token': get_token(request)})
 
 
 @require_POST

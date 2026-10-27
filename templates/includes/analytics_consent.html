@@ -79,17 +79,37 @@
       });
     }
 
-    function save(choice) {
-      setBusy(true);
-      error.classList.add('hidden');
-      fetch('/api/analytics/consent', {
+    function csrfToken() {
+      var token = panel.getAttribute('data-csrf-token');
+      if (token) return Promise.resolve(token);
+      // Decided visitors get cacheable pages without a CSRF cookie/token.
+      // Reopening preferences must still allow granting or revoking consent.
+      return fetch('/api/analytics/consent/csrf', {
+        cache: 'no-store', credentials: 'same-origin',
+      })
+        .then(function(response) {
+          if (!response.ok) throw new Error('Consent token failed');
+          return response.json();
+        })
+        .then(function(data) { return data.csrf_token; });
+    }
+
+    function postChoice(choice, token) {
+      return fetch('/api/analytics/consent', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': panel.getAttribute('data-csrf-token'),
+          'X-CSRFToken': token,
         },
         body: JSON.stringify({consent: choice}),
-      })
+      });
+    }
+
+    function save(choice) {
+      setBusy(true);
+      error.classList.add('hidden');
+      csrfToken()
+      .then(function(token) { return postChoice(choice, token); })
       .then(function(response) {
         if (!response.ok) throw new Error('Consent save failed');
         return response.json();

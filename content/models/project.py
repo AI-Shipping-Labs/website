@@ -89,6 +89,12 @@ class Project(
     )
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(
+                fields=['published', 'status', '-date'],
+                name='content_proj_pubst_date',
+            ),
+        ]
 
     def __str__(self):
         return self.title

@@ -288,6 +288,12 @@ class Workshop(
     )
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(
+                fields=['status', '-date'],
+                name='content_ws_status_date',
+            ),
+        ]
 
     def __str__(self):
         return self.title

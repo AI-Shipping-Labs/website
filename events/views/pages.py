@@ -30,6 +30,7 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
+from content.caching import cache_anonymous_page
 from content.services.related_content import build_related_content_rail
 from events.models import (
     Event,
@@ -269,6 +270,7 @@ def _build_event_post_resources(event, *, has_access):
     }
 
 
+@cache_anonymous_page()
 def events_calendar(request, year=None, month=None):
     """Monthly calendar grid view for events."""
     today = date.today()
@@ -303,7 +305,9 @@ def events_calendar(request, year=None, month=None):
         start_datetime__date__lt=month_end,
     ).exclude(
         status__in=HIDDEN_FROM_PUBLIC_STATUSES,
-    ).exclude(event_series__visibility='hidden').order_by('start_datetime')
+    ).exclude(event_series__visibility='hidden').select_related(
+        'event_series', 'workshop',
+    ).order_by('start_datetime')
 
     # Map events to days
     events_by_day = {}
@@ -369,6 +373,7 @@ def events_calendar(request, year=None, month=None):
     return render(request, 'events/events_calendar.html', context)
 
 
+@cache_anonymous_page()
 def events_list(request):
     """Luma-style events timeline with an Upcoming/Past toggle.
 
@@ -417,7 +422,7 @@ def events_list(request):
         past_public_qs = (
             past_public_qs
             .annotate(_attendee_count=Count('registrations'))
-            .select_related('workshop')
+            .select_related('workshop', 'event_series')
             .order_by('-start_datetime')
         )
 
@@ -1062,6 +1067,7 @@ def event_feedback_submit(request, event_id, slug):
     return redirect(f'{event.get_absolute_url()}?feedback=thanks')
 
 
+@cache_anonymous_page()
 def event_recap(request, event_id, slug):
     """Public recap page for a single event.
 

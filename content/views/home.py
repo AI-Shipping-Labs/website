@@ -18,6 +18,7 @@ from content.access import (
     get_required_tier_name,
     get_user_level,
 )
+from content.caching import cache_anonymous_page
 from content.models import (
     Article,
     Course,
@@ -211,6 +212,7 @@ SECTION_NAV = [
 ]
 
 
+@cache_anonymous_page()
 def home(request):
     """Homepage view.
 
@@ -239,8 +241,14 @@ def home(request):
 
 def _public_home(request):
     """Render the public marketing homepage for anonymous users."""
-    articles = Article.objects.filter(published=True)[:3]
-    workshops = Workshop.objects.filter(status='published').order_by('-date')[:3]
+    articles = Article.objects.filter(
+        published=True,
+    ).select_related('source_event').order_by('-date')[:3]
+    workshops = Workshop.objects.filter(
+        status='published',
+    ).select_related('event').prefetch_related(
+        'instructors',
+    ).order_by('-date')[:3]
 
     # Add payment links to tiers
     stripe_links = get_stripe_payment_links()

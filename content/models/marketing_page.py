@@ -157,6 +157,12 @@ class MarketingPage(
 
     class Meta:
         ordering = ['nav_order', 'title']
+        indexes = [
+            models.Index(
+                fields=['status', 'nav_section', 'nav_order'],
+                name='content_mp_stat_navord',
+            ),
+        ]
 
     def __str__(self):
         return self.title

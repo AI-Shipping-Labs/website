@@ -40,7 +40,11 @@ def membership(request):
         ],
         'activity_sprints': _get_activity_sprints(user),
         'recent_workshops': list(
-            Workshop.objects.filter(status='published').order_by('-date')[:3]
+            Workshop.objects.filter(
+                status='published',
+            ).select_related('event').prefetch_related(
+                'instructors',
+            ).order_by('-date')[:3]
         ),
     })
     context.update(build_public_upcoming_timeline(user, row_limit=1))

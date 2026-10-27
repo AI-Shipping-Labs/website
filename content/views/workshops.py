@@ -55,6 +55,7 @@ from content.access import (
     get_required_tier_name,
     get_user_level,
 )
+from content.caching import cache_anonymous_page
 from content.models import (
     Instructor,
     Workshop,
@@ -364,6 +365,7 @@ def _build_workshops_catalog_context(
     }
 
 
+@cache_anonymous_page()
 def workshops_list(request):
     """Landing page: marketing copy with a short latest-workshops preview."""
     context = _build_workshops_catalog_context(
@@ -385,6 +387,7 @@ def workshops_list(request):
     return render(request, 'content/workshops_list.html', context)
 
 
+@cache_anonymous_page()
 def workshops_catalog(request):
     """Catalog page: grid of all published workshops."""
     try:
@@ -474,7 +477,10 @@ def _resolve_workshop_by_key(date_slug):
 
 def _resolve_workshop_by_slug(slug):
     """Fetch a published workshop by its canonical public slug."""
-    return get_object_or_404(Workshop, slug=slug, status='published')
+    return get_object_or_404(
+        Workshop.objects.select_related('event'),
+        slug=slug, status='published',
+    )
 
 
 def _append_query_string(request, url):

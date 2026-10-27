@@ -49,6 +49,12 @@ class CuratedLink(SourceMetadataMixin, TimestampedModelMixin, models.Model):
     published = models.BooleanField(default=True)
     class Meta:
         ordering = ['sort_order', 'title']
+        indexes = [
+            models.Index(
+                fields=['published', 'sort_order'],
+                name='content_link_pub_sort',
+            ),
+        ]
 
     def __str__(self):
         return self.title

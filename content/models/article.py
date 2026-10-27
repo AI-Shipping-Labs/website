@@ -117,6 +117,12 @@ class Article(
 
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(
+                fields=['published', 'page_type', '-date'],
+                name='content_art_pubtype_date',
+            ),
+        ]
 
     def __str__(self):
         return self.title

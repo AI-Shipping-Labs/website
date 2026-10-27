@@ -128,6 +128,12 @@ class Download(
     published = models.BooleanField(default=True)
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['published', '-created_at'],
+                name='content_dl_pub_created',
+            ),
+        ]
 
     def __str__(self):
         return self.title

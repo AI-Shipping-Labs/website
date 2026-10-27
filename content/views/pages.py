@@ -13,6 +13,7 @@ from content.access import (
     get_user_level,
     requires_free_download_verification,
 )
+from content.caching import cache_anonymous_page
 from content.models import (
     Article,
     CuratedLink,
@@ -297,6 +298,7 @@ def _build_sprints_index_sections(user):
     return sections, list(plans_by_sprint.values()), enrollments
 
 
+@cache_anonymous_page()
 def about(request):
     """About page."""
     return render(request, 'content/about.html')
@@ -307,6 +309,7 @@ def activities(request):
     return redirect('/membership#activities', permanent=True)
 
 
+@cache_anonymous_page()
 def sprints_index(request):
     """Public community sprints discovery page."""
     sprint_sections, plans, enrollments = _build_sprints_index_sections(
@@ -322,6 +325,7 @@ def sprints_index(request):
     return render(request, 'content/sprints_index.html', context)
 
 
+@cache_anonymous_page()
 def blog_list(request):
     """Blog listing page filtered by a curated topic (or legacy tags).
 
@@ -330,7 +334,9 @@ def blog_list(request):
     ``?tag=<slug>`` is still honored so inbound links and article-detail
     tag chips keep working.
     """
-    articles = list(Article.objects.filter(published=True, page_type='blog'))
+    articles = list(Article.objects.filter(
+        published=True, page_type='blog',
+    ).select_related('source_event').order_by('-date'))
     selected_tags = _get_selected_tags(request)
     selected_topic = (request.GET.get('topic') or '').strip()
 
@@ -342,7 +348,9 @@ def blog_list(request):
         articles = filter_by_topic(articles, valid_topic)
     elif selected_tags:
         articles = list(_filter_by_tags(
-            Article.objects.filter(published=True, page_type='blog'),
+            Article.objects.filter(
+                published=True, page_type='blog',
+            ).select_related('source_event').order_by('-date'),
             selected_tags,
         ))
 
@@ -362,6 +370,7 @@ def blog_list(request):
     return render(request, 'content/blog_list.html', context)
 
 
+@cache_anonymous_page()
 def blog_detail(request, slug):
     """Blog post detail page with related articles."""
     article = get_object_or_404(

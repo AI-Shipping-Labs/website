@@ -28,6 +28,12 @@ class Tutorial(models.Model):
 
     class Meta:
         ordering = ['-date']
+        indexes = [
+            models.Index(
+                fields=['published', '-date'],
+                name='content_tut_pub_date',
+            ),
+        ]
 
     def __str__(self):
         return self.title

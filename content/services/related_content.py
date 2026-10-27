@@ -65,11 +65,42 @@ def build_related_content_rail(
 ) -> RelatedContentRail:
     """Return up to ``limit`` deterministic recommendations for ``current``.
 
-    Matching recommendations share at least one normalized tag with the current
-    object and sort by shared-tag count, newest public date, then title. If the
-    current object is untagged or no tag matches exist, the rail falls back to
-    the newest published internal content pages.
+    The rail is cached per object for five minutes: every public detail
+    view calls this, and without caching each call scans six tables.
+    The cache stays off in tests (see content.caching) so rows can
+    never leak across the per-case database flush.
     """
+    from django.conf import settings
+    from django.core.cache import cache
+
+    enabled = getattr(
+        settings, "PUBLIC_PAGE_CACHE_ENABLED", not settings.TESTING,
+    )
+    key = _related_rail_cache_key(current, limit) if enabled else None
+    if key is not None:
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+    rail = _build_related_content_rail_uncached(current, limit=limit)
+    if key is not None:
+        cache.set(key, rail, 300)
+    return rail
+
+
+def _related_rail_cache_key(current: Any, limit: int) -> str | None:
+    """Return the cache key for one object's rail."""
+    pk = getattr(current, 'pk', None)
+    if pk is None:
+        return None
+    return f'related-rail:v1:{_model_key(current)}:{pk}:{limit}'
+
+
+def _build_related_content_rail_uncached(
+    current: Any,
+    *,
+    limit: int = DEFAULT_RELATED_LIMIT,
+) -> RelatedContentRail:
+    """Build the rail without consulting the cache."""
     allowed_content_types = (
         WORKSHOP_RELATED_TYPES
         if _model_key(current) == 'content.workshop'

@@ -23,6 +23,7 @@ from content.access import (
     get_required_tier_name,
     get_user_level,
 )
+from content.caching import cache_anonymous_page
 from content.models import (
     Cohort,
     CohortEnrollment,
@@ -168,6 +169,7 @@ def _course_grid_classes(count):
     return "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
 
 
+@cache_anonymous_page()
 def courses_list(request):
     """Course catalog page: grid of all published courses.
 
@@ -245,6 +247,7 @@ def courses_list(request):
     return render(request, 'content/courses_list.html', context)
 
 
+@cache_anonymous_page()
 @ensure_csrf_cookie
 def course_detail(request, slug):
     """Public course overview; enrolled learners enter their course home.
@@ -255,7 +258,19 @@ def course_detail(request, slug):
     - Unauthorized user: unit titles (not clickable), CTA
     - Free course + unauthenticated: CTA to sign up
     """
-    course = get_object_or_404(Course, slug=slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related(
+            'aisl_extension',
+        ).prefetch_related(
+            Prefetch(
+                'aisl_instructor_links',
+                queryset=CourseInstructor.objects.select_related(
+                    'instructor',
+                ).order_by('position'),
+            ),
+        ),
+        slug=slug, status='published',
+    )
     user = request.user
 
     has_access = can_access(user, course)
@@ -906,7 +921,18 @@ def unenroll_course(request, slug):
 
 def api_courses_list(request):
     """GET /api/courses - list all published courses with is_locked flag."""
-    courses = Course.objects.filter(status='published')
+    courses = list(
+        Course.objects.filter(
+            status='published',
+        ).select_related('aisl_extension').prefetch_related(
+            Prefetch(
+                'aisl_instructor_links',
+                queryset=CourseInstructor.objects.select_related(
+                    'instructor',
+                ).order_by('position'),
+            ),
+        ),
+    )
     user = request.user
 
     data = []

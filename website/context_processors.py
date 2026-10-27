@@ -454,15 +454,16 @@ def site_context(request):
         'analytics_consent_state': consent_state,
         # get_token() forces the csrftoken Set-Cookie onto the response.
         # Consent POSTs read it from the cookie / banner attribute, so it
-        # is only needed for interactive visitors; emitting it for crawler
-        # user-agents would make every public page Set-Cookie-bearing and
-        # therefore uncacheable at the CDN. See PublicCachePolicyMiddleware.
-        # Only fetch-only crawlers without a session skip it: a session
+        # is only needed when the banner can actually show (consent
+        # undecided). Decided visitors never POST consent, so skipping the
+        # token keeps their responses Set-Cookie-free and CDN-cacheable.
+        # See PublicCachePolicyMiddleware. Only fetch-only crawlers
+        # without a session skip it for the same reason; a session
         # request is never CDN-cacheable anyway, and headless browser
         # automation submits forms just like a human visitor.
         'analytics_consent_csrf_token': (
             ''
-            if _skip_consent_csrf_token(request)
+            if _skip_consent_csrf_token(request) or consent_state
             else get_token(request)
         ),
         'aslab_anon_id': aslab_anon_id,

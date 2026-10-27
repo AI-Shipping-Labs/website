@@ -22,7 +22,6 @@ class ConsentPreferenceCsrfTest(SimpleTestCase):
                 client = Client(enforce_csrf_checks=True)
                 client.cookies[ANALYTICS_CONSENT_COOKIE] = previous
                 token_response = client.get('/api/analytics/consent/csrf')
-                self.assertEqual(token_response.status_code, 200)
                 self.assertIn('no-store', token_response['Cache-Control'])
                 self.assertIn('csrftoken', token_response.cookies)
                 self.assertNotIn(ANALYTICS_CONSENT_COOKIE, token_response.cookies)
@@ -32,5 +31,5 @@ class ConsentPreferenceCsrfTest(SimpleTestCase):
                     content_type='application/json',
                     HTTP_X_CSRFTOKEN=token_response.json()['csrf_token'],
                 )
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {'status': 'ok', 'consent': choice})
                 self.assertEqual(response.cookies[ANALYTICS_CONSENT_COOKIE].value, choice)

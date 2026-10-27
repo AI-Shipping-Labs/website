@@ -63,7 +63,7 @@ class BlogListQueryBudgetTest(TierSetupMixin, TestCase):
         for i in range(3, 9):
             _make_article(f"blog-budget-{i}")
         response, large_count = _measured_get(self.client, "/blog")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "blog-budget-0")
         self.assertEqual(
             small_count,
             large_count,
@@ -88,10 +88,10 @@ class BlogDetailQueryBudgetTest(TierSetupMixin, TestCase):
 
     def test_repeat_hit_serves_rail_from_cache(self):
         first, first_count = _measured_get(self.client, "/blog/rail-budget-main")
-        self.assertEqual(first.status_code, 200)
+        self.assertContains(first, "rail-budget-main")
         with CaptureQueriesContext(connection) as ctx:
             second = self.client.get("/blog/rail-budget-main")
-        self.assertEqual(second.status_code, 200)
+        self.assertContains(second, "rail-budget-main")
         self.assertLess(
             len(ctx.captured_queries),
             first_count,
@@ -115,7 +115,7 @@ class HomeAnonQueryBudgetTest(TierSetupMixin, TestCase):
         _make_article("home-budget-2")
         _make_workshop("home-budget-ws-1")
         response, large_count = _measured_get(self.client, "/")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "home-budget-1")
         self.assertEqual(
             small_count,
             large_count,
@@ -146,7 +146,7 @@ class CoursesListQueryBudgetTest(TierSetupMixin, TestCase):
                 status="published",
             )
         response, large_count = _measured_get(self.client, "/courses")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Budget Course")
         self.assertEqual(
             small_count,
             large_count,
@@ -169,7 +169,7 @@ class WorkshopsListQueryBudgetTest(TierSetupMixin, TestCase):
         for i in range(2, 6):
             _make_workshop(f"ws-budget-{i}")
         response, large_count = _measured_get(self.client, "/workshops")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ws-budget")
         self.assertEqual(
             small_count,
             large_count,
@@ -193,11 +193,9 @@ class AnonPageCacheTest(TierSetupMixin, TestCase):
     def test_anonymous_blog_list_is_cached(self):
         cache.clear()
         first = self.client.get("/blog")
-        self.assertEqual(first.status_code, 200)
         self.assertContains(first, "cache-budget-first")
         _make_article("cache-budget-second")
         second = self.client.get("/blog")
-        self.assertEqual(second.status_code, 200)
         self.assertNotContains(second, "cache-budget-second")
         cache.clear()
         third = self.client.get("/blog")
@@ -208,7 +206,6 @@ class AnonPageCacheTest(TierSetupMixin, TestCase):
 
         cache.clear()
         anon = self.client.get("/blog")
-        self.assertEqual(anon.status_code, 200)
         self.assertContains(anon, "cache-budget-first")
         user = get_user_model().objects.create_user(
             email="cache-budget@test.com",
@@ -218,7 +215,6 @@ class AnonPageCacheTest(TierSetupMixin, TestCase):
         _make_article("cache-budget-second")
         self.client.force_login(user)
         authed = self.client.get("/blog")
-        self.assertEqual(authed.status_code, 200)
         self.assertContains(
             authed,
             "cache-budget-second",
@@ -249,10 +245,10 @@ class EventsListQueryBudgetTest(TierSetupMixin, TestCase):
     def test_anonymous_events_list_is_cached(self):
         cache.clear()
         first = self.client.get("/events")
-        self.assertIn(first.status_code, (200, 302))
+        self.assertTemplateUsed(first, "events/events_list.html")
         with CaptureQueriesContext(connection) as ctx:
             second = self.client.get("/events")
-        self.assertIn(second.status_code, (200, 302))
+        self.assertEqual(second.content, first.content)
         self.assertLessEqual(
             len(ctx.captured_queries),
             3,
@@ -274,7 +270,7 @@ class WorkshopDetailQueryBudgetTest(TierSetupMixin, TestCase):
         cache.clear()
         with CaptureQueriesContext(connection) as ctx:
             response = self.client.get("/workshops/ws-detail-budget")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ws-detail-budget")
         event_queries = [q for q in ctx.captured_queries if "events_event" in q["sql"]]
         self.assertLessEqual(
             len(event_queries),
@@ -397,7 +393,7 @@ class PastEventsNPlusOneTest(TierSetupMixin, TestCase):
                 published=True,
             )
         response, large_count = _measured_get(self.client, "/events?filter=past")
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Budget Past 0")
         self.assertEqual(
             small_count,
             large_count,

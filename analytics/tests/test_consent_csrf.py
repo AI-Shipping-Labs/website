@@ -2,12 +2,20 @@
 
 import json
 
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, override_settings
 
 from analytics.consent import ANALYTICS_CONSENT_COOKIE
 
 
-class ConsentPreferenceCsrfTest(TestCase):
+@override_settings(
+    ROOT_URLCONF='analytics.urls',
+    MIDDLEWARE=[
+        'website.middleware.PublicCachePolicyMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+    ],
+)
+class ConsentPreferenceCsrfTest(SimpleTestCase):
     def test_decided_visitors_can_fetch_token_and_change_preference(self):
         for previous, choice in [('denied', 'granted'), ('granted', 'denied')]:
             with self.subTest(previous=previous):

@@ -455,8 +455,8 @@ def site_context(request):
         # get_token() forces the csrftoken Set-Cookie onto the response.
         # Consent POSTs read it from the cookie / banner attribute, so it
         # is only needed when the banner can actually show (consent
-        # undecided). Decided visitors never POST consent, so skipping the
-        # token keeps their responses Set-Cookie-free and CDN-cacheable.
+        # undecided). Decided visitors fetch a token on demand when saving
+        # reopened preferences, keeping these pages CDN-cacheable.
         # See PublicCachePolicyMiddleware. Only fetch-only crawlers
         # without a session skip it for the same reason; a session
         # request is never CDN-cacheable anyway, and headless browser

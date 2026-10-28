@@ -264,6 +264,3 @@ class PodJoinRequest(models.Model):
     def __str__(self):
         return f'{self.user} -> {self.pod} ({self.status})'
 
-    @property
-    def is_open(self):
-        return self.status in OPEN_REQUEST_STATUSES

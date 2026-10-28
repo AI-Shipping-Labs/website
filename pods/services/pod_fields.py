@@ -1,22 +1,11 @@
 """Validation for editable study-group fields."""
 
-from dataclasses import dataclass
 
 from pods.models import MEETING_MINUTES_CHOICES
 from pods.services import config as pods_config
 from pods.services.membership_common import MSG_MAX_MEMBERS_RETIRED
 
 VALID_MEETING_MINUTES = {value for value, _label in MEETING_MINUTES_CHOICES}
-
-
-@dataclass
-class PodFields:
-    name: str = ""
-    purpose: str = ""
-    scheduling_note: str = ""
-    internal_notes: str = ""
-    meeting_count: int = 1
-    meeting_minutes: int = 60
 
 
 def _parse_int(raw, field_name, label, minimum, maximum, errors):

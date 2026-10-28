@@ -14,7 +14,7 @@ from pods.models import (
     Pod,
     PodMembership,
 )
-from pods.services.activity import activity_for_pod, cohort_activity
+from pods.services.activity import activity_for_pod
 
 MSG_SELF_PACED = "Pods need a dated cohort. A self-paced cohort cannot have pods."
 MSG_NOT_ELIGIBLE = "Only members of this cohort can join its pods."
@@ -82,10 +82,6 @@ def lock_pod(pod):
     return (
         Pod.objects.select_for_update(of=("self",)).select_related("cohort__course", "sprint", "owner").get(pk=pod.pk)
     )
-
-
-def ensure_dated_cohort(cohort):
-    ensure_can_have_pods(cohort_activity(cohort))
 
 
 def ensure_can_have_pods(activity):

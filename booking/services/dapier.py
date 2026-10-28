@@ -98,6 +98,3 @@ def get_calendar_access_token(*, force_refresh: bool = False, timeout: int = 10)
     return access_token
 
 
-def clear_dapier_token_cache():
-    """Clear cached token (useful for tests)."""
-    _token_cache.clear()

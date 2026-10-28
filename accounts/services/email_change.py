@@ -99,19 +99,6 @@ def derive_email_change_token(request_obj):
     return signer.signature(f"email-change-confirm:{request_obj.pk}")
 
 
-def active_email_change_request_for_user(user):
-    return (
-        EmailChangeRequest.objects
-        .filter(
-            user=user,
-            confirmed_at__isnull=True,
-            invalidated_at__isnull=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
-
-
 def _validate_new_email_for_user(user, raw_email):
     new_email = normalize_email(raw_email)
     if not new_email:

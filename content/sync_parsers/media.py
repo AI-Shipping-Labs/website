@@ -230,12 +230,6 @@ def rewrite_cover_image_url(
     return f'{image_base}/{full_path}'
 
 
-def _md5_file(filepath, chunk_size=8192):
-    """Compute the MD5 hex digest of a file."""
-    del chunk_size  # Retained for compatibility with legacy callers.
-    return hashlib.md5(checkout_read_bytes(filepath)).hexdigest()
-
-
 def upload_images_to_s3(content_dir, source):
     """Upload image files from a content directory to S3.
 
@@ -379,12 +373,6 @@ def _upload_images_to_s3_from_checkout(content_dir, source):
         source.repo_name, stats['uploaded'], stats['skipped'], len(stats['errors']),
     )
     return stats
-
-def _collect_image_paths(content_dir):
-    """Return a set of all image file paths relative to content_dir."""
-    with checkout_scope(content_dir, preload=True):
-        return _collect_image_paths_from_checkout(content_dir)
-
 
 def _collect_image_paths_from_checkout(content_dir):
     image_paths = set()

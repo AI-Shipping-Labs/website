@@ -35,10 +35,6 @@ def get_calendly_organization_uri():
     return get_config('CALENDLY_ORGANIZATION_URI', '')
 
 
-def get_calendly_webhook_subscription_uri():
-    return get_config('CALENDLY_WEBHOOK_SUBSCRIPTION_URI', '')
-
-
 def get_calendly_oauth_client_id():
     """Calendly OAuth app client ID. '' when unset."""
     return get_config('CALENDLY_OAUTH_CLIENT_ID', '')

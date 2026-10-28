@@ -15,11 +15,6 @@ from content.sync_parsers.checkout_view import (
     checkout_listdir,
     checkout_walk,
 )
-from content.sync_parsers.common import (
-    CONTENT_EXTENSIONS,
-    IMAGE_EXTENSIONS,
-    logger,
-)
 from content.sync_parsers.parsing import (
     _parse_markdown_file,
     _parse_yaml_file,
@@ -74,24 +69,6 @@ def classify_checkout(run):
     run._classify_errors = []
     classifier = RepoFileClassifier(run.repo_dir, run._classify_errors)
     return classifier.classify()
-
-
-def count_content_files(run):
-    """Count content files (.md, .yaml, .yml) in the checkout."""
-    count = 0
-    for root, dirs, files in checkout_walk(run.repo_dir):
-        if '.git' in root:
-            continue
-        for filename in files:
-            ext = os.path.splitext(filename)[1].lower()
-            if ext in CONTENT_EXTENSIONS:
-                count += 1
-            elif ext not in IMAGE_EXTENSIONS and filename != 'README.md':
-                logger.debug(
-                    'Skipping non-content, non-image file: %s',
-                    os.path.join(root, filename),
-                )
-    return count
 
 
 class RepoFileClassifier:

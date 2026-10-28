@@ -70,22 +70,6 @@ class _DiskSnapshot:
                         raise
         self.removed_symlinks = removed
 
-    def _strip_symlinks(self, root):
-        # Some committed entries are tooling symlinks (e.g. .claude/skills);
-        # the package checkout refuses every symlink, so drop them here.
-        # Content sync never followed symlinks under the legacy engine.
-        removed = 0
-        for current, dirs, files in os.walk(root):
-            for name in list(dirs) + files:
-                candidate = os.path.join(current, name)
-                if os.path.islink(candidate):
-                    os.unlink(candidate)
-                    removed += 1
-                    if name in dirs:
-                        dirs.remove(name)
-        self.removed_symlinks = removed
-        return removed
-
     def __exit__(self, exc_type, exc, traceback):
         if self.created_worktree and self.temp_dir:
             subprocess.run(

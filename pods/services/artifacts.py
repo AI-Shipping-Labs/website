@@ -392,5 +392,3 @@ def studio_rows(pod, numbers):
     } for artifact in pod_artifacts(pod)]
 
 
-def meeting_numbers(pod, now=None):
-    return meeting_state(pod, now).numbers

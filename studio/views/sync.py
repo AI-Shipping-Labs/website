@@ -705,27 +705,6 @@ def _is_metadata_only_skip(log):
     )
 
 
-def _latest_result_log_for_dashboard(latest_logs):
-    """Pick the newest log with content details for the dashboard table.
-
-    HEAD-unchanged skips only prove the repo is current; they do not carry
-    content-type detail rows. Keep the current skipped status on the card, but
-    render the most recent real sync results instead of a synthetic "Other" row.
-    """
-    logs = list(latest_logs[:50])
-    if not logs:
-        return None
-
-    newest = logs[0]
-    if not _is_metadata_only_skip(newest):
-        return newest
-
-    for log in logs[1:]:
-        if not _is_metadata_only_skip(log):
-            return log
-    return newest
-
-
 def _build_repos_context():
     """Build the per-repo dashboard payload (cards + last batches).
 

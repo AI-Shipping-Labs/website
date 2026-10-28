@@ -155,11 +155,6 @@ def get_test_relay_template_client():
     return _relay_template_client
 
 
-def reset_test_relay_template_client():
-    """Reset the installed template stub so browser tests cannot leak state."""
-    get_test_relay_template_client().reset()
-
-
 def install_test_relay():
     """Point package mail at an offline Relay client for the test run."""
     global _relay_patchers, _relay_template_client

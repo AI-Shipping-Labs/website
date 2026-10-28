@@ -93,10 +93,6 @@ def _ms(start, end):
     return max(0, round((end - start) * 1000))
 
 
-def _datetime_ms(start, end):
-    return max(0, round((end - start).total_seconds() * 1000))
-
-
 def _deadline_timeout():
     return LLMTimeoutError('Onboarding generation exceeded its hard deadline')
 

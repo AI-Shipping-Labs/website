@@ -18,10 +18,6 @@ def plural(count, singular, plural):
     return plural
 
 
-def requests_label(count):
-    return f"{count} pod {plural(count, 'request', 'requests')}"
-
-
 def proposals_label(count):
     return f"{count} pod {plural(count, 'proposal', 'proposals')}"
 

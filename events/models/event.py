@@ -896,10 +896,6 @@ class Event(
         value = self.start_datetime
         return f'{value.strftime("%b")} {value.day}, {value.year}'
 
-    def weekday_date(self):
-        value = self.start_datetime
-        return f'{value.strftime("%a, %b")} {value.day}, {value.year}'
-
     def formatted_time(self):
         return self.start_datetime.strftime('%H:%M UTC')
 

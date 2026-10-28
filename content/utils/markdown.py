@@ -7,7 +7,6 @@ import markdown as markdown_lib
 import nh3
 from django.utils.html import strip_tags
 from markdown_it import MarkdownIt
-from markdown_it.tree import SyntaxTreeNode
 
 from content.markdown_extensions import (
     EventWidgetExtension,
@@ -392,27 +391,6 @@ def _email_plain_block(node, depth=0):
     if node.type == 'html_block':
         return html_lib.unescape(strip_tags(node.content)).strip()
     return _email_plain_children(node, depth)
-
-
-def render_email_plain_text(text):
-    """Render resolved Markdown source as a readable email text body.
-
-    The syntax tree is built directly from Markdown source. This preserves
-    structural boundaries and actionable destinations that would be lost by
-    stripping the already-wrapped HTML email.
-    """
-    if not text:
-        return ''
-    source = normalize_inline_bullets(str(text))
-    root = SyntaxTreeNode(_EMAIL_PLAIN_TEXT_MARKDOWN.parse(source))
-    blocks = []
-    for child in root.children or []:
-        rendered = _email_plain_block(child).strip()
-        if rendered:
-            blocks.append(rendered)
-    plain_text = '\n\n'.join(blocks)
-    plain_text = '\n'.join(line.rstrip() for line in plain_text.splitlines())
-    return re.sub(r'\n{3,}', '\n\n', plain_text).strip()
 
 
 def render_description_html(text):

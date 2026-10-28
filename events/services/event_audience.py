@@ -73,11 +73,6 @@ class AudienceMember:
     def signed_up(self):
         return any(reason.source in SIGNED_UP_REASONS for reason in self.reasons)
 
-    @property
-    def via_cohort(self):
-        return any(reason.source == REASON_COHORT for reason in self.reasons)
-
-
 def registrant_reasons(event) -> Iterator[tuple[int, AudienceReason]]:
     """Yield the event's registrants; a joined registrant counts as attended."""
     rows = EventRegistration.objects.filter(event_id=event.pk).values_list(

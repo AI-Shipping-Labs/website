@@ -156,10 +156,6 @@ class SyncRun:
             self.families[name] = FamilyState(name)
         return self.families[name]
 
-    def record_s3_errors(self, errors):
-        self._media_prepass = self._media_prepass or {'uploaded': 0, 'skipped': 0, 'errors': []}
-        self._media_prepass['errors'].extend(errors)
-
     def record_media_stats(self, stats):
         self._media_prepass = stats
 

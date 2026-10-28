@@ -32,9 +32,5 @@ class EmailChangeRequest(models.Model):
             ),
         ]
 
-    @property
-    def is_pending(self):
-        return self.confirmed_at is None and self.invalidated_at is None
-
     def __str__(self):
         return f"EmailChangeRequest({self.old_email} -> {self.new_email})"

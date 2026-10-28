@@ -431,14 +431,6 @@ def _answers_from_extraction(extraction, persona_catalog):
                 prompt=prompt, question_type='number', number_value=value,
             ))
 
-    def add_choice(prompt, labels):
-        if labels:
-            answers.append(ExtractedAnswer(
-                prompt=prompt,
-                question_type='single_choice',
-                selected_labels=list(labels),
-            ))
-
     outcome = extraction.primary_goal or extraction.target_outcome
     add_text(
         'What would you like to have achieved 6 to 8 weeks from now?',

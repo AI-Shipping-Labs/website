@@ -18,6 +18,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail.backends.base import BaseEmailBackend
 from django.core.mail.message import EmailMessage
+from django.utils.html import escape, linebreaks, urlize
 
 from integrations.config import get_config
 
@@ -164,4 +165,12 @@ def _message_bodies(message: EmailMessage) -> tuple[str, str]:
     if not html_body and getattr(message, "content_subtype", "plain") == "html":
         html_body = message.body
         text_body = ""
+    if text_body and not html_body:
+        # Relay's raw_transactional template renders the HTML part, so a
+        # plain-text-only message (send_mail) would arrive with an empty body.
+        html_body = _text_to_html(text_body)
     return text_body, html_body
+
+
+def _text_to_html(text: str) -> str:
+    return linebreaks(urlize(escape(text)))

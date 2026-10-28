@@ -97,6 +97,23 @@ class TestRelayEmailBackendDirect(SimpleTestCase):
         self.assertEqual(payload["context"]["text_body"], "Plain text body here.")
 
     @patch("email_app.backends.relay.requests.post")
+    def test_plain_text_only_message_sends_text_and_html_body(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200)
+        msg = EmailMessage(
+            subject="Onboarding completed",
+            body="Jane (j@example.com) just completed onboarding.\n\nOpen: https://x.test/a?b=1&c=2\n",
+            from_email="community@aishippinglabs.com",
+            to=["staff@example.com"],
+        )
+
+        self.backend.send_messages([msg])
+
+        context = mock_post.call_args[1]["json"]["context"]
+        self.assertIn("just completed onboarding", context["text_body"])
+        self.assertIn("just completed onboarding", context["html_body"])
+        self.assertIn("b=1&amp;c=2", context["html_body"])
+
+    @patch("email_app.backends.relay.requests.post")
     def test_send_messages_html_alternative(self, mock_post):
         mock_response = MagicMock(status_code=200)
         mock_post.return_value = mock_response

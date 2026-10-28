@@ -281,10 +281,13 @@ class OnboardingSlackChannelTest(TestCase):
             return_value='',
         ):
             with patch('requests.post') as mock_post:
-                self._submit()
-        # No channel -> never attempts the Slack API.
+                with self.assertLogs('crm.services.onboarding_notify', 'WARNING') as logs:
+                    self._submit()
+        # No channel -> never attempts the Slack API, and the skip is logged.
         self.assertEqual(mock_post.call_count, 0)
+        self.assertTrue(any('skipped' in m for m in logs.output))
         self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(mail.outbox[0].body)
         self.assertEqual(
             Notification.objects.filter(
                 notification_type='onboarding_submitted',

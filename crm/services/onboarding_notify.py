@@ -122,9 +122,18 @@ def _post_onboarding_to_slack(*, member, target_url, updated=False):
         return False
     channel_id = get_slack_team_requests_channel_id()
     if not channel_id:
+        logger.warning(
+            'Onboarding-submitted Slack post skipped: no team-requests '
+            'channel configured for the active Slack environment; '
+            'falling back to staff email.',
+        )
         return False
     bot_token = get_config('SLACK_BOT_TOKEN')
     if not bot_token:
+        logger.warning(
+            'Onboarding-submitted Slack post skipped: SLACK_BOT_TOKEN is '
+            'not configured; falling back to staff email.',
+        )
         return False
 
     import requests  # noqa: PLC0415 -- network dep, kept off module top.

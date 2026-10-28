@@ -1,4 +1,4 @@
-.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate qcache sync seed core-link core-unlink test test-core test-affected test-judge test-live-slack-announcement coverage playwright test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
+.PHONY: css-build css-watch check-tailwind collectstatic run run2 worker dev migrate sync seed core-link core-unlink test test-core test-affected test-judge test-live-slack-announcement coverage test-playwright test-playwright-core test-playwright-manual-visual test-visual-regression lint lint-fix lint-advisory check-openapi-drift boot-profile clean
 
 # Default SITE_BASE_URL for local dev so generated links (unsubscribe,
 # calendar invites, password resets, share URLs) point at the running

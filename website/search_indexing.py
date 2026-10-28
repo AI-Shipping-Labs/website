@@ -32,10 +32,6 @@ FACETED_LISTING_QUERY_PARAMS = {
     '/events': frozenset({'filter', 'tag'}),
 }
 
-# Backwards-compatible names retained for #1376 callers and tests.
-DEV_ROBOTS_DIRECTIVE = NOINDEX_ROBOTS_DIRECTIVE
-DEV_ROBOTS_META_CONTENT = NOINDEX_ROBOTS_META_CONTENT
-
 _PRIVATE_PATH_FAMILIES = (
     '/accounts',
     '/account',

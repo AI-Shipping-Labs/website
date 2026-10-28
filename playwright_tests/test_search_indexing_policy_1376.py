@@ -14,7 +14,7 @@ from django.db import connection  # noqa: E402
 from content.models import Article  # noqa: E402
 from integrations.config import clear_config_cache  # noqa: E402
 from integrations.models import IntegrationSetting  # noqa: E402
-from website.search_indexing import DEV_ROBOTS_DIRECTIVE  # noqa: E402
+from website.search_indexing import NOINDEX_ROBOTS_DIRECTIVE  # noqa: E402
 
 pytestmark = pytest.mark.local_only
 
@@ -37,7 +37,7 @@ def _article(slug):
 
 
 def _assert_dev_html(page, response):
-    assert response.headers['x-robots-tag'] == DEV_ROBOTS_DIRECTIVE
+    assert response.headers['x-robots-tag'] == NOINDEX_ROBOTS_DIRECTIVE
     robots = page.locator('meta[name="robots"]')
     assert robots.count() == 1
     assert robots.get_attribute('content') == 'noindex,nofollow,noarchive'

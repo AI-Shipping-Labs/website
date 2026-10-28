@@ -257,10 +257,6 @@ def _refs_for_email(client, email, cache, source):
     return cache[key]
 
 
-def _zoom_refs_for_email(client, email, cache):
-    """Back-compat wrapper: the ``zoom`` refs for one email."""
-    return _refs_for_email(client, email, cache, 'zoom')
-
 #: ``20260420_eli-sample.md`` plan stem -> member slug.
 PLAN_STEM_RE = re.compile(r'^\d{8}_(?P<slug>[a-z0-9-]+)$')
 
@@ -524,7 +520,7 @@ def run_import(
             })
             continue
 
-        existing = _zoom_refs_for_email(client, resolution.email, refs_cache)
+        existing = _refs_for_email(client, resolution.email, refs_cache, 'zoom')
         if apply:
             payload = parsed.payload()
             payload['email'] = resolution.email

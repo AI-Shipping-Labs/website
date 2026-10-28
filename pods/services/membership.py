@@ -20,7 +20,6 @@ from pods.services.membership_common import (
     MSG_SELF_PACED,
     PodError,
     is_member,
-    lock_pod,
     member_count,
     msg_count_below_used,
     pod_url,
@@ -29,9 +28,6 @@ from pods.services.membership_common import (
 )
 from pods.services.pod_fields import clean_pod_fields
 from pods.services.staff_membership import AddResults, add_members_by_email, can_manage, create_staff_pod, update_pod
-
-# Retain the private name for the existing PostgreSQL lock regression.
-_lock = lock_pod
 
 __all__ = [
     "AddResults",

@@ -162,7 +162,7 @@ class WorkerLivenessTest(TestCase):
     def test_state_not_running_when_no_clusters(self):
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.get('/studio/worker/')
-        self.assertFalse(response.context['worker_alive'])
+        self.assertFalse(response.context['worker_info']['alive'])
         # Red banner with explicit "NOT running" wording and start command
         self.assertContains(response, 'Worker NOT running')
         self.assertContains(response, 'manage.py qcluster')
@@ -173,8 +173,8 @@ class WorkerLivenessTest(TestCase):
         )
         with patch('studio.worker_health.Stat.get_all', return_value=[cluster]):
             response = self.client.get('/studio/worker/')
-        self.assertTrue(response.context['worker_alive'])
-        self.assertTrue(response.context['worker_idle'])
+        self.assertTrue(response.context['worker_info']['alive'])
+        self.assertTrue(response.context['worker_info']['idle'])
         self.assertContains(response, 'Worker running (idle)')
 
     def test_state_running_busy_when_queue_has_tasks(self):
@@ -183,8 +183,8 @@ class WorkerLivenessTest(TestCase):
         )
         with patch('studio.worker_health.Stat.get_all', return_value=[cluster]):
             response = self.client.get('/studio/worker/')
-        self.assertTrue(response.context['worker_alive'])
-        self.assertFalse(response.context['worker_idle'])
+        self.assertTrue(response.context['worker_info']['alive'])
+        self.assertFalse(response.context['worker_info']['idle'])
         # Should show "Worker running" but not "(idle)"
         self.assertContains(response, 'Worker running')
         self.assertNotContains(response, 'Worker running (idle)')
@@ -206,7 +206,7 @@ class WorkerLivenessTest(TestCase):
         )
         with patch('studio.worker_health.Stat.get_all', return_value=[]):
             response = self.client.get('/studio/worker/')
-        self.assertFalse(response.context['worker_alive'])
+        self.assertFalse(response.context['worker_info']['alive'])
         self.assertContains(response, 'Worker NOT running')
 
     def test_idle_worker_with_no_recent_tasks_still_alive(self):
@@ -214,7 +214,7 @@ class WorkerLivenessTest(TestCase):
         cluster = _fake_cluster(heartbeat_age_seconds=5.0)
         with patch('studio.worker_health.Stat.get_all', return_value=[cluster]):
             response = self.client.get('/studio/worker/')
-        self.assertTrue(response.context['worker_alive'])
+        self.assertTrue(response.context['worker_info']['alive'])
         # No Task rows exist — but heartbeat is fresh
         self.assertEqual(Task.objects.count(), 0)
 
@@ -224,7 +224,7 @@ class WorkerLivenessTest(TestCase):
             side_effect=ConnectionError('broker unreachable'),
         ), self.assertLogs('studio.worker_health', level='WARNING') as logs:
             response = self.client.get('/studio/worker/')
-        self.assertFalse(response.context['worker_alive'])
+        self.assertFalse(response.context['worker_info']['alive'])
         self.assertContains(response, 'broker unreachable')
         self.assertIn(
             'Failed to query django-q cluster status: broker unreachable',

@@ -20,7 +20,6 @@ from integrations.config import get_config
 logger = logging.getLogger(__name__)
 
 EMAIL_TYPE = 'event_recording_ready'
-_build_context = build_recording_ready_context
 
 
 @dataclass(frozen=True)

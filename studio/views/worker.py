@@ -275,11 +275,6 @@ def worker_status(request):
         {
             "worker_info": worker_info,
             "schedule_reconciliation": schedule_reconciliation,
-            # Backwards-compatible aliases used by older template fragments / tests.
-            "worker_alive": worker_info["alive"],
-            "worker_idle": worker_info["idle"],
-            "last_heartbeat_age": worker_info["last_heartbeat_age"],
-            "cluster_count": worker_info["cluster_count"],
             "queue_depth": pending["queue_depth"],
             "queued_tasks": pending["queued_tasks"],
             # Pending keeps its existing independent pager context.

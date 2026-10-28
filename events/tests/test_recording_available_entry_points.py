@@ -15,7 +15,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, tag
 
 from events.models import Event
-from events.services.recording_ready_notification import _build_context
+from events.services.recording_ready_context import build_recording_ready_context
 
 User = get_user_model()
 UTC = dt_timezone.utc
@@ -31,7 +31,7 @@ class RecordingReadyEmailCtaTest(TestCase):
             status='completed',
             recording_url='https://youtube.com/watch?v=agents',
         )
-        context = _build_context(event)
+        context = build_recording_ready_context(event)
         self.assertIn('campaign_prefill_url', context)
         self.assertIn(
             f'/studio/campaigns/new?event={event.pk}'

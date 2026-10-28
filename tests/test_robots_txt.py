@@ -10,7 +10,7 @@ from analytics.models import CampaignVisit
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from website.robots import robots_txt
-from website.search_indexing import DEV_ROBOTS_DIRECTIVE
+from website.search_indexing import NOINDEX_ROBOTS_DIRECTIVE
 
 PRODUCTION_URL = 'https://aishippinglabs.com'
 PRODUCTION_BODY = (
@@ -117,7 +117,7 @@ class DevRobotsResponseTest(RobotsConfigMixin, TestCase):
         self.assertEqual(response.content.decode(), NON_PRODUCTION_BODY)
         self.assertNotIn('Disallow:', response.content.decode())
         self.assertNotIn('Sitemap:', response.content.decode())
-        self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
 
     def test_crawl_targets_keep_status_body_and_environment_header(self):
         robots = self.client.get('/robots.txt')
@@ -135,7 +135,7 @@ class DevRobotsResponseTest(RobotsConfigMixin, TestCase):
         )
         self.assertTrue(responses[1].content)
         for response in responses:
-            self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+            self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
 
 
 @tag('core')
@@ -159,7 +159,7 @@ class DevHostRobotsResponseTest(RobotsConfigMixin, TestCase):
         self.assertEqual(response.content.decode(), NON_PRODUCTION_BODY)
         self.assertNotIn('Sitemap:', response.content.decode())
         self.assertNotContains(response, 'aishippinglabs.com')
-        self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
         self.assertEqual(response['Cache-Control'], 'no-store, max-age=0')
 
     def test_prod_host_keeps_full_production_robots(self):

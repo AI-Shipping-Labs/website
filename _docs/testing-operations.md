@@ -84,7 +84,7 @@ Playwright E2E tests are a separate validation gate and are not folded into the
 
 ```bash
 make coverage      # optional exhaustive local Django/runtime coverage, 85% minimum; not what CI invokes
-make playwright    # browser E2E scenarios
+make test-playwright    # browser E2E scenarios
 ```
 
 Playwright source files are not counted as uncovered Django coverage debt unless

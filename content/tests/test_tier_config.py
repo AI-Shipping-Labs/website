@@ -2,7 +2,7 @@ from django.test import TestCase
 
 from content.models import SiteConfig
 from content.tier_config import (
-    get_activities,
+    get_membership_benefits,
     get_tiers,
     get_tiers_with_features,
 )
@@ -144,35 +144,35 @@ class GetTiersWithFeaturesTest(TestCase):
 
 
 class GetActivitiesTest(TestCase):
-    """Tests for the get_activities() function (activities page data)."""
+    """Tests for the get_membership_benefits() function (activities page data)."""
 
     @classmethod
     def setUpTestData(cls):
         _seed_tiers()
 
     def test_returns_all_activities(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         self.assertEqual(len(activities), 3)
         titles = [a['title'] for a in activities]
         self.assertEqual(titles, ['Activity A', 'Activity B', 'Activity C'])
 
     def test_basic_activity_inherits_to_all_tiers(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         activity_a = activities[0]
         self.assertEqual(activity_a['tiers'], ['basic', 'main', 'premium'])
 
     def test_main_activity_inherits_to_main_and_premium(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         activity_b = activities[1]
         self.assertEqual(activity_b['tiers'], ['main', 'premium'])
 
     def test_premium_activity_only_in_premium(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         activity_c = activities[2]
         self.assertEqual(activity_c['tiers'], ['premium'])
 
     def test_activity_dict_has_required_keys(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         for activity in activities:
             self.assertIn('icon', activity)
             self.assertIn('title', activity)
@@ -182,7 +182,7 @@ class GetActivitiesTest(TestCase):
             self.assertIn('action_url', activity)
 
     def test_activity_dict_has_default_action_metadata(self):
-        activities = get_activities()
+        activities = get_membership_benefits()
         self.assertEqual(activities[0]['action_label'], 'Compare membership options')
         self.assertEqual(activities[0]['action_url'], '/membership')
 
@@ -211,7 +211,7 @@ class GetActivitiesTest(TestCase):
                 },
             ]},
         )
-        activities = get_activities()
+        activities = get_membership_benefits()
         self.assertEqual(activities[0]['description'], 'padded text')
 
     def test_deduplicates_activities_by_title(self):
@@ -249,7 +249,7 @@ class GetActivitiesTest(TestCase):
                 },
             ]},
         )
-        activities = get_activities()
+        activities = get_membership_benefits()
         shared = [a for a in activities if a['title'] == 'Shared']
         self.assertEqual(len(shared), 1)
         self.assertEqual(shared[0]['icon'], 'a')  # first occurrence wins
@@ -257,7 +257,7 @@ class GetActivitiesTest(TestCase):
     def test_duplicate_activity_does_not_skip_later_unique_activity_in_same_tier(self):
         """Regression: a duplicate title must not stop scanning the rest of the tier's activities.
 
-        If the dedup branch in get_activities() were `break` instead of `continue`,
+        If the dedup branch in get_membership_benefits() were `break` instead of `continue`,
         the distinct 'Unique After Dup' activity would be dropped. This test pins
         that behavior so a mutation flipping `continue` -> `break` is detected.
         """
@@ -297,7 +297,7 @@ class GetActivitiesTest(TestCase):
                 },
             ]},
         )
-        activities = get_activities()
+        activities = get_membership_benefits()
         titles = [a['title'] for a in activities]
         # The unique activity that comes AFTER the duplicate must still be present.
         self.assertIn('Unique After Dup', titles)
@@ -359,11 +359,11 @@ class ProductionYamlTest(TestCase):
         self.assertEqual(len(tiers[2]['benefits']), 3)
 
     def test_total_benefits_is_10(self):
-        benefits = get_activities()
+        benefits = get_membership_benefits()
         self.assertEqual(len(benefits), 10)
 
     def test_benefit_inheritance_counts(self):
-        benefits = get_activities()
+        benefits = get_membership_benefits()
         basic_count = len([a for a in benefits if 'basic' in a['tiers']])
         main_count = len([a for a in benefits if 'main' in a['tiers']])
         premium_count = len([a for a in benefits if 'premium' in a['tiers']])

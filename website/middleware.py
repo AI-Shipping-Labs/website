@@ -121,10 +121,6 @@ class SearchIndexingPolicyMiddleware:
         return response
 
 
-# Compatibility import for tests/extensions written against issue #1376.
-DevSearchExclusionMiddleware = SearchIndexingPolicyMiddleware
-
-
 _CRAWLER_USER_AGENT_RE = re.compile(
     r'(?:^|[^a-z0-9])(?:[a-z0-9._-]*(?:bot|crawler|spider))'
     r'(?:$|[/\s;,+()])',

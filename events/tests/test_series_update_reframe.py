@@ -6,7 +6,7 @@ Covers:
 - ``build_series_template_context`` for ``series_update`` with a changed
   occurrence + old start: the changed line shows old -> new, unchanged lines
   show a single time, and ``event_title`` names the changed occurrence.
-- ``_render_series_email`` forwards the native context to Relay and returns
+- ``render_series_email`` forwards the native context to Relay and returns
   the remote preview response.
 - No-old-start (auto-enroll addition) keeps the whole-series framing.
 - A subscriber whose accessible list does not include the changed occurrence
@@ -39,11 +39,8 @@ from events.models import (
     EventSeries,
     SeriesRegistration,
 )
-from events.services.series_email_context import build_series_template_context
-from events.services.series_invite import (
-    _render_series_email,
-    send_series_update_to_subscribers,
-)
+from events.services.series_email_context import build_series_template_context, render_series_email
+from events.services.series_invite import send_series_update_to_subscribers
 from tests.fixtures import TierSetupMixin
 
 User = get_user_model()
@@ -196,7 +193,7 @@ class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
 
         self.assertIn(f'{expected_weekday}, ', context['occurrences_list'])
 
-    def test_render_series_email_uses_relay_preview_result_and_context(self):
+    def testrender_series_email_uses_relay_preview_result_and_context(self):
         relay = Mock()
         relay.preview.return_value = {
             'subject': 'Relay series update subject',
@@ -207,7 +204,7 @@ class RenderSeriesUpdateBodyTest(TierSetupMixin, TestCase):
             'events.services.series_email_context.configured_template_client',
             return_value=relay,
         ):
-            subject, html = _render_series_email(
+            subject, html = render_series_email(
                 'series_update', self.user, self.series,
                 [self.changed, self.other], 'series_update',
                 changed_event=self.changed, old_start=self.old_start,

@@ -148,7 +148,3 @@ def build_pod_rows(activity, viewer, *, now=None):
     rows.sort(key=_row_sort_key)
     return rows, availability.get(viewer.pk)
 
-
-def pending_count_for_owner(cohort, user):
-    """Compatibility value after join-request badges were retired."""
-    return 0

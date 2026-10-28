@@ -49,10 +49,6 @@ migrate:
 	uv run python manage.py makemigrations
 	uv run python manage.py migrate
 
-# Backwards-compat alias for older muscle-memory: ``make qcache`` used to
-# run ``migrate`` then ``createcachetable``. Now it's just ``migrate``.
-qcache: migrate
-
 # Sync content from local content repo clone
 # Override repo path: make sync CONTENT_REPO=~/other/path
 CONTENT_REPO ?= _content-repo
@@ -188,10 +184,6 @@ test-visual-regression: css-build
 		exit 0; \
 	fi; \
 	exit $$status
-
-# Backwards-compat alias for older muscle-memory: `make playwright` runs the
-# full Playwright suite (same as `make test-playwright`).
-playwright: test-playwright
 
 # Run all tests (Django + Playwright)
 test-all: test test-playwright

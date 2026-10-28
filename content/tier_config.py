@@ -170,7 +170,3 @@ def get_membership_benefits():
 
     return benefits
 
-
-def get_activities():
-    """Backward-compatible alias for callers using the former name."""
-    return get_membership_benefits()

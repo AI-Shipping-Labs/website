@@ -11,9 +11,9 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from content.models import Article
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
-from website.middleware import DevSearchExclusionMiddleware
+from website.middleware import SearchIndexingPolicyMiddleware
 from website.search_indexing import (
-    DEV_ROBOTS_DIRECTIVE,
+    NOINDEX_ROBOTS_DIRECTIVE,
     dev_serving_disabled,
     request_targets_dev_host,
     search_indexing_disabled,
@@ -96,7 +96,7 @@ class DevHostRequestPolicyTest(TestCase):
     def test_dev_host_homepage_has_noindex_meta_and_no_canonical(self):
         response = self.client.get('/', HTTP_HOST='dev.aishippinglabs.com')
 
-        self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
         html = response.content.decode()
         self.assertIn('name="robots" content="noindex,nofollow,noarchive"', html)
         self.assertNotIn('<link rel="canonical"', html)
@@ -115,8 +115,8 @@ class DevHostRequestPolicyTest(TestCase):
 
         self.assertTrue(ping_response.content)
         self.assertEqual(missing_response.status_code, 404)
-        self.assertEqual(ping_response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
-        self.assertEqual(missing_response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(ping_response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
+        self.assertEqual(missing_response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
 
 
 @override_settings(SITE_BASE_URL='https://dev.aishippinglabs.com')
@@ -131,7 +131,7 @@ class DevSearchExclusionResponseTest(TestCase):
         clear_config_cache()
 
     def assertDevHeader(self, response):
-        self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
 
     @tag('core')
     def test_public_dev_html_has_one_robots_meta_no_canonical_and_dev_og_url(self):
@@ -220,9 +220,9 @@ class DevSearchExclusionMiddlewareResponseTypeTest(SimpleTestCase):
 
         for expected in responses:
             with self.subTest(status=expected.status_code):
-                middleware = DevSearchExclusionMiddleware(lambda _request: expected)
+                middleware = SearchIndexingPolicyMiddleware(lambda _request: expected)
                 response = middleware(request)
-                self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+                self.assertEqual(response['X-Robots-Tag'], NOINDEX_ROBOTS_DIRECTIVE)
 
 
 @tag('core')

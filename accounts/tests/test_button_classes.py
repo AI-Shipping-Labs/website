@@ -11,9 +11,9 @@ from django.utils import timezone
 
 from accounts.templatetags.accounts_extras import (
     PRODUCT_BUTTON_BASE_CLASSES,
-    PRODUCT_BUTTON_CLASSES,
     PRODUCT_BUTTON_SIZE_CLASSES,
     PRODUCT_BUTTON_VARIANT_CLASSES,
+    _compose_button_classes,
     button_classes,
 )
 from plans.models import Plan, Sprint, SprintEnrollment
@@ -37,18 +37,18 @@ def _tag_class(html, marker):
 
 class ButtonClassesTagTest(TestCase):
     def test_primary_secondary_and_destructive_variants_return_canonical_strings(self):
-        self.assertEqual(button_classes('primary'), PRODUCT_BUTTON_CLASSES['primary'])
+        self.assertEqual(button_classes('primary'), _compose_button_classes('primary', 'md'))
         self.assertEqual(
-            button_classes('secondary'), PRODUCT_BUTTON_CLASSES['secondary'],
+            button_classes('secondary'), _compose_button_classes('secondary', 'md'),
         )
         self.assertEqual(
-            button_classes('destructive'), PRODUCT_BUTTON_CLASSES['destructive'],
+            button_classes('destructive'), _compose_button_classes('destructive', 'md'),
         )
 
     def test_extra_classes_are_appended(self):
         self.assertEqual(
             button_classes('primary', 'w-full sm:w-auto'),
-            f"{PRODUCT_BUTTON_CLASSES['primary']} w-full sm:w-auto",
+            f"{_compose_button_classes('primary', 'md')} w-full sm:w-auto",
         )
 
     def test_unknown_variant_raises_template_syntax_error(self):
@@ -74,11 +74,11 @@ class ButtonClassesTagTest(TestCase):
             with self.subTest(variant=variant):
                 self.assertEqual(
                     button_classes(variant),
-                    PRODUCT_BUTTON_CLASSES[variant],
+                    _compose_button_classes(variant, "md"),
                 )
                 self.assertEqual(
                     button_classes(variant, size='md'),
-                    PRODUCT_BUTTON_CLASSES[variant],
+                    _compose_button_classes(variant, "md"),
                 )
 
     def test_sm_size_renders_compact_class_string_without_min_height(self):
@@ -122,7 +122,7 @@ class ButtonClassesTagTest(TestCase):
         result = button_classes('secondary', 'shrink-0')
         self.assertEqual(
             result,
-            f"{PRODUCT_BUTTON_CLASSES['secondary']} shrink-0",
+            f"{_compose_button_classes('secondary', 'md')} shrink-0",
         )
 
     def test_size_lg_with_extra_appends_classes_after_canonical(self):
@@ -175,7 +175,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             _tag_class(html, 'data-testid="account-sprint-plan-cohort"'),
-            PRODUCT_BUTTON_CLASSES['secondary'],
+            _compose_button_classes('secondary', 'md'),
         )
         self.assertEqual(
             _tag_class(html, 'data-testid="account-sprint-plan-open"'),
@@ -208,18 +208,18 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             _tag_class(html, 'id="profile-save-btn"'),
-            PRODUCT_BUTTON_CLASSES['primary'],
+            _compose_button_classes('primary', 'md'),
         )
         self.assertEqual(
             _tag_class(html, 'id="manage-subscription-btn"'),
-            PRODUCT_BUTTON_CLASSES['primary'],
+            _compose_button_classes('primary', 'md'),
         )
         self.assertNotIn('id="upgrade-btn"', html)
         self.assertNotIn('id="downgrade-btn"', html)
         self.assertNotIn('id="cancel-btn"', html)
         self.assertEqual(
             _tag_class(html, 'id="save-timezone-btn"'),
-            PRODUCT_BUTTON_CLASSES['primary'],
+            _compose_button_classes('primary', 'md'),
         )
         self.assertNotIn('id="clear-timezone-btn"', html)
 
@@ -236,7 +236,7 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         button_class = _tag_class(html, 'id="resend-verification-btn"')
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(PRODUCT_BUTTON_CLASSES['secondary'], button_class)
+        self.assertIn(_compose_button_classes('secondary', 'md'), button_class)
         self.assertIn('!border-amber-500/40', button_class)
         self.assertIn('!text-amber-900', button_class)
         self.assertIn('dark:!text-amber-100', button_class)
@@ -269,11 +269,11 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             _tag_class(html, 'data-testid="view-sprint-detail-cta"'),
-            PRODUCT_BUTTON_CLASSES['secondary'],
+            _compose_button_classes('secondary', 'md'),
         )
         self.assertEqual(
             _tag_class(html, 'data-testid="view-cohort-board-cta"'),
-            PRODUCT_BUTTON_CLASSES['secondary'],
+            _compose_button_classes('secondary', 'md'),
         )
 
     def test_inline_plan_body_buttons_remain_compact_exceptions(self):

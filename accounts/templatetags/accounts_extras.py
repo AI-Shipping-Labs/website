@@ -76,15 +76,6 @@ def _compose_button_classes(variant, size):
     )
 
 
-# Backwards-compatible alias: the original constant exposed one class
-# string per variant (the ``md`` size). Keep the same shape so callers
-# importing ``PRODUCT_BUTTON_CLASSES`` continue to work.
-PRODUCT_BUTTON_CLASSES = {
-    variant: _compose_button_classes(variant, 'md')
-    for variant in PRODUCT_BUTTON_VARIANT_CLASSES
-}
-
-
 @register.simple_tag
 def button_classes(variant, size_or_extra='', size='md', extra=''):
     """Return canonical product-surface button classes.

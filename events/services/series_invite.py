@@ -10,13 +10,9 @@ from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.registration_email import _send_calendar_email
 from events.services.series_email_context import (
     build_series_subject_context,
-    render_series_email,
-    render_series_email_parts,
 )
 
 logger = logging.getLogger(__name__)
-_render_series_email = render_series_email
-_render_series_email_parts = render_series_email_parts
 
 
 def _subscriber_upcoming_events(user, series):

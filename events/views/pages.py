@@ -32,6 +32,7 @@ from content.access import (
 )
 from content.caching import cache_anonymous_page
 from content.services.related_content import build_related_content_rail
+from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.models import (
     Event,
     EventFeedback,
@@ -97,26 +98,6 @@ PUBLIC_BOOK_RELATIONSHIP_STATUSES = (
     BOOK_STATUS_FINISHED,
 )
 PUBLIC_SPRINT_RELATIONSHIP_STATUSES = ('active', 'completed')
-
-
-def _get_selected_tags(request):
-    """Extract selected tags from query params. Supports ?tag=X&tag=Y."""
-    return [t.strip() for t in request.GET.getlist('tag') if t.strip()]
-
-
-def _filter_by_tags(queryset, selected_tags):
-    """Filter a queryset by multiple tags with AND logic.
-
-    Returns a filtered queryset containing only items that have ALL selected tags.
-    """
-    if not selected_tags:
-        return queryset
-    matching_ids = []
-    for obj in queryset:
-        obj_tags = set(obj.tags or [])
-        if all(tag in obj_tags for tag in selected_tags):
-            matching_ids.append(obj.pk)
-    return queryset.filter(pk__in=matching_ids)
 
 
 def _pagination_query_prefix(request):

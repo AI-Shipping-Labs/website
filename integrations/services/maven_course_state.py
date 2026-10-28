@@ -38,6 +38,7 @@ def _register_event_series(user, cohort, actions):
 
 
 def _cohort_event_series(cohort):
+    """Return the cohort's linked ``EventSeries``, or ``None``."""
     if not getattr(cohort, 'event_series_id', None):
         return None
     return getattr(cohort, 'event_series', None)

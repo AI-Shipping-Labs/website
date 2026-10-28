@@ -35,6 +35,7 @@ from integrations.maven_config import (
 )
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven_course_state import (
+    _cohort_event_series,
     grant_maven_course_state,
     revoke_maven_course_access,
 )
@@ -1100,18 +1101,6 @@ def _enrollment_notification_entitlement(occurrence):
     if grant is not None and grant.expires_at not in expiry_candidates:
         expiry_candidates.append(grant.expires_at)
     return tier, max(expiry_candidates)
-
-
-def _cohort_event_series(cohort):
-    """Return the cohort's linked ``EventSeries``, or ``None``.
-
-    Reads ``event_series`` defensively (issue #1660 adds the field to
-    ``Cohort`` on a parallel track): ``getattr`` with a default so this
-    ships and stays a clean no-op whether or not that field has landed yet.
-    """
-    if not getattr(cohort, "event_series_id", None):
-        return None
-    return getattr(cohort, "event_series", None)
 
 
 def _run_enrollment_step(row, actions):

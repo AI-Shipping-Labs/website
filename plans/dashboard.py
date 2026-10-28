@@ -23,23 +23,11 @@ from accounts.utils.user_checks import is_authenticated_user
 from content.access import LEVEL_OPEN, get_required_tier_name
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import annotate_plan_progress
+from plans.sprint_dates import created_timestamp, is_current_sprint, is_upcoming_sprint
 from plans.tasks.sprint_end import (
     build_sprint_end_next_action,
     get_member_sprint_feedback_response,
 )
-
-
-def _created_timestamp(obj):
-    value = getattr(obj, 'created_at', None)
-    return value.timestamp() if value is not None else 0
-
-
-def _is_current(sprint, today):
-    return sprint.start_date <= today <= sprint.end_date
-
-
-def _is_upcoming(sprint, today):
-    return today < sprint.start_date
 
 
 def _select_dashboard_shared_plan(plans, *, today=None):
@@ -53,34 +41,34 @@ def _select_dashboard_shared_plan(plans, *, today=None):
         today = timezone.localdate()
 
     current_plans = [
-        plan for plan in shared_plans if _is_current(plan.sprint, today)
+        plan for plan in shared_plans if is_current_sprint(plan.sprint, today)
     ]
     if current_plans:
         return max(
             current_plans,
             key=lambda item: (
                 item.sprint.start_date,
-                _created_timestamp(item),
+                created_timestamp(item),
                 item.pk,
             ),
         )
 
     upcoming_plans = [
-        plan for plan in shared_plans if _is_upcoming(plan.sprint, today)
+        plan for plan in shared_plans if is_upcoming_sprint(plan.sprint, today)
     ]
     if upcoming_plans:
         return min(
             upcoming_plans,
             key=lambda item: (
                 item.sprint.start_date,
-                -_created_timestamp(item),
+                -created_timestamp(item),
                 -item.pk,
             ),
         )
 
     return max(
         shared_plans,
-        key=lambda item: (_created_timestamp(item), item.pk),
+        key=lambda item: (created_timestamp(item), item.pk),
     )
 
 

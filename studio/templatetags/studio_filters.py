@@ -19,6 +19,7 @@ from content.access import (
     LEVEL_PREMIUM,
     LEVEL_REGISTERED,
 )
+from content.templatetags.access_tags import dict_get
 from email_app import ses_explain
 from integrations.config import site_base_url
 from integrations.models.utm_campaign import UTM_MEDIUM_PRESETS, UTM_SOURCE_PRESETS
@@ -27,6 +28,7 @@ from studio.utils import get_github_edit_url, is_synced
 from studio.worker_health import get_worker_status
 
 register = template.Library()
+register.filter("dict_get", dict_get)
 
 
 LIST_TABLE_WRAPPER_CLASS = 'studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto'
@@ -185,14 +187,6 @@ _MARKDOWN_LINK_RE = re.compile(r'\[([^\]]+)\]\([^)]+\)')
 _MARKDOWN_MARKER_RE = re.compile(r'(?m)^\s{0,3}(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s?)')
 _WHITESPACE_RE = re.compile(r'\s+')
 _LOCAL_SITE_HOSTS = {'localhost', '127.0.0.1', '0.0.0.0', '::1'}
-
-
-@register.filter
-def dict_get(dictionary, key):
-    """Look up a key in a dictionary. Returns None if key is missing."""
-    if isinstance(dictionary, dict):
-        return dictionary.get(key)
-    return None
 
 
 def _seconds_from_duration(value):

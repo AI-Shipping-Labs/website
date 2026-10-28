@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
 from payments.models import CheckoutFulfillment, PaymentAccountMismatch
@@ -26,10 +27,6 @@ def _user_payload(user):
     if user is None:
         return None
     return {"id": user.pk, "email": user.email}
-
-
-def _dt(value):
-    return value.isoformat() if value else None
 
 
 def _serialize_fulfillment(fulfillment):
@@ -55,8 +52,8 @@ def _serialize_fulfillment(fulfillment):
             }
             if binding is not None else None
         ),
-        "created_at": _dt(fulfillment.created_at),
-        "updated_at": _dt(fulfillment.updated_at),
+        "created_at": isoformat_or_none(fulfillment.created_at),
+        "updated_at": isoformat_or_none(fulfillment.updated_at),
     }
 
 
@@ -83,9 +80,9 @@ def _serialize_mismatch(mismatch, fulfillment=None):
         "outcome": _operator_outcome(mismatch, fulfillment),
         "fulfillment": _serialize_fulfillment(fulfillment),
         "details": mismatch.details,
-        "created_at": _dt(mismatch.created_at),
-        "updated_at": _dt(mismatch.updated_at),
-        "resolved_at": _dt(mismatch.resolved_at),
+        "created_at": isoformat_or_none(mismatch.created_at),
+        "updated_at": isoformat_or_none(mismatch.updated_at),
+        "resolved_at": isoformat_or_none(mismatch.resolved_at),
         "resolved_by": _user_payload(mismatch.resolved_by),
         "resolution_note": mismatch.resolution_note,
     }

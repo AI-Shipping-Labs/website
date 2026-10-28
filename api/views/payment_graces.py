@@ -7,6 +7,7 @@ from django.utils.dateparse import parse_datetime
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import require_methods
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.services.monthly_payment_grace import _effective_tier
@@ -18,10 +19,6 @@ VALID_DELIVERY_STATUS = {"pending", "sent", "failed", "suppressed"}
 PAGE_SIZE = 100
 
 
-def _dt(value):
-    return value.isoformat() if value else None
-
-
 def _serialize(grace, *, detail=False):
     effective = _effective_tier(grace.user)
     deliveries = [
@@ -30,9 +27,9 @@ def _serialize(grace, *, detail=False):
             "status": delivery.status,
             "recipient": delivery.recipient,
             "attempt_count": delivery.attempt_count,
-            "last_attempt_at": _dt(delivery.last_attempt_at),
-            "transport_started_at": _dt(delivery.transport_started_at),
-            "sent_at": _dt(delivery.sent_at),
+            "last_attempt_at": isoformat_or_none(delivery.last_attempt_at),
+            "transport_started_at": isoformat_or_none(delivery.transport_started_at),
+            "sent_at": isoformat_or_none(delivery.sent_at),
             "last_error": delivery.last_error,
         }
         for delivery in grace.deliveries.all()
@@ -56,13 +53,13 @@ def _serialize(grace, *, detail=False):
         "livemode": grace.livemode,
         "interval": grace.interval,
         "interval_count": grace.interval_count,
-        "grace_started_at": _dt(grace.grace_started_at),
-        "grace_expires_at": _dt(grace.grace_expires_at),
-        "effective_expires_at": _dt(grace.effective_expires_at),
-        "policy_enforced_at": _dt(grace.policy_enforced_at),
-        "recovered_at": _dt(grace.recovered_at),
-        "expired_at": _dt(grace.expired_at),
-        "last_checked_at": _dt(grace.last_checked_at),
+        "grace_started_at": isoformat_or_none(grace.grace_started_at),
+        "grace_expires_at": isoformat_or_none(grace.grace_expires_at),
+        "effective_expires_at": isoformat_or_none(grace.effective_expires_at),
+        "policy_enforced_at": isoformat_or_none(grace.policy_enforced_at),
+        "recovered_at": isoformat_or_none(grace.recovered_at),
+        "expired_at": isoformat_or_none(grace.expired_at),
+        "last_checked_at": isoformat_or_none(grace.last_checked_at),
         "review": {
             "code": grace.last_error_code,
             "message": grace.last_error_message,
@@ -74,8 +71,8 @@ def _serialize(grace, *, detail=False):
             "last_failure_event_id": grace.last_failure_event_id,
             "recovery_event_id": grace.recovery_event_id,
         }
-        data["created_at"] = _dt(grace.created_at)
-        data["updated_at"] = _dt(grace.updated_at)
+        data["created_at"] = isoformat_or_none(grace.created_at)
+        data["updated_at"] = isoformat_or_none(grace.updated_at)
     return data
 
 

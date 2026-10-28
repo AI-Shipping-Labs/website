@@ -40,6 +40,7 @@ from django.utils import timezone
 from booking.models.booking import STATUS_CONFIRMED, Booking
 from crm.models.call import Call
 from crm.services.calls import record_call
+from events.services.recording_transcript import _extract_transcript_url
 from integrations.config import (
     crm_call_capture_enabled,
     crm_call_summary_autosend_enabled,
@@ -528,14 +529,6 @@ def _mark_unavailable(call, reason, attempts=None, *, now=None):
         call.pk, reason,
     )
     return {'status': 'unavailable', 'reason': reason}
-
-
-def _extract_transcript_url(recording_files):
-    """The ``audio_transcript`` download URL (same pick as events)."""
-    for rec_file in recording_files:
-        if rec_file.get('recording_type') == 'audio_transcript':
-            return (rec_file.get('download_url') or '').strip()
-    return ''
 
 
 def _extract_share_url(data):

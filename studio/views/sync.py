@@ -693,18 +693,6 @@ def _aggregate_batch(logs, *, structured_errors=None):
     }
 
 
-def _is_metadata_only_skip(log):
-    """Return True for HEAD-unchanged skips that contain no content results."""
-    return (
-        log.status == 'skipped'
-        and not (log.items_detail or [])
-        and not log.items_created
-        and not log.items_updated
-        and not log.items_unchanged
-        and not log.items_deleted
-    )
-
-
 def _build_repos_context():
     """Build the per-repo dashboard payload (cards + last batches).
 

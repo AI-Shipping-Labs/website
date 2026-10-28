@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.gating import is_newsletter_only_user
 from plans.models import Plan, SprintEnrollment
+from plans.sprint_dates import created_timestamp, is_current_sprint, is_upcoming_sprint
 
 register = template.Library()
 
@@ -37,19 +38,6 @@ def _cohort_board_url(sprint):
 
 def _sprint_detail_url(sprint):
     return reverse('sprint_detail', kwargs={'sprint_slug': sprint.slug})
-
-
-def _is_current(sprint, today):
-    return sprint.start_date <= today <= sprint.end_date
-
-
-def _is_upcoming(sprint, today):
-    return today < sprint.start_date
-
-
-def _created_timestamp(obj):
-    value = getattr(obj, 'created_at', None)
-    return value.timestamp() if value is not None else 0
 
 
 def _enrolled_timestamp(enrollment):
@@ -94,28 +82,28 @@ def resolve_header_sprint_shortcut(
         ]
 
     current_plans = [
-        plan for plan in plans if _is_current(plan.sprint, today)
+        plan for plan in plans if is_current_sprint(plan.sprint, today)
     ]
     if current_plans:
         plan = max(
             current_plans,
             key=lambda item: (
                 item.sprint.start_date,
-                _created_timestamp(item),
+                created_timestamp(item),
                 item.pk,
             ),
         )
         return HeaderSprintShortcut(label='Plan', href=_plan_url(plan))
 
     upcoming_plans = [
-        plan for plan in plans if _is_upcoming(plan.sprint, today)
+        plan for plan in plans if is_upcoming_sprint(plan.sprint, today)
     ]
     if upcoming_plans:
         plan = min(
             upcoming_plans,
             key=lambda item: (
                 item.sprint.start_date,
-                -_created_timestamp(item),
+                -created_timestamp(item),
                 -item.pk,
             ),
         )
@@ -139,7 +127,7 @@ def resolve_header_sprint_shortcut(
     current_enrollments = [
         enrollment
         for enrollment in enrollments
-        if _is_current(enrollment.sprint, today)
+        if is_current_sprint(enrollment.sprint, today)
     ]
     if current_enrollments:
         enrollment = max(
@@ -158,7 +146,7 @@ def resolve_header_sprint_shortcut(
     upcoming_enrollments = [
         enrollment
         for enrollment in enrollments
-        if _is_upcoming(enrollment.sprint, today)
+        if is_upcoming_sprint(enrollment.sprint, today)
     ]
     if upcoming_enrollments:
         enrollment = min(

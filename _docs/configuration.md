@@ -19,9 +19,9 @@ These variables are read at process start, before the DB is reachable, used dire
 | `S3_ENABLED` | prod content images | Must be `true` to upload synced content images to S3. Defaults `false`; forced false under `manage.py test`. Existing CDN URLs continue to resolve, but new image uploads are skipped. |
 | `SLACK_ENABLED` | prod Slack bot/imports | Must be `true` at process start to let Slack bot/import credentials survive settings import. Studio also has a `SLACK_ENABLED` key, but it cannot undo the startup blanking when this env var is false. |
 | `VERSION` | optional | Build tag shown in the page footer. Set automatically by deploy scripts. |
-| `RUN_MIGRATIONS` | ECS only | `true` on the web container, `false` on the worker container. The single entrypoint runs migrations only when this is `true`; `deploy/update_task_def.py` maintains it. |
+| `RUN_MIGRATIONS` | Coolify web | `true` on the web container, `false` on the worker container. The single entrypoint runs migrations only when this is `true`; the Coolify topology (`deploy/coolify/topology.py`) sets it. |
 | `Q_WORKERS` | optional | Worker count for django-q. Defaults to 1 on SQLite, 2 on Postgres. |
-| `GUNICORN_WORKERS` | optional | gunicorn worker processes on the web container. Default 3; `deploy/update_task_def.py` sets 2 on dev and 3 on prod. A malformed, zero, or negative value logs a warning and falls back to 3. Read in `scripts/gunicorn_runtime.py`. |
+| `GUNICORN_WORKERS` | optional | gunicorn worker processes on the web container. Default 3. A malformed, zero, or negative value logs a warning and falls back to 3. Read in `scripts/gunicorn_runtime.py`. |
 | `GUNICORN_THREADS` | optional | `gthread` threads per gunicorn worker (issue #1854). Default 4, so 3 workers serve 12 requests at once. A malformed, zero, or negative value logs a warning and falls back to 4. Threads add request slots, not CPU: a slow request no longer blocks its whole worker, so `/ping` and page views keep being served while the site is slow. gunicorn also runs with `--timeout 30`, `--graceful-timeout 20`, and `--keep-alive 0` (close after each response, as the old sync workers did, so the ALB never reuses a connection gunicorn is closing). |
 | `WEB_DB_STATEMENT_TIMEOUT_MS` | optional | Postgres `statement_timeout` for the gunicorn web process only (issue #1854). Default 10000 (10 s); `0` disables. A malformed or negative value logs a warning and falls back to 10000. Applied by the entrypoint right before the gunicorn handoff, so migrations, the django-q worker, and management commands keep no limit. A web request whose query runs longer fails with a 500 instead of holding a request slot. SQLite is unaffected. |
 | `IP_HASH_SALT` | optional | Salt for SHA-256 hashing client IPs in `CampaignVisit.ip_hash`. Empty leaves `ip_hash` blank. |
@@ -35,7 +35,7 @@ These variables are read at process start, before the DB is reachable, used dire
 
 Test: `curl -I {SITE_BASE_URL}/ping` returns `200 OK`. Then visit `{SITE_BASE_URL}/` and confirm the home page renders without 500 errors.
 
-`SITE_BASE_URL` is also written into ECS task definitions by `deploy/update_task_def.py` as the process-start baseline. Unlike the variables above, it is also a Studio setting; use Studio > Settings > Site for normal runtime URL changes after boot.
+`SITE_BASE_URL` is also set in the runtime environment as the process-start baseline. Unlike the variables above, it is also a Studio setting; use Studio > Settings > Site for normal runtime URL changes after boot.
 
 The sync watchdog and worker expectation are also runtime Site settings. Change
 them in Studio > Settings > Site; the environment values are process-start

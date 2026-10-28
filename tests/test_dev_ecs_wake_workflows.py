@@ -5,7 +5,6 @@ import yaml
 from django.test import SimpleTestCase, tag
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ACTION_PATH = REPO_ROOT / ".github" / "actions" / "wake-dev-ecs" / "action.yml"
 SCHEDULED_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "scheduled-playwright-dev.yml"
 DEPLOY_DEV_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml"
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
@@ -17,89 +16,6 @@ POSTGRESQL_TAGGED_TESTS = (
 
 def _load_yaml(path):
     return yaml.safe_load(path.read_text())
-
-
-@tag("core")
-class DevEcsWakeActionTest(SimpleTestCase):
-    def test_shared_action_scales_service_before_polling(self):
-        action = _load_yaml(ACTION_PATH)
-        run_script = action["runs"]["steps"][0]["run"]
-
-        scale_index = run_script.index("aws ecs update-service")
-        poll_index = run_script.index("readiness_poll_until_stable")
-        validation_index = run_script.index("readiness_validate_configuration")
-
-        self.assertLess(validation_index, scale_index)
-        self.assertLess(scale_index, poll_index)
-        self.assertIn('--cluster "${ECS_CLUSTER}"', run_script)
-        self.assertIn('--service "${ECS_SERVICE}"', run_script)
-        self.assertIn('--desired-count "${DESIRED_COUNT}"', run_script)
-        self.assertIn('source "${GITHUB_ACTION_PATH}/../../../deploy/readiness_poll.sh"', run_script)
-        self.assertIn('"${REQUIRED_CONSECUTIVE}"', run_script)
-        self.assertNotIn("grep -Fq", run_script)
-
-    def test_shared_action_prints_ecs_evidence_around_readiness(self):
-        # #1943: a dev readiness timeout must carry ECS evidence (service
-        # events, stopped-task reasons, target health), not only
-        # "empty-or-unreachable".
-        action = _load_yaml(ACTION_PATH)
-        run_script = action["runs"]["steps"][0]["run"]
-
-        scale_index = run_script.index("aws ecs update-service")
-        poll_index = run_script.index("if readiness_poll_until_stable")
-        error_index = run_script.index("::error ::Readiness timeout")
-        events_query = "services[0].events[:25]"
-
-        self.assertIn(events_query, run_script)
-        self.assertIn("stoppedReason:stoppedReason", run_script)
-        self.assertIn("describe-target-health", run_script)
-
-        before_scale = run_script.index("print_service_state\n", run_script.index("::group::ECS state before scaling"))
-        self.assertLess(before_scale, scale_index)
-
-        failure_block = run_script[poll_index:error_index]
-        self.assertIn("print_service_state", failure_block)
-        self.assertIn("print_task_state", failure_block)
-
-        # Diagnostics are read-only except for the wake-up scale and the
-        # one-time stale-TG detach: the live dev service may still reference
-        # a deleted ALB target group (ELB cost-cut / shared-edge migration;
-        # Terraform defines no load_balancers), so the action retries a
-        # TG-not-found update-service with --load-balancers '[]' to align
-        # live state. No other ECS mutations are allowed.
-        self.assertEqual(run_script.count("aws ecs update-service"), 2)
-        self.assertIn("--load-balancers '[]'", run_script)
-        for mutating in ("stop-task", "run-task", "deregister", "delete-"):
-            with self.subTest(mutating=mutating):
-                self.assertNotIn(mutating, run_script)
-
-    def test_shared_action_exposes_required_configuration_inputs(self):
-        action = _load_yaml(ACTION_PATH)
-        inputs = action["inputs"]
-
-        for name in (
-            "aws-region",
-            "ecs-cluster",
-            "ecs-service",
-            "desired-count",
-            "ping-url",
-            "expected-text",
-            "timeout-seconds",
-            "poll-seconds",
-            "max-attempts",
-            "required-consecutive",
-        ):
-            with self.subTest(name=name):
-                self.assertIn(name, inputs)
-
-        self.assertEqual(inputs["timeout-seconds"]["default"], "1500")
-        self.assertEqual(inputs["poll-seconds"]["default"], "10")
-        self.assertEqual(inputs["max-attempts"]["default"], "150")
-        self.assertEqual(inputs["required-consecutive"]["default"], "3")
-        self.assertIn(
-            "exact response body",
-            inputs["expected-text"]["description"],
-        )
 
 
 @tag("core")

@@ -1,8 +1,7 @@
 """Unit tests for scripts/boot_profile_report.py.
 
 Pure-Python parser tests — no Docker, no live boot required, so they run in CI.
-The module is loaded by path (it lives in scripts/, not an importable package),
-mirroring tests/test_update_task_def.py.
+The module is loaded by path (it lives in scripts/, not an importable package).
 """
 
 import importlib.util

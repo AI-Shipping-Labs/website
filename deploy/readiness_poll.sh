@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Shared bounded readiness polling for deploy/deploy_dev.sh and the
-# wake-dev-ecs composite action (issue #1140).
+# Shared bounded readiness polling (issue #1140), sourced by the scheduled
+# dev Playwright workflow to wait for the Contabo dev endpoint.
 #
 # The deadline is based on Python's monotonic clock, so wall-clock changes do
 # not lengthen or shorten a deploy. curl time and sleep time consume the SAME

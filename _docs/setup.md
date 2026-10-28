@@ -79,7 +79,7 @@ Set in the ECS task definition (plain environment variables):
 | `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
 | `SITE_BASE_URL` | `https://dev.aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
-| `RUN_MIGRATIONS` | `true` on web, `false` on worker | Entrypoint dispatch flag. Only the web container runs `migrate`; the worker starts `qcluster`. Set automatically by `deploy/update_task_def.py`. |
+| `RUN_MIGRATIONS` | `true` on web, `false` on worker | Entrypoint dispatch flag. Only the web container runs `migrate`; the worker starts `qcluster`. Set by the Coolify topology (`deploy/coolify/topology.py`). |
 | `RELAY_BASE_URL` / `RELAY_API_KEY` | `true` in prod | Required so transactional/campaign email deliver through Relay. Missing values fail `manage.py check` when `DEBUG=False`. |
 | `S3_ENABLED` | `true` in prod | Uploads content-sync images to S3. Defaults true — a missing var resolves to true so uploads run; content sync only skips image upload when the flag is explicitly `false` (or under `TESTING`). Keep it `true` in prod so uploads never depend on the default drifting. |
 | `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
@@ -117,7 +117,7 @@ Fetched at runtime by the Django app (not injected via ECS):
 
 The app fetches this from Secrets Manager automatically if no direct PEM is set. The secret path and region can be configured in Studio with `GITHUB_APP_PRIVATE_KEY_SECRET_ID` and `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`; otherwise the app uses `ai-shipping-labs/github-app-private-key` in `eu-west-1`. Fallback order: Studio PEM → local PEM file → env var → Studio secret path → default Secrets Manager path.
 
-When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it. `deploy/update_task_def.py` currently writes `dev.aishippinglabs.com` for dev and `aishippinglabs.com,www.aishippinglabs.com` plus matching HTTPS origins for prod.
+When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it.
 
 The app also has test-only/internal env controls:
 
@@ -292,8 +292,6 @@ Two GitHub Actions workflows handle deployment:
 
 Manual Production Deployment (`deploy-prod.yml`), Emergency Production Web Rollback (`prod-emergency-web-rollback.yml`), and Emergency Production Worker Rollback (`prod-emergency-worker-rollback.yml`) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
 
-GitHub concurrency only serializes those workflows. It does not cover a laptop `CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh` or an AWS Console / CLI click. Those still race the same ECS services and rely on the production path of `deploy/deploy_dev.sh` (and the rollback workflows) re-reading the live PRIMARY deployment and failing closed when the service already has an ACTIVE non-PRIMARY deployment.
-
 The production ECS workflow uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access. The Coolify workflow uses the environment names documented in [`coolify-deployment.md`](coolify-deployment.md).
 
 ### Lockfile contract
@@ -315,51 +313,11 @@ If a deploy fails at the "Install dependencies" step with a message about `uv.lo
 
 ## Deploying and redeploying manually
 
-One command to build, push, and deploy:
-
-```bash
-# Deploy to dev (default)
-bash deploy/deploy.sh
-
-# Deploy to prod
-bash deploy/deploy.sh prod
-```
-
-This runs `deploy/deploy.sh` which generates a tag, logs into ECR, builds the Docker image, pushes it, and updates the ECS service.
-
-Redeploy an existing image tag without rebuilding:
-
-```bash
-# Redeploy an existing tag to dev
-bash deploy/deploy_dev.sh 20260327-124723-02ce799 dev
-
-# Promote or redeploy an existing tag to prod
-CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh 20260327-124723-02ce799
-```
-
-Force ECS to restart tasks on the current task definition, for example after an AWS-side secret value changes but the image/tag does not:
-
-```bash
-aws ecs update-service \
-  --cluster ai-shipping-labs \
-  --service ai-shipping-labs-dev \
-  --force-new-deployment
-```
-
-Use `ai-shipping-labs-prod` for production.
-
-### ECS rollout recovery
-
-`deploy/deploy_dev.sh` waits for `aws ecs wait services-stable`. If the wait times out, the script prints recent service events, running/stopped task reasons, and ALB target health. The common recovery path is:
-
-1. Read the stopped task reason and CloudWatch logs for the new task. Startup failures usually come from missing env-only values: `SECRET_KEY`, `DATABASE_URL`, `RELAY_API_KEY`/`RELAY_BASE_URL` with `DEBUG=False`, invalid `ALLOWED_HOSTS` / `CSRF_TRUSTED_ORIGINS`, or missing `S3_ENABLED=true` for production content-image uploads.
-2. Fix the ECS task definition, Secrets Manager value, or deploy helper source of truth.
-3. Register a corrected task definition by rerunning `bash deploy/deploy_dev.sh <tag> <env>`, or use `aws ecs update-service --force-new-deployment` if only the referenced secret value changed.
-4. Confirm `/ping` returns the expected `VERSION` tag and check `/studio/worker/` for a live django-q heartbeat.
-
-To roll back, redeploy a previously known-good tag with `deploy_dev.sh` for dev or `CONFIRM_DEPLOY=true deploy_prod.sh` for prod. Prod tags are appended to `.prod-versions`; the current dev tag can be read from `https://dev.aishippinglabs.com/ping`. A full prod tag redeploy registers new revisions and can roll web as a side effect, so it is not an emergency rollback.
+There is no local deploy script. The AWS ECS runtime and its ECR repository are retired, and the `deploy/deploy*.sh` / `deploy/update_task_def.py` helpers were removed with it. Every deploy goes through `Deploy Dev` on push to `main` (or `workflow_dispatch`), which deploys the exact-head GHCR image to the split Coolify runtime; [`coolify-deployment.md`](coolify-deployment.md) owns the target, verification, and redeploy contract.
 
 ### Emergency production rollback
+
+Warning: the three `prod-emergency-*` workflows below still target the retired ECS services and cannot succeed against the Coolify runtime. Use the Coolify redeploy path in [`coolify-deployment.md`](coolify-deployment.md) until they are replaced.
 
 Keep the expanded schema. Do not reverse migrations. Emergency rollback does not rewrite `.prod-versions`.
 
@@ -368,12 +326,6 @@ Web-only: dispatch `Emergency Production Web Rollback` (`.github/workflows/prod-
 Worker-only: dispatch `Emergency Production Worker Rollback` (`.github/workflows/prod-emergency-worker-rollback.yml`). Service `ai-shipping-labs-worker-prod`, family `ai-shipping-labs-worker-prod:<revision>`. Confirm the run, pass that family/revision and the immutable `expectedTag`. `update-service` uses `--desired-count 1` because worker services are woken from a 0 baseline. Success is PRIMARY `taskDefinition` equal to the requested ARN, `runningCount >= desiredCount`, and at least one RUNNING task whose containers are all RUNNING. Do not treat `https://aishippinglabs.com/ping` as worker proof; that only observes web.
 
 If both services need restoring, dispatch two serialized runs. They share `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`.
-
-## Deploy scripts
-
-- `deploy/deploy_dev.sh <tag> [env]` — fetches the current ECS task definition, swaps the image tag, registers a new revision, and updates the service. `env` defaults to `dev`.
-- `deploy/deploy_prod.sh [tag]` — promotes a tag to prod. If no tag is given, reads the current dev tag. Requires confirmation.
-- `deploy/update_task_def.py` — helper that ensures the worker container exists and updates the image tag plus `VERSION`, `DEBUG`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SITE_BASE_URL`, and per-container `RUN_MIGRATIONS` in a task definition JSON file.
 
 ### Canonical-host redirect verification
 

@@ -1,7 +1,3 @@
-import os
-import stat
-import subprocess
-import tempfile
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
@@ -15,7 +11,6 @@ from website.release_phase import (
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "deploy-dev.yml"
-REHEARSAL = ROOT / "deploy" / "verify_r1_image_rollback_recovery.sh"
 
 
 @tag("core")
@@ -45,95 +40,3 @@ class R1ImageRecoveryWorkflowContractTest(SimpleTestCase):
         self.assertNotIn("Rehearse exact R1 image rollback", workflow)
         self.assertNotIn("R1_PRODUCTION_TAG", workflow)
         self.assertNotIn("verify_r1_image_rollback_recovery.sh", workflow)
-
-    def test_rehearsal_is_ephemeral_image_only_and_idempotent(self):
-        script = REHEARSAL.read_text()
-        self.assertIn("postgres:16", script)
-        self.assertIn("docker pull \"${R1_IMAGE}\"", script)
-        self.assertIn("docker image inspect \"${R1_IMAGE}\"", script)
-        self.assertIn("candidate is no longer in R1", script)
-        self.assertLess(
-            script.index("candidate is no longer in R1"),
-            script.index("docker pull \"${R1_IMAGE}\""),
-        )
-        self.assertIn("manage \"${R1_IMAGE}\" migrate --noinput", script)
-        self.assertIn("manage \"${CANDIDATE_IMAGE}\" migrate --noinput", script)
-        self.assertGreaterEqual(script.count("reconcile_r1_expand"), 4)
-        self.assertNotIn("migrate content 0054", script)
-        self.assertNotIn("migrate email_app 0019", script)
-        self.assertNotIn("aws ", script)
-        self.assertNotIn("aishippinglabs.com", script)
-        self.assertIn("candidate-era-workshop", script)
-        self.assertIn("0056_reconcile_workshop_preview_tokens", script)
-        self.assertIn("EmailLog.objects.count() == 4", script)
-
-
-# The stub stands in for the container CLI so the rehearsal's retirement
-# branches can be driven without a registry or a daemon. It reports the
-# candidate as still in R1, reports the exact R1 image as absent locally, and
-# replays a caller-chosen pull outcome.
-DOCKER_STUB = """#!/usr/bin/env bash
-case "$1" in
-    run) echo "r1" ;;
-    image) exit 1 ;;
-    pull)
-        echo "${STUB_PULL_MESSAGE}"
-        exit "${STUB_PULL_EXIT}"
-        ;;
-    rm) : ;;
-esac
-"""
-
-ECR_MANIFEST_MISSING = (
-    "Error response from daemon: manifest for "
-    "387546586013.dkr.ecr.eu-west-1.amazonaws.com/ai-shipping-labs"
-    ":20260716-162837-dc07564 not found: manifest unknown: "
-    "Requested image not found"
-)
-
-
-@tag("core")
-class R1RehearsalRegistryAbsenceTest(SimpleTestCase):
-    """The rehearsal must retire on registry absence and only on that."""
-
-    def run_rehearsal(self, pull_message, pull_exit):
-        with tempfile.TemporaryDirectory() as stub_dir:
-            stub = Path(stub_dir) / "docker"
-            stub.write_text(DOCKER_STUB)
-            stub.chmod(stub.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP)
-            env = dict(
-                os.environ,
-                PATH=f"{stub_dir}{os.pathsep}{os.environ['PATH']}",
-                STUB_PULL_MESSAGE=pull_message,
-                STUB_PULL_EXIT=str(pull_exit),
-            )
-            return subprocess.run(
-                [
-                    "bash",
-                    str(REHEARSAL),
-                    "candidate-image:latest",
-                    "r1-image:20260716-162837-dc07564",
-                ],
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-    def test_expired_r1_image_retires_the_gate_instead_of_blocking_deploys(self):
-        result = self.run_rehearsal(ECR_MANIFEST_MISSING, 1)
-
-        self.assertEqual(result.returncode, 0, msg=result.stderr)
-        self.assertIn("no longer in the registry", result.stdout)
-
-    def test_pull_failure_other_than_absence_still_fails_the_gate(self):
-        result = self.run_rehearsal(
-            "Error response from daemon: pull access denied, "
-            "repository does not exist or may require authorization: "
-            "authorization failed",
-            1,
-        )
-
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("other than registry absence", result.stderr)
-        self.assertNotIn("no longer in the registry", result.stdout)

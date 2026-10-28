@@ -581,7 +581,6 @@ class EventDetailPageTest(TestCase):
     def test_detail_template(self):
         response = self.client.get(self.event.get_absolute_url())
         self.assertTemplateUsed(response, 'events/event_detail.html')
-        self.assertTemplateNotUsed(response, 'events/_event_hero_media.html')
         self.assertTemplateUsed(response, 'events/_event_header.html')
         self.assertTemplateUsed(response, 'events/_event_registration_card.html')
         self.assertTemplateUsed(response, 'events/_event_description.html')

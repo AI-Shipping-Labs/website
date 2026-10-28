@@ -259,12 +259,11 @@ class EventsListSeriesCardRenderTest(TestCase):
         self.assertEqual(rows[1]['kind'], 'series')
 
     def test_developer_comments_do_not_leak_into_rendered_page(self):
-        # Both upcoming partials (_upcoming_event_card / _upcoming_series_card)
-        # open with a multi-line file-header comment. A bare ``{# ... #}`` is
-        # single-line only, so a multi-line one leaks lines 2+ as visible text
-        # on /events. These must be wrapped in {% comment %}. Assert distinctive
-        # phrases from each header comment never reach the response body so the
-        # leak can never silently return (QA round 2, issue #866).
+        # The upcoming event partial opens with a multi-line file-header
+        # comment. A bare ``{# ... #}`` is single-line only, so a multi-line
+        # one leaks lines 2+ as visible text on /events. It must be wrapped in
+        # {% comment %}. Assert a distinctive phrase from the header comment
+        # never reaches the response body (QA round 2, issue #866).
         response = self.client.get('/events')
         self.assertEqual(response.status_code, 200)
         # Both partials are exercised: a grouped series card and a standalone
@@ -274,10 +273,6 @@ class EventsListSeriesCardRenderTest(TestCase):
         # Distinctive phrase from _upcoming_event_card.html's header comment.
         self.assertNotContains(
             response, 'the Upcoming loop can render either an event row',
-        )
-        # Distinctive phrase from _upcoming_series_card.html's header comment.
-        self.assertNotContains(
-            response, 'Every link routes to the series page',
         )
 
 

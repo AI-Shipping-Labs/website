@@ -8,8 +8,6 @@ registered for.
 {% endcomment %}
 {% member_access_badge event.required_level testid="event-tier-badge" %}
 {% if event.event_series %}
-{# Same pill as _upcoming_series_card.html so a series occurrence is marked #}
-{# identically whether it renders grouped or standalone. #}
 <span class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="series-card-badge">
   <i data-lucide="repeat" class="h-3 w-3"></i>
   Event series

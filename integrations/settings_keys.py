@@ -111,6 +111,7 @@ _KEY_ORDER = {
         "DAPIER_API_TOKEN",
         "DAPIER_AGENT_NAME",
         "GOOGLE_CALENDAR_ID",
+        "BOOKING_CALENDLY_EVENT_URL",
     ),
     "crm": (
         "CRM_CALL_CAPTURE_ENABLED",
@@ -2247,6 +2248,17 @@ GOOGLE_CALENDAR_ID = declare(
     description="Google Calendar ID for host availability queries and event scheduling (typically 'primary' or the host's email).",
     value_type="str",
     default="primary",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#booking-and-calendar",
+)
+BOOKING_CALENDLY_EVENT_URL = declare(
+    key="BOOKING_CALENDLY_EVENT_URL",
+    group="booking",
+    label="Calendly event for slot parity",
+    description="Calendly event URL (e.g. https://calendly.com/dtc-alexey/ai-shipping-labs-call) whose available times the Request-a-call booking page offers one for one. Blank uses the local weekly schedule plus Google free/busy.",
+    value_type="str",
+    default="",
     secret=False,
     optional=True,
     docs_url="_docs/configuration.md#booking-and-calendar",

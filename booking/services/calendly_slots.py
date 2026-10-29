@@ -14,12 +14,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.utils import timezone as dj_timezone
 
+from integrations.config import get_config
+
 if TYPE_CHECKING:
     from booking.models import BookingHost
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ALEXEY_CALENDLY_URL = "https://calendly.com/dtc-alexey/ai-shipping-labs-call"
 CALENDLY_PUBLIC_API_BASE = "https://calendly.com/api/booking/event_types"
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -40,34 +41,15 @@ def clear_calendly_slots_cache() -> None:
 
 
 def resolve_calendly_event_url(host: BookingHost) -> str:
-    """Return the canonical Calendly event URL for ``host``, or blank if local-only."""
-    try:
-        from community.models import CallHost
+    """Return the Calendly event URL whose availability ``host`` mirrors, or blank.
 
-        call_host = CallHost.objects.filter(slug=host.slug, is_active=True).first()
-    except Exception:
-        call_host = None
-
-    if call_host and call_host.booking_url:
-        raw_url = call_host.booking_url.strip()
-        if "calendly.com/" in raw_url:
-            return raw_url
-        if raw_url.startswith("/"):
-            return _fallback_alexey_calendly_url(host)
+    Driven by the ``BOOKING_CALENDLY_EVENT_URL`` integration setting. Blank
+    means the host's local weekly schedule plus Google free/busy is used.
+    """
+    url = str(get_config("BOOKING_CALENDLY_EVENT_URL", "") or "").strip()
+    if "calendly.com/" not in url:
         return ""
-
-    return _fallback_alexey_calendly_url(host)
-
-
-def _fallback_alexey_calendly_url(host: BookingHost) -> str:
-    """Return Alexey's canonical Calendly URL unless running an offline UTC test fixture."""
-    if host.slug != "alexey":
-        return ""
-    if host.email != "alexey@datatalks.club":
-        return ""
-    if host.timezone == "UTC" and float(host.notice_hours or 0.0) == 0.0:
-        return ""
-    return DEFAULT_ALEXEY_CALENDLY_URL
+    return url
 
 
 def parse_calendly_event_url(calendly_url: str) -> tuple[str, str]:

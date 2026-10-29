@@ -164,17 +164,16 @@ def get_available_slots(
     )
     local_protected = _local_protected_spans(active_bookings, exclude_booking_id)
 
-    if not hasattr(query_busy, "assert_called"):
-        calendly_url = resolve_calendly_event_url(host)
-        if calendly_url:
-            return _get_calendly_backed_slots(
-                host,
-                calendly_url,
-                from_date,
-                to_date,
-                str(viewer_tz),
-                local_protected,
-            )
+    calendly_url = resolve_calendly_event_url(host)
+    if calendly_url:
+        return _get_calendly_backed_slots(
+            host,
+            calendly_url,
+            from_date,
+            to_date,
+            str(viewer_tz),
+            local_protected,
+        )
 
     # 1. Query busy times from Google Calendar via Dapier
     busy_spans = query_busy(span_start, span_end)

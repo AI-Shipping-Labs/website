@@ -140,7 +140,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 21)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 175)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 176)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

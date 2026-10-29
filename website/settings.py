@@ -517,6 +517,14 @@ SES_WEBHOOK_SHARED_SECRET = (
     '' if TESTING else os.environ.get('SES_WEBHOOK_SHARED_SECRET', '')
 )
 
+# Request-a-call offers exactly the slots of this Calendly event (read via
+# get_config, so a Studio DB override wins). Tests and local dev keep the
+# local weekly schedule so they never call Calendly.
+BOOKING_CALENDLY_EVENT_URL = (
+    '' if (TESTING or DEBUG)
+    else 'https://calendly.com/dtc-alexey/ai-shipping-labs-call'
+)
+
 # Email campaign chunking: number of recipients per chunked send_campaign_batch task.
 # At ~0.05s/email + Relay network latency, a 200-recipient batch finishes in roughly
 # 10-30s, well under the 300s Q_CLUSTER worker timeout, while keeping the queue

@@ -1,12 +1,12 @@
 """Tests for 1:1 Calendly slot parity, submit-time re-check, and invite alerting."""
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
 
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from freezegun import freeze_time
 
 from booking.models import STATUS_CONFIRMED, Booking, BookingHost
@@ -18,11 +18,11 @@ from booking.services.booking_service import (
 )
 from booking.services.calendar import create_calendar_event
 from booking.services.calendly_slots import (
-    DEFAULT_ALEXEY_CALENDLY_URL,
     clear_calendly_slots_cache,
     resolve_calendly_event_url,
 )
-from community.models import CallHost
+
+ALEXEY_CALENDLY_URL = "https://calendly.com/dtc-alexey/ai-shipping-labs-call"
 
 
 def _mock_urlopen_responses(lookup_payload: dict, range_payload: dict):
@@ -44,6 +44,7 @@ def _mock_urlopen_responses(lookup_payload: dict, range_payload: dict):
 
 
 @freeze_time("2026-10-29T01:00:00Z")
+@override_settings(BOOKING_CALENDLY_EVENT_URL=ALEXEY_CALENDLY_URL)
 class CalendlySlotParityTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -59,24 +60,35 @@ class CalendlySlotParityTests(TestCase):
                 "is_active": True,
             },
         )
-        cls.call_host, _ = CallHost.objects.update_or_create(
-            slug="alexey",
-            defaults={
-                "name": "Alexey Grigorev",
-                "booking_url": DEFAULT_ALEXEY_CALENDLY_URL,
-                "is_active": True,
-            },
-        )
+        # The pre-fix local rule set: Thursday 10:00-18:00 Berlin. On its own
+        # it offers 2026-10-29 16:30 UTC (17:30 CET), the incident slot.
+        cls.host.weekly_windows.all().delete()
+        cls.host.weekly_windows.create(weekday=3, start_time=time(10, 0), end_time=time(18, 0))
 
     def setUp(self):
         clear_calendly_slots_cache()
         self.addCleanup(clear_calendly_slots_cache)
 
-    def test_resolve_calendly_event_url_returns_alexey_calendly(self):
-        self.assertEqual(
-            resolve_calendly_event_url(self.host),
-            DEFAULT_ALEXEY_CALENDLY_URL,
+    def test_resolve_calendly_event_url_reads_integration_setting(self):
+        self.assertEqual(resolve_calendly_event_url(self.host), ALEXEY_CALENDLY_URL)
+
+    @override_settings(BOOKING_CALENDLY_EVENT_URL="")
+    @patch("booking.services.calendly_slots.urlopen")
+    @patch("booking.services.booking_service.query_busy", return_value=[])
+    def test_blank_setting_uses_local_schedule_without_calling_calendly(
+        self, mock_busy, mock_urlopen
+    ):
+        slots = get_available_slots(
+            self.host,
+            from_date=date(2026, 10, 29),
+            to_date=date(2026, 10, 29),
+            viewer_timezone="UTC",
         )
+        mock_urlopen.assert_not_called()
+        self.assertEqual(mock_busy.call_count, 1)
+        # Fail-open local path: an empty free/busy answer leaves the incident
+        # slot bookable, which is how the Oct 29 booking got through.
+        self.assertIn("2026-10-29T16:30:00+00:00", [s["start_iso"] for s in slots])
 
     @patch("booking.services.calendly_slots.urlopen")
     def test_slots_match_calendly_one_for_one_and_exclude_busy_day(self, mock_urlopen):

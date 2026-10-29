@@ -500,6 +500,13 @@
     "default": "primary",
     "description": "Google Calendar ID for host availability queries and event scheduling (typically 'primary' or the host's email).",
     "docs_url": "_docs/configuration.md#booking-and-calendar"
+   },
+   {
+    "key": "BOOKING_CALENDLY_EVENT_URL",
+    "is_secret": false,
+    "description": "Calendly event URL (e.g. https://calendly.com/dtc-alexey/ai-shipping-labs-call) whose available times the Request-a-call booking page offers one for one. Blank uses the local weekly schedule plus Google free/busy.",
+    "docs_url": "_docs/configuration.md#booking-and-calendar",
+    "optional": true
    }
   ]
  },

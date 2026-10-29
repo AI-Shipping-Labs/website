@@ -507,6 +507,7 @@ Keys to set in Studio:
 | `DAPIER_API_TOKEN` | secret | Bearer token for Dapier `/api/agent/token` endpoint to mint Google Calendar OAuth access tokens. |
 | `DAPIER_AGENT_NAME` | non-secret | Agent name registered in Dapier with google-calendar permissions (default `alexey-calendar`). |
 | `GOOGLE_CALENDAR_ID` | non-secret | Calendar ID to check busy times and create booked events (default `primary`). |
+| `BOOKING_CALENDLY_EVENT_URL` | non-secret | Calendly event whose available times the booking page offers one for one (production: `https://calendly.com/dtc-alexey/ai-shipping-labs-call`). Calendly then owns hours, busy calendars, buffers, minimum notice and duration; if Calendly is unreachable no slots are offered. Blank uses the local weekly schedule plus Google free/busy. |
 
 Zoom meeting links for booked 1:1 calls are generated automatically via the Server-to-Server OAuth Zoom integration configured in Section 10.
 

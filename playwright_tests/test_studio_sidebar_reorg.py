@@ -8,6 +8,12 @@ The section that contains the current page auto-expands server-side; on
 the dashboard only Events is open (#576 moved Events to the top and
 flipped the dashboard default from Content to Events).
 
+The anchor counts and the ordered People labels asserted here come from
+the shared contract in ``tests/studio_sidebar_expectations.py`` (#2020)
+so the same expectations fail the regular-CI Django rendered-sidebar
+guard (``studio/tests/test_sidebar.py``) when a sidebar entry is added
+without updating them.
+
 Coverage mirrors the Playwright scenarios in the issue bodies. Per the
 project testing guidelines we assert on specific elements (visible
 buttons, links, aria attributes) rather than full HTML substring
@@ -29,6 +35,11 @@ from playwright_tests.conftest import (
 )
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
+)
+from tests.studio_sidebar_expectations import (
+    EXPECTED_ANCHOR_COUNT_STAFF,
+    EXPECTED_ANCHOR_COUNT_SUPERUSER,
+    EXPECTED_PEOPLE_LINK_LABELS_SUPERUSER,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -240,7 +251,9 @@ class TestStaffLandsInStudio:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 53)
+        _assert_all_sidebar_anchors_have_keyboard_focus(
+            focus_page, EXPECTED_ANCHOR_COUNT_SUPERUSER
+        )
         focus_page.close()
 
 
@@ -458,7 +471,9 @@ class TestNonSuperuserGating:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 0
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 50)
+        _assert_all_sidebar_anchors_have_keyboard_focus(
+            focus_page, EXPECTED_ANCHOR_COUNT_STAFF
+        )
         focus_page.close()
 
 
@@ -692,21 +707,11 @@ class TestPlanningSection:
 
         _section_button(page, "people").click()
         people_labels = page.locator("#studio-section-people a span").all_inner_texts()
-        assert [label.strip() for label in people_labels if label.strip()] == [
-            "Users",
-            "Call profiles",
-            "Call requests",
-            "Imports",
-            "Instructors",
-            "Tier overrides",
-            "Tags",
-            "Merge accounts",
-            "Payment mismatches",
-            "Subscription reconciliation",
-            "New user",
-            "CRM",
-            "AI Assistant",
-        ]
+        # Shared contract (#2020): Bookings stays grouped immediately
+        # after Call requests and before Imports.
+        assert [label.strip() for label in people_labels if label.strip()] == (
+            EXPECTED_PEOPLE_LINK_LABELS_SUPERUSER
+        )
 
         planning.click()
         planning_labels = page.locator(

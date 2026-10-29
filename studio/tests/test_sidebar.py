@@ -13,6 +13,11 @@ Covers the structural expectations the spec calls out:
 - ``data-testid`` attributes preserved for downstream callers.
 - Sections render with the right initial ``aria-expanded`` state for the
   active page (server-rendered, no JS required).
+- The ordered People link labels and the total anchor counts come from
+  the shared contract in ``tests/studio_sidebar_expectations.py``
+  (#2020): a sidebar entry added to the template without updating that
+  module fails this regular-CI guard instead of only the scheduled
+  Playwright sidebar-reorg suite.
 """
 
 import re
@@ -21,6 +26,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from studio.templatetags.studio_filters import studio_sidebar_state
+from tests.studio_sidebar_expectations import (
+    EXPECTED_ANCHOR_COUNT_STAFF,
+    EXPECTED_ANCHOR_COUNT_SUPERUSER,
+    EXPECTED_PEOPLE_LINK_LABELS_STAFF,
+    EXPECTED_PEOPLE_LINK_LABELS_SUPERUSER,
+)
 
 User = get_user_model()
 
@@ -33,6 +44,7 @@ CANONICAL_FOCUS_CLASSES = {
 }
 ANCHOR_RE = re.compile(r'<a\s[^>]*>')
 CLASS_RE = re.compile(r'class="([^"]*)"')
+PEOPLE_LINK_SPAN_RE = re.compile(r'<span>([^<]+)</span>')
 
 
 class StudioSidebarStructureTest(TestCase):
@@ -62,6 +74,18 @@ class StudioSidebarStructureTest(TestCase):
         nav_start = body.index('id="studio-sidebar-nav"')
         nav_end = body.index('</nav>', nav_start)
         return ANCHOR_RE.findall(body[nav_start:nav_end])
+
+    def _rendered_people_link_labels(self, body):
+        """Return the ordered link labels inside the People section <ul>.
+
+        The slice starts at the section ``<ul>`` (the section button only
+        carries ``aria-controls``, never ``id=``) and ends at the ul's
+        closing tag; People has no nested list. Only attribute-less
+        ``<span>`` labels match, so badge spans with classes are skipped.
+        """
+        start = body.index('id="studio-section-people"')
+        end = body.index('</ul>', start)
+        return PEOPLE_LINK_SPAN_RE.findall(body[start:end])
 
     # ------------------------------------------------------------------
     # Top utility row + dashboard link order
@@ -253,7 +277,10 @@ class StudioSidebarStructureTest(TestCase):
                 )
 
     def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
-        for superuser, expected_count in ((False, 51), (True, 54)):
+        for superuser, expected_count in (
+            (False, EXPECTED_ANCHOR_COUNT_STAFF),
+            (True, EXPECTED_ANCHOR_COUNT_SUPERUSER),
+        ):
             with self.subTest(superuser=superuser):
                 response = self._get_studio_dashboard(superuser=superuser)
                 anchors = self._sidebar_anchors(response)
@@ -620,32 +647,22 @@ class StudioSidebarStructureTest(TestCase):
         self.assertNotIn('aria-label="Toggle Users sub-menu"', body)
         self.assertNotIn('studio-users-chevron', body)
 
+    def test_people_section_links_are_flat_and_ordered_for_staff(self):
+        response = self._get_studio_dashboard()
+        # Exact rendered order from the shared contract: any People entry
+        # added, removed, or re-ordered without updating
+        # tests/studio_sidebar_expectations.py fails here on regular CI.
+        self.assertEqual(
+            self._rendered_people_link_labels(response.content.decode()),
+            EXPECTED_PEOPLE_LINK_LABELS_STAFF,
+        )
+
     def test_people_section_links_are_flat_and_ordered_for_superuser(self):
         response = self._get_studio_dashboard(superuser=True)
-        body = response.content.decode()
-        start = body.index('id="studio-section-people"')
-        end = body.index('id="studio-section-planning"')
-        people = body[start:end]
-
-        expected_order = [
-            '<span>Users</span>',
-            '<span>Call profiles</span>',
-            '<span>Call requests</span>',
-            '<span>Imports</span>',
-            '<span>Tier overrides</span>',
-            '<span>Tags</span>',
-            '<span>Merge accounts</span>',
-            '<span>Payment mismatches</span>',
-            '<span>New user</span>',
-            '<span>CRM</span>',
-            '<span>AI Assistant</span>',
-        ]
-        positions = [people.find(label) for label in expected_order]
-        for label, idx in zip(expected_order, positions):
-            self.assertGreater(idx, -1, f'People link missing: {label}')
-        self.assertEqual(positions, sorted(positions))
-        self.assertNotIn('<span>Sprints</span>', people)
-        self.assertNotIn('<span>Plans</span>', people)
+        self.assertEqual(
+            self._rendered_people_link_labels(response.content.decode()),
+            EXPECTED_PEOPLE_LINK_LABELS_SUPERUSER,
+        )
 
     def test_search_host_labels_and_persistence_hooks_render(self):
         response = self._get_studio_dashboard()

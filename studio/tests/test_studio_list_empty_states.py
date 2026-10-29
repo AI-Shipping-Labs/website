@@ -66,6 +66,7 @@ PARTIAL_USERS = {
     'campaigns/list.html',
     'utm_campaigns/list.html',
     'event_series/list.html',
+    'bookings/list.html',
     'call_requests/list.html',
     'crm/list.html',
     'imports/list.html',

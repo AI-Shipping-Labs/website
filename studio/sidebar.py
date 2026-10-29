@@ -263,6 +263,13 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_call_request_approve',
         'studio_call_request_decline',
     )),
+    # Member bookings (issue #2018). The cancel route is the POST-only
+    # destructive action of this destination.
+    ('people', 'bookings', (
+        'studio_booking_list',
+        'studio_booking_detail',
+        'studio_booking_cancel',
+    )),
     ('people', 'imports', (
         'studio_import_batch_list',
         'studio_import_batch_new',

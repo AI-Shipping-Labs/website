@@ -1,0 +1,200 @@
+{% extends "studio/base.html" %}
+{% load accounts_extras member_badges studio_filters date_formatting %}
+
+{% block studio_title %}Booking #{{ booking.id }} | Studio{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_booking_list' %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
+    <i data-lucide="arrow-left" class="h-4 w-4"></i>
+    Back to bookings
+  </a>
+
+  {% studio_header_actions title="Booking details" subtitle="Member booking with Zoom and calendar details." %}
+    {% if booking.status == 'confirmed' %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-800 dark:text-emerald-400" data-testid="booking-status-badge">
+      Confirmed
+    </span>
+    {% elif booking.status == 'canceled' %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-muted-foreground" data-testid="booking-status-badge">
+      Canceled
+    </span>
+    {% else %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent/15 text-accent" data-testid="booking-status-badge">
+      Rescheduled
+    </span>
+    {% endif %}
+  {% endstudio_header_actions %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <!-- Main Column: Booking Details & Cancel Action (8 cols) -->
+  <div class="lg:col-span-8 space-y-6">
+
+    <!-- Booking Details -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-4">Booking details</h2>
+
+      <div class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Invitee</label>
+            <p class="text-base font-medium text-foreground">{{ booking.invitee_name }}</p>
+            <p class="text-sm text-muted-foreground">{{ booking.invitee_email }}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Invitee timezone</label>
+            <p class="text-sm text-foreground">{{ booking.invitee_timezone }}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Host</label>
+            <p class="text-sm text-foreground">{{ booking.host.name }}</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Duration</label>
+            <p class="text-sm text-foreground">{{ booking.duration_minutes }} minutes</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Start (UTC)</label>
+            <p class="text-sm text-foreground">{{ booking.start_datetime|operator_datetime }} UTC</p>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">End (UTC)</label>
+            <p class="text-sm text-foreground">{{ booking.end_datetime|operator_datetime }} UTC</p>
+          </div>
+        </div>
+
+        {% if booking.discussion_topic %}
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Topic</label>
+          <p class="text-sm text-foreground">{{ booking.discussion_topic }}</p>
+        </div>
+        {% endif %}
+
+        {% if booking.discussion_notes %}
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Notes</label>
+          <div class="rounded-lg bg-secondary/50 p-4 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+            {{ booking.discussion_notes }}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if booking.company %}
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Company</label>
+          <p class="text-sm text-foreground">{{ booking.company }}</p>
+        </div>
+        {% endif %}
+
+        <div class="grid grid-cols-2 gap-4 pt-2 text-xs text-muted-foreground border-t border-border">
+          <div>
+            <span class="font-medium text-foreground">Created:</span>
+            {{ booking.created_at|operator_datetime }} UTC
+          </div>
+          {% if booking.canceled_at %}
+          <div>
+            <span class="font-medium text-foreground">Canceled:</span>
+            {{ booking.canceled_at|operator_datetime }} UTC
+          </div>
+          {% endif %}
+          <div>
+            <span class="font-medium text-foreground">Zoom join URL:</span>
+            {% if booking.zoom_join_url %}
+            <a href="{{ booking.zoom_join_url }}" class="text-accent hover:underline break-all">{{ booking.zoom_join_url }}</a>
+            {% else %}
+            —
+            {% endif %}
+          </div>
+          <div>
+            <span class="font-medium text-foreground">Google event id:</span>
+            {% if booking.google_event_id %}{{ booking.google_event_id }}{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cancel Action (confirmed bookings only) -->
+    {% if booking.status == 'confirmed' %}
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-2">Cancel booking</h2>
+      <p class="text-sm text-muted-foreground mb-4">
+        Canceling deletes the Zoom meeting and the Google Calendar event and marks the CRM call canceled. This cannot be undone.
+      </p>
+
+      <form method="post"
+            action="{% url 'studio_booking_cancel' booking_id=booking.id %}"
+            onsubmit="return confirm('Cancel this booking? The Zoom meeting and calendar event will be deleted.');">
+        {% csrf_token %}
+        <label class="flex items-center gap-2 text-sm text-foreground mb-4">
+          <input type="checkbox"
+                 name="notify_member"
+                 data-testid="notify-member-checkbox"
+                 class="h-4 w-4 rounded border-border text-accent focus:ring-accent">
+          Notify the member by email
+        </label>
+
+        <button type="submit"
+                class="{% studio_action_class 'destructive' %} min-h-[44px]"
+                data-testid="cancel-booking-button">
+          <i data-lucide="calendar-x" class="h-4 w-4"></i>
+          Cancel booking
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- Sidebar Column: Member Context (4 cols) -->
+  <div class="lg:col-span-4 space-y-6">
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-4">Member context</h2>
+
+      {% if member %}
+      <div class="space-y-4">
+        <div>
+          <p class="text-lg font-semibold text-foreground">{{ member.name|default:member.email }}</p>
+          <p class="text-sm text-muted-foreground">{{ member.email }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Tier</label>
+          {% if tier_name %}
+          {% member_tier_badge tier_name %}
+          {% else %}
+          <span class="text-sm text-muted-foreground">Free</span>
+          {% endif %}
+        </div>
+
+        <div class="pt-4 border-t border-border space-y-2">
+          {% if crm_record %}
+          <a href="{% url 'studio_crm_detail' crm_id=crm_record.id %}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="contact" class="h-4 w-4"></i>
+            Open member CRM record
+          </a>
+          {% else %}
+          <a href="/studio/crm/?q={{ member.email }}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="search" class="h-4 w-4"></i>
+            Search member in CRM
+          </a>
+          {% endif %}
+
+          <a href="{% url 'studio_user_detail' user_id=member.id %}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="user" class="h-4 w-4"></i>
+            View Studio user detail
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted-foreground">
+        {{ booking.invitee_email }} is not linked to a registered member.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

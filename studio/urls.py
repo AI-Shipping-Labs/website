@@ -47,6 +47,11 @@ from studio.views.banner_upload import (
     studio_workshop_remove_banner,
     studio_workshop_upload_banner,
 )
+from studio.views.bookings import (
+    studio_booking_cancel,
+    studio_booking_detail,
+    studio_booking_list,
+)
 from studio.views.books import (
     book_chapter_create,
     book_chapter_delete,
@@ -924,6 +929,13 @@ urlpatterns = [
     path('call-requests/<int:request_id>/', studio_call_request_detail, name='studio_call_request_detail'),
     path('call-requests/<int:request_id>/approve/', studio_call_request_approve, name='studio_call_request_approve'),
     path('call-requests/<int:request_id>/decline/', studio_call_request_decline, name='studio_call_request_decline'),
+
+    # Bookings (issue #2018). Cancel is a POST-only destructive action
+    # verb, no trailing slash, matching the sprint-action convention from
+    # issue #949.
+    path('bookings/', studio_booking_list, name='studio_booking_list'),
+    path('bookings/<int:booking_id>/', studio_booking_detail, name='studio_booking_detail'),
+    path('bookings/<int:booking_id>/cancel', studio_booking_cancel, name='studio_booking_cancel'),
     # Instructor account linking (issue #1345)
     path('instructors/', instructor_list, name='studio_instructor_list'),
     path(

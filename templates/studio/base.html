@@ -528,6 +528,14 @@ rail rule below is scoped to ``min-width: 768px``.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_booking_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'bookings' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'bookings' %}aria-current="page"{% endif %}>
+                <i data-lucide="calendar-x" class="w-4 h-4"></i>
+                <span>Bookings</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_import_batch_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'imports' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                  {% if state.active_destination == 'imports' %}aria-current="page"{% endif %}>

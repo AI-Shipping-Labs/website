@@ -1,0 +1,97 @@
+{% extends "studio/base.html" %}
+{% load studio_filters member_badges date_formatting %}
+
+{% block studio_title %}Bookings{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Bookings" subtitle="Member bookings with hosts, including Zoom and calendar details." %}
+{% endstudio_header_actions %}
+
+<!-- Filter Tabs -->
+<div class="flex items-center gap-2 mb-6 border-b border-border pb-3">
+  <a href="?status=all"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'all' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-all">
+    All ({{ counts.all }})
+  </a>
+  <a href="?status=confirmed"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'confirmed' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-confirmed">
+    Confirmed ({{ counts.confirmed }})
+  </a>
+  <a href="?status=canceled"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'canceled' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-canceled">
+    Canceled ({{ counts.canceled }})
+  </a>
+  <a href="?status=rescheduled"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'rescheduled' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-rescheduled">
+    Rescheduled ({{ counts.rescheduled }})
+  </a>
+</div>
+
+{% if counts.all %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Invitee</th>
+        <th class="{% studio_list_class 'th' %}">Host</th>
+        <th class="{% studio_list_class 'th' %}">Start (UTC)</th>
+        <th class="{% studio_list_class 'th' %}">Member</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for booking in bookings %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="booking-row" data-booking-id="{{ booking.id }}">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_booking_detail' booking_id=booking.id %}" class="text-sm font-medium text-foreground hover:text-accent">
+            {{ booking.invitee_name }}
+          </a>
+          <p class="text-xs text-muted-foreground">{{ booking.invitee_email }}</p>
+        </td>
+        <td class="px-6 py-4 text-sm text-foreground">
+          {{ booking.host.name }}
+        </td>
+        <td class="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+          {{ booking.start_datetime|operator_datetime }}
+        </td>
+        <td class="px-6 py-4 text-sm">
+          {% if booking.member %}
+          <a href="{% url 'studio_user_detail' user_id=booking.member.id %}" class="text-accent hover:underline">
+            {{ booking.member.name|default:booking.member.email }}
+          </a>
+          {% else %}
+          <span class="text-muted-foreground">—</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4">
+          {% if booking.status == 'confirmed' %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-800 dark:text-emerald-400" data-testid="booking-status-badge">Confirmed</span>
+          {% elif booking.status == 'canceled' %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground" data-testid="booking-status-badge">Canceled</span>
+          {% else %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/15 text-accent" data-testid="booking-status-badge">Rescheduled</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}">
+          {% url 'studio_booking_detail' booking_id=booking.id as booking_detail_url %}
+          <div class="{% studio_list_class 'action_group' %}">
+            {% studio_list_action booking_detail_url 'View' 'secondary' %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_booking_list' as bookings_clear_url %}
+        {% studio_empty_state 'filter' entity_label='booking' entity_label_plural='bookings' clear_url=bookings_clear_url colspan=6 testid_suffix='bookings-empty-state' %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='booking' entity_label_plural='bookings' create_url=None empty_message='No bookings yet.' testid_suffix='bookings-empty-state' %}
+{% endif %}
+{% endblock %}

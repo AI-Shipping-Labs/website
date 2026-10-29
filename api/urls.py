@@ -21,6 +21,8 @@ from api.views.articles import (
     article_preview_token_regenerate,
 )
 from api.views.booking import (
+    booking_booking_cancel,
+    booking_bookings_collection,
     booking_call_request_approve,
     booking_call_request_decline,
     booking_call_request_detail,
@@ -393,6 +395,16 @@ urlpatterns = [
         name="api_call_profile_detail",
     ),
     # ---- Booking call requests (issue #1953) -------------------------
+    path(
+        "booking/bookings",
+        booking_bookings_collection,
+        name="api_booking_bookings_collection",
+    ),
+    path(
+        "booking/bookings/<int:booking_id>/cancel",
+        booking_booking_cancel,
+        name="api_booking_booking_cancel",
+    ),
     path(
         "booking/call-requests",
         booking_call_requests_collection,

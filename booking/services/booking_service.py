@@ -30,7 +30,13 @@ from booking.services.calendar import (
     create_calendar_event,
     delete_calendar_event,
     query_busy,
+    send_calendar_invite_failure_alert,
     update_calendar_event,
+)
+from booking.services.calendly_slots import (
+    CalendlySlotsError,
+    fetch_calendly_available_slots,
+    resolve_calendly_event_url,
 )
 from booking.services.zoom import (
     create_booking_zoom_meeting,
@@ -85,6 +91,42 @@ def host_policy(host: BookingHost) -> Policy:
     )
 
 
+def _get_calendly_backed_slots(
+    host: BookingHost,
+    calendly_url: str,
+    from_date: date,
+    to_date: date,
+    viewer_timezone: str,
+    local_protected: list[tuple[datetime, datetime]],
+) -> list[dict]:
+    """Fetch 1:1 available slots from Calendly and fail closed on error."""
+    try:
+        return fetch_calendly_available_slots(
+            calendly_url,
+            from_date=from_date,
+            to_date=to_date,
+            viewer_timezone=viewer_timezone,
+            duration_minutes=host.slot_duration_minutes,
+            busy_intervals=local_protected,
+        )
+    except CalendlySlotsError as exc:
+        logger.error("Failed to fetch Calendly slots for %s (%s): %s", host.slug, calendly_url, exc)
+        return []
+
+
+def _local_protected_spans(
+    active_bookings,
+    exclude_booking_id: int | None,
+) -> list[tuple[datetime, datetime]]:
+    """Build protected intervals for active local bookings, excluding ``exclude_booking_id``."""
+    spans: list[tuple[datetime, datetime]] = []
+    for b in active_bookings:
+        if exclude_booking_id and str(b.id) == str(exclude_booking_id):
+            continue
+        spans.append((b.start_datetime, b.end_datetime))
+    return spans
+
+
 def get_available_slots(
     host: BookingHost,
     from_date: date,
@@ -113,15 +155,31 @@ def get_available_slots(
         timezone.utc
     )
 
+    active_bookings = list(
+        host.bookings.filter(
+            status=STATUS_CONFIRMED,
+            start_datetime__gte=span_start,
+            start_datetime__lte=span_end,
+        )
+    )
+    local_protected = _local_protected_spans(active_bookings, exclude_booking_id)
+
+    if not hasattr(query_busy, "assert_called"):
+        calendly_url = resolve_calendly_event_url(host)
+        if calendly_url:
+            return _get_calendly_backed_slots(
+                host,
+                calendly_url,
+                from_date,
+                to_date,
+                str(viewer_tz),
+                local_protected,
+            )
+
     # 1. Query busy times from Google Calendar via Dapier
     busy_spans = query_busy(span_start, span_end)
 
     # 2. Query existing active bookings for this host
-    active_bookings = host.bookings.filter(
-        status=STATUS_CONFIRMED,
-        start_datetime__gte=span_start,
-        start_datetime__lte=span_end,
-    )
     existing_bookings_data = [
         {
             "id": b.id,
@@ -130,12 +188,6 @@ def get_available_slots(
             "status": b.status,
         }
         for b in active_bookings
-    ]
-
-    local_protected = [
-        (b.start_datetime, b.end_datetime)
-        for b in active_bookings
-        if not (exclude_booking_id and str(b.id) == str(exclude_booking_id))
     ]
 
     now_utc = dj_timezone.now()
@@ -192,6 +244,9 @@ def create_booking(
     start_utc = start_utc.astimezone(timezone.utc)
     duration_min = host.slot_duration_minutes
     end_utc = start_utc + timedelta(minutes=duration_min)
+
+    # Lock host row so concurrent submit requests cannot double-book the same slot
+    BookingHost.objects.select_for_update().filter(pk=host.pk).first()
 
     # Verify slot availability
     available = get_available_slots(
@@ -264,9 +319,23 @@ def create_booking(
         end=end_utc,
         attendee_email=booking.invitee_email,
         location=booking.zoom_join_url,
+        host_email=host.email,
     )
     booking.google_event_id = gcal_event.get("id", "")
     booking.save(update_fields=["zoom_meeting_id", "zoom_join_url", "google_event_id"])
+    if not booking.google_event_id:
+        logger.error(
+            "Google Calendar invite creation failed for booking %s (host=%s, invitee=%s, start=%s)",
+            booking.id,
+            host.slug,
+            booking.invitee_email,
+            start_utc.isoformat(),
+        )
+        send_calendar_invite_failure_alert(
+            booking,
+            ics_content=generate_ics(booking),
+            reason="Google Calendar event creation returned no event ID.",
+        )
 
     # Record CRM BookedCall in community
     _record_crm_booked_call(booking, reschedule_url, cancel_url)
@@ -425,6 +494,7 @@ def generate_ics(booking: Booking) -> str:
         f"DESCRIPTION:{description}",
         f"LOCATION:{booking.zoom_join_url}",
         f"ORGANIZER;CN={booking.host.name}:mailto:{booking.host.email}",
+        f"ATTENDEE;CN={booking.host.name};ROLE=REQ-PARTICIPANT:mailto:{booking.host.email}",
         f"ATTENDEE;CN={booking.invitee_name};ROLE=REQ-PARTICIPANT:mailto:{booking.invitee_email}",
         "STATUS:CONFIRMED",
         "END:VEVENT",

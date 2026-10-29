@@ -99,6 +99,47 @@
         ]
       }
     },
+    "/api/booking/bookings": {
+      "get": {
+        "description": "List and filter member 1:1 bookings by status or invitee email.",
+        "responses": {
+          "200": {
+            "description": "Filtered list of bookings."
+          }
+        },
+        "summary": "List member bookings",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
+    "/api/booking/bookings/{booking_id}/cancel": {
+      "post": {
+        "description": "Cancel a 1:1 booking through cancel_booking, releasing the slot and deleting its Zoom meeting and Google Calendar event without sending a platform cancellation email to the member.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "booking_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canceled booking details."
+          },
+          "404": {
+            "description": "Booking not found."
+          }
+        },
+        "summary": "Cancel a member booking",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
     "/api/booking/call-requests": {
       "get": {
         "description": "List and filter member call requests by status or member.",

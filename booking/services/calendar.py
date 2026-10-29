@@ -105,6 +105,25 @@ def query_busy(start: datetime, end: datetime, calendar_id: str | None = None) -
     return busy_spans
 
 
+def _ensure_utc(dt: datetime) -> datetime:
+    """Return a timezone-aware datetime in UTC."""
+    if dt.tzinfo:
+        return dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=timezone.utc)
+
+
+def _build_attendees(attendee_email: str, host_email: str = "") -> list[dict]:
+    """Build the Google Calendar attendees list including invitee and host."""
+    attendees: list[dict] = []
+    primary = (attendee_email or "").strip()
+    if primary:
+        attendees.append({"email": primary})
+    host_clean = (host_email or "").strip()
+    if host_clean and host_clean.lower() != primary.lower():
+        attendees.append({"email": host_clean})
+    return attendees
+
+
 def create_calendar_event(
     *,
     summary: str,
@@ -114,11 +133,12 @@ def create_calendar_event(
     attendee_email: str,
     location: str = "",
     calendar_id: str | None = None,
+    host_email: str = "",
 ) -> dict:
-    """Create an event on Google Calendar and invite the attendee."""
+    """Create an event on Google Calendar and invite both the attendee and host."""
     cal_id = calendar_id or get_selected_calendar_id()
-    start_utc = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
-    end_utc = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
+    start_utc = _ensure_utc(start)
+    end_utc = _ensure_utc(end)
 
     payload = {
         "summary": summary,
@@ -126,7 +146,7 @@ def create_calendar_event(
         "location": location,
         "start": {"dateTime": start_utc.isoformat()},
         "end": {"dateTime": end_utc.isoformat()},
-        "attendees": [{"email": attendee_email}],
+        "attendees": _build_attendees(attendee_email, host_email),
     }
 
     quoted_cal = urllib.parse.quote(cal_id, safe="")
@@ -190,4 +210,49 @@ def delete_calendar_event(event_id: str, calendar_id: str | None = None) -> bool
         return True
     except CalendarError as exc:
         logger.error("Failed to delete Google Calendar event %s: %s", event_id, exc)
+        return False
+
+
+def _build_failure_alert_body(booking, reason: str) -> str:
+    """Build the plaintext alert message for a failed calendar event creation."""
+    lines = [
+        "Google Calendar event creation failed for a confirmed 1:1 booking.",
+        "An .ics calendar invitation is attached so you can add it to your calendar.",
+        "",
+        f"Invitee: {booking.invitee_name} ({booking.invitee_email})",
+        f"Start (UTC): {booking.start_datetime.isoformat()}",
+        f"End (UTC): {booking.end_datetime.isoformat()}",
+        f"Topic: {booking.discussion_topic}",
+    ]
+    if booking.discussion_notes:
+        lines.append(f"Notes: {booking.discussion_notes}")
+    if booking.zoom_join_url:
+        lines.append(f"Zoom Join URL: {booking.zoom_join_url}")
+    if reason:
+        lines.append(f"Error: {reason}")
+    return "\n".join(lines)
+
+
+def send_calendar_invite_failure_alert(booking, ics_content: str = "", reason: str = "") -> bool:
+    """Alert the booking host by email (with .ics attachment) when Google Calendar write fails."""
+    from django.conf import settings
+    from django.core.mail import EmailMessage
+
+    host_email = ""
+    if booking.host and booking.host.email:
+        host_email = booking.host.email.strip()
+    recipient = host_email or "alexey@datatalks.club"
+    default_from = getattr(settings, "DEFAULT_FROM_EMAIL", "community@aishippinglabs.com")
+    from_email = get_config("RELAY_TRANSACTIONAL_FROM_EMAIL", default_from)
+    slot_str = booking.start_datetime.strftime("%Y-%m-%d %H:%M UTC")
+    subject = f"[Alert] Calendar invite failed for 1:1 call with {booking.invitee_name} ({slot_str})"
+    body = _build_failure_alert_body(booking, reason)
+    msg = EmailMessage(subject=subject, body=body, from_email=from_email, to=[recipient])
+    if ics_content:
+        msg.attach("booking.ics", ics_content, "text/calendar; method=REQUEST; charset=utf-8")
+    try:
+        msg.send(fail_silently=False)
+        return True
+    except Exception:
+        logger.exception("Failed to send calendar failure alert email for booking %s", booking.pk)
         return False

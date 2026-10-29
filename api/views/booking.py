@@ -13,11 +13,119 @@ from api.utils import (
 )
 from booking.models import (
     STATUS_APPROVED,
+    STATUS_CANCELED,
     STATUS_DECLINED,
+    Booking,
     CallRequest,
 )
+from booking.services.booking_service import cancel_booking
 
 TAG = "Booking"
+
+
+def _iso_or_none(dt) -> str | None:
+    if dt:
+        return dt.isoformat()
+    return None
+
+
+def serialize_booking(booking: Booking) -> dict:
+    host_slug = ""
+    if booking.host:
+        host_slug = booking.host.slug
+    return {
+        "id": booking.id,
+        "host_id": booking.host_id,
+        "host_slug": host_slug,
+        "member_id": booking.member_id,
+        "invitee_name": booking.invitee_name,
+        "invitee_email": booking.invitee_email,
+        "invitee_timezone": booking.invitee_timezone,
+        "start_datetime": _iso_or_none(booking.start_datetime),
+        "end_datetime": _iso_or_none(booking.end_datetime),
+        "duration_minutes": booking.duration_minutes,
+        "status": booking.status,
+        "discussion_topic": booking.discussion_topic,
+        "discussion_notes": booking.discussion_notes,
+        "company": booking.company,
+        "zoom_meeting_id": booking.zoom_meeting_id,
+        "zoom_join_url": booking.zoom_join_url,
+        "google_event_id": booking.google_event_id,
+        "canceled_at": _iso_or_none(booking.canceled_at),
+        "created_at": _iso_or_none(booking.created_at),
+        "updated_at": _iso_or_none(booking.updated_at),
+    }
+
+
+@token_required(structured_errors=True)
+@require_methods("GET", structured_errors=True)
+@openapi_spec(
+    tag=TAG,
+    methods={
+        "GET": {
+            "summary": "List member bookings",
+            "description": "List and filter member 1:1 bookings by status or invitee email.",
+            "responses": {
+                200: {
+                    "description": "Filtered list of bookings.",
+                },
+            },
+        },
+    },
+)
+def booking_bookings_collection(request):
+    """List and filter member 1:1 bookings."""
+    qs = Booking.objects.select_related("host", "member").order_by("-start_datetime")
+
+    status_filter = request.GET.get("status")
+    if status_filter:
+        qs = qs.filter(status=status_filter.strip().lower())
+
+    email_filter = request.GET.get("email")
+    if email_filter:
+        qs = qs.filter(invitee_email__iexact=email_filter.strip())
+
+    data = [serialize_booking(b) for b in qs]
+    return JsonResponse({"bookings": data, "count": len(data)})
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods("POST", structured_errors=True)
+@openapi_spec(
+    tag=TAG,
+    methods={
+        "POST": {
+            "summary": "Cancel a member booking",
+            "description": (
+                "Cancel a 1:1 booking through cancel_booking, releasing the slot "
+                "and deleting its Zoom meeting and Google Calendar event without "
+                "sending a platform cancellation email to the member."
+            ),
+            "responses": {
+                200: {
+                    "description": "Canceled booking details.",
+                },
+                404: {
+                    "description": "Booking not found.",
+                },
+            },
+        },
+    },
+)
+def booking_booking_cancel(request, booking_id):
+    """Cancel a booking via the standard cancel_booking service."""
+    booking = get_object_or_404(
+        Booking.objects.select_related("host", "member", "booked_call"),
+        pk=booking_id,
+    )
+    previous_status = booking.status
+    if booking.status != STATUS_CANCELED:
+        cancel_booking(booking)
+    payload = serialize_booking(booking)
+    payload["previous_status"] = previous_status
+    payload["email_sent"] = False
+    return JsonResponse(payload)
 
 
 def serialize_call_request(call_request: CallRequest) -> dict:

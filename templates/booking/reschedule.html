@@ -126,23 +126,28 @@
   });
 
   prevMonthBtn.addEventListener("click", function() {
+    viewDate.setDate(1);
     viewDate.setMonth(viewDate.getMonth() - 1);
     fetchSlots();
   });
 
   nextMonthBtn.addEventListener("click", function() {
+    viewDate.setDate(1);
     viewDate.setMonth(viewDate.getMonth() + 1);
     fetchSlots();
   });
 
+  function formatLocalIsoDate(y, m, d) {
+    return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+
   function getMonthBounds(date) {
     const year = date.getFullYear();
     const month = date.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
+    const lastDayNum = new Date(year, month + 1, 0).getDate();
     return {
-      from: firstDay.toISOString().slice(0, 10),
-      to: lastDay.toISOString().slice(0, 10)
+      from: formatLocalIsoDate(year, month, 1),
+      to: formatLocalIsoDate(year, month, lastDayNum)
     };
   }
 

@@ -1,13 +1,19 @@
 import json
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import TestCase
 
 from accounts.models import Token
 from booking.models import (
     STATUS_APPROVED,
+    STATUS_CANCELED,
+    STATUS_CONFIRMED,
     STATUS_DECLINED,
     STATUS_PENDING,
+    Booking,
     BookingHost,
     CallRequest,
 )
@@ -211,3 +217,35 @@ class ApiCallRequestsTests(TestCase):
         r_dec.refresh_from_db()
         self.assertEqual(r_dec.status, STATUS_DECLINED)
         self.assertEqual(r_dec.reviewed_by, self.staff)
+
+    @patch("booking.services.booking_service.delete_booking_zoom_meeting")
+    @patch("booking.services.booking_service.delete_calendar_event")
+    def test_api_bookings_list_and_cancel_without_member_email(
+        self, mock_del_cal, mock_del_zoom
+    ):
+        mail.outbox = []
+        booking = Booking.objects.create(
+            host=self.host,
+            member=self.member,
+            invitee_name="Member User",
+            invitee_email=self.member.email,
+            start_datetime=datetime(2026, 10, 29, 16, 30, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 29, 17, 0, tzinfo=timezone.utc),
+            status=STATUS_CONFIRMED,
+            zoom_meeting_id="zm-cancel-1",
+            google_event_id="gcal-cancel-1",
+        )
+        resp_list = self.client.get("/api/booking/bookings?status=confirmed", **self._auth())
+        self.assertEqual(resp_list.json()["count"], 1)
+
+        resp_cancel = self.client.post(
+            f"/api/booking/bookings/{booking.id}/cancel",
+            **self._auth(),
+        )
+        payload = resp_cancel.json()
+        self.assertEqual(payload["previous_status"], STATUS_CONFIRMED)
+        self.assertEqual(payload["status"], STATUS_CANCELED)
+        self.assertFalse(payload["email_sent"])
+        mock_del_zoom.assert_called_once_with("zm-cancel-1")
+        mock_del_cal.assert_called_once_with("gcal-cancel-1")
+        self.assertEqual(len(mail.outbox), 0)

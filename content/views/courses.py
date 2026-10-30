@@ -12,7 +12,6 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
 from accounts.oauth_context import get_oauth_provider_context
@@ -247,8 +246,7 @@ def courses_list(request):
     return render(request, 'content/courses_list.html', context)
 
 
-@cache_anonymous_page()
-@ensure_csrf_cookie
+@cache_anonymous_page(timeout=3600)
 def course_detail(request, slug):
     """Public course overview; enrolled learners enter their course home.
 
@@ -257,6 +255,19 @@ def course_detail(request, slug):
     - Authorized user: clickable unit links
     - Unauthorized user: unit titles (not clickable), CTA
     - Free course + unauthenticated: CTA to sign up
+
+    Cached for anonymous sessionless GETs with a 1h TTL: the syllabus
+    render is CPU-heavy and scales with unit count (the largest course
+    takes hundreds of ms), while per-slug anonymous traffic is sparse —
+    a 300s TTL usually expired before the next visitor. Content only
+    changes via the content sync pipeline, so an hour of staleness on
+    the public overview is acceptable.
+
+    No ``@ensure_csrf_cookie``: anonymous visitors render no POST form
+    here (enroll/unenroll forms are authenticated-only), and forcing the
+    csrftoken Set-Cookie would make every response uncacheable for
+    ``cache_anonymous_page``. Authenticated viewers still get the cookie
+    because the rendered forms call ``get_token()``.
     """
     course = get_object_or_404(
         Course.objects.select_related(
@@ -499,7 +510,10 @@ def course_detail(request, slug):
 @login_required(login_url='/accounts/login/')
 def course_home(request, slug, section='home'):
     """Private learner orientation; the public overview remains at the course URL."""
-    course = get_object_or_404(Course, slug=slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=slug, status='published',
+    )
     if not can_access(request.user, course):
         return redirect(course.get_absolute_url())
     if section == 'announcements' and not can_view_announcements(request.user, course):
@@ -556,7 +570,15 @@ def course_home(request, slug, section='home'):
         context['preview_cohorts'] = course.aisl_cohorts.filter(
             mode='cohort', is_active=True,
         ).order_by('start_date')
-    progress = course_progress_counts(request.user, course, self_paced_view)
+    raw_completed_ids = set(
+        UserCourseProgress.objects.filter(
+            user=request.user, unit__module__course=course,
+            completed_at__isnull=False,
+        ).values_list('unit_id', flat=True)
+    )
+    progress = course_progress_counts(
+        request.user, course, self_paced_view, completed_ids=raw_completed_ids,
+    )
     context['total_units'] = progress.total
     context['completed_units'] = progress.completed
     context['progress_pct'] = (
@@ -575,6 +597,7 @@ def course_home(request, slug, section='home'):
     if section == 'home':
         context.update(build_course_home(
             course, request.user, cohort, self_paced_view=self_paced_view,
+            completed_ids=raw_completed_ids,
         ))
         commitments = build_course_commitments(
             course, request.user, cohort, focus_module=context['current_module'],
@@ -607,10 +630,7 @@ def course_home(request, slug, section='home'):
         ))
         context.update(build_current_module(
             course, request.user, cohort, context, commitments,
-            completed_ids=set(UserCourseProgress.objects.filter(
-                user=request.user, unit__module__course=course,
-                completed_at__isnull=False,
-            ).values_list('unit_id', flat=True)),
+            completed_ids=raw_completed_ids,
             cohort_query=cohort_query,
             today=timezone.localdate(),
             due_next_keys=context['due_next']['keys'] if context['due_next'] else frozenset(),
@@ -657,11 +677,7 @@ def course_home(request, slug, section='home'):
                 description='Read the orientation, then use Mark as completed at the end.',
                 url=first_orientation_unit.get_absolute_url() + context['cohort_query'],
                 cta_label='Open orientation',
-                completed=UserCourseProgress.objects.filter(
-                    user=request.user,
-                    unit=first_orientation_unit,
-                    completed_at__isnull=False,
-                ).exists(),
+                completed=first_orientation_unit.pk in raw_completed_ids,
             ))
         orientation_module_id = (
             first_orientation['module'].pk if first_orientation else None
@@ -678,11 +694,7 @@ def course_home(request, slug, section='home'):
                 description='Read your first lesson, then mark it complete.',
                 url=first_lesson_unit.get_absolute_url() + context['cohort_query'],
                 cta_label='Open lesson',
-                completed=UserCourseProgress.objects.filter(
-                    user=request.user,
-                    unit=first_lesson_unit,
-                    completed_at__isnull=False,
-                ).exists(),
+                completed=first_lesson_unit.pk in raw_completed_ids,
             ))
         first_homework_unit = next((
             unit for unit in ordered_units
@@ -804,6 +816,7 @@ def course_home(request, slug, section='home'):
         )
         completed_unit_ids, completed_counts = completed_units_by_module(
             request.user, course, modules, self_paced_view,
+            raw_completed_ids=raw_completed_ids,
         )
         projects_by_module = _course_home_projects_by_module(
             course, cohort, request.user, self_paced_view,
@@ -961,7 +974,11 @@ def api_courses_list(request):
 
 def api_course_detail(request, slug):
     """GET /api/courses/{slug} - detail + syllabus + progress."""
-    course = get_object_or_404(Course, slug=slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=slug,
+        status='published',
+    )
     user = request.user
 
     has_access = can_access(user, course)
@@ -1075,23 +1092,33 @@ def _resolve_top_level_module(course, module_slug):
     submodule slug (unique only among its own siblings). A 404 here (not
     a raw ``MultipleObjectsReturned``) is the only possible failure mode.
     """
-    return get_object_or_404(
+    module = get_object_or_404(
         Module.objects.select_related('parent'), course=course,
         parent__isnull=True, slug=module_slug,
     )
+    module.course = course
+    return module
 
 
 def _render_module_overview(request, course, module):
     """Render a top-level or leaf-module overview with course access policy."""
     user = request.user
+    module.course = course
 
     has_access = can_access(user, course)
     # ``Unit.Meta.ordering = ['sort_order']`` already guarantees ordering;
     # an explicit ``.order_by()`` would be redundant. Issue #287.
     units = list(module.units.all())
+    for unit in units:
+        unit.module = module
     # Issue #1674: a parent module holds submodules, not units directly —
     # ``submodules`` is empty for a leaf module (today's two-level shape).
     children = list(module.children.order_by('sort_order', 'id').prefetch_related('units'))
+    for child in children:
+        child.course = course
+        child.parent = module
+        for unit in child.units.all():
+            unit.module = child
     inline_units, submodules = inline_units_and_topics(children, course.slug)
     units.extend(inline_units)
     course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
@@ -1207,7 +1234,10 @@ def module_overview(request, course_slug, module_slug):
     existing two-level course; a submodule's own overview page now lives
     at the three-segment ``course_unit_detail`` route below instead
     (``/courses/<course>/<parent>/<submodule>``)."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=course_slug, status='published',
+    )
     module = _resolve_top_level_module(course, module_slug)
     return _render_module_overview(request, course, module)
 
@@ -1219,6 +1249,8 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     mark-complete toggle, and next-unit button.
     """
     user = request.user
+    module.course = course
+    unit.module = module
 
     access_decision = course_unit_service.decide_course_unit_access(user, unit)
     if not access_decision.has_access:
@@ -1409,7 +1441,10 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     NO children, ``unit_slug`` can only be a unit slug under it — exactly
     today's two-level behaviour, byte-for-byte unchanged.
     """
-    course = get_object_or_404(Course, slug=course_slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=course_slug, status='published',
+    )
     top_module = _resolve_top_level_module(course, module_slug)
 
     if top_module.children.exists():
@@ -1425,6 +1460,8 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
                     request, course, capstone_unit.module, capstone_unit,
                 )
             raise Http404
+        submodule.course = course
+        submodule.parent = top_module
 
         inline_unit = inline_unit_for(submodule, course.slug)
         if inline_unit is not None:
@@ -1552,13 +1589,19 @@ def course_submodule_unit_detail(
     a unit's page when its module is a submodule. Entirely new URL
     territory — a two-level course never produces a four-segment path,
     so this never collides with any existing URL."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=course_slug, status='published',
+    )
     parent_module = _resolve_top_level_module(course, parent_slug)
     submodule = get_object_or_404(
         Module.objects.select_related('parent'), course=course,
         parent=parent_module, slug=module_slug,
     )
+    submodule.course = course
+    submodule.parent = parent_module
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
+    unit.module = submodule
     if is_inline_homework_unit(submodule, unit, course.slug):
         raise Http404
     inline_unit = inline_unit_for(submodule, course.slug)
@@ -1576,13 +1619,19 @@ def course_submodule_homework_step_detail(
     request, course_slug, parent_slug, module_slug, unit_slug, homework_step,
 ):
     """Serve a canonical step URL for a unit inside a submodule."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
+    course = get_object_or_404(
+        Course.objects.select_related('aisl_extension'),
+        slug=course_slug, status='published',
+    )
     parent_module = _resolve_top_level_module(course, parent_slug)
     submodule = get_object_or_404(
         Module.objects.select_related('parent'), course=course,
         parent=parent_module, slug=module_slug,
     )
+    submodule.course = course
+    submodule.parent = parent_module
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
+    unit.module = submodule
     if is_inline_homework_unit(submodule, unit, course.slug):
         raise Http404
     step_keys = _homework_route_step_keys(request, course, unit)

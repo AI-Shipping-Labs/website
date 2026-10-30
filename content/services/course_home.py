@@ -118,13 +118,16 @@ def _can_open_unit(unit, *, user_level, individual_access, entitlement_mode, is_
     return user_level >= required
 
 
-def build_course_home(course, user, cohort, *, today=None, self_paced_view=False):
+def build_course_home(
+    course, user, cohort, *, today=None, self_paced_view=False, completed_ids=None,
+):
     """Return one coherent view model; database query count is independent of module count."""
     today = today or timezone.localdate()
     modules = _ordered_modules(course)
-    completed_ids = set(UserCourseProgress.objects.filter(
-        user=user, unit__module__course=course, completed_at__isnull=False,
-    ).values_list('unit_id', flat=True))
+    if completed_ids is None:
+        completed_ids = set(UserCourseProgress.objects.filter(
+            user=user, unit__module__course=course, completed_at__isnull=False,
+        ).values_list('unit_id', flat=True))
     capstone_ids = {
         parent_id or module_id
         for module_id, parent_id in CourseProject.objects.filter(

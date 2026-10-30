@@ -399,3 +399,86 @@ class PastEventsNPlusOneTest(TierSetupMixin, TestCase):
             large_count,
             msg=(f"past events query count grew with row volume ({small_count} -> {large_count})"),
         )
+
+
+@override_settings(PUBLIC_PAGE_CACHE_ENABLED=True)
+class DetailPagesAnonCacheTest(TierSetupMixin, TestCase):
+    """Course/workshop detail pages stay anonymous-cacheable, CSRF intact.
+
+    Anonymous visitors render no POST form on either page, so a cookieless
+    repeat hit must be served from the anon page cache without setting any
+    cookie, while authenticated viewers keep their csrftoken cookie and
+    bypass the cache. The syllabus render is CPU-heavy on large courses,
+    so a lost cache here is directly visible in server-side latency.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
+            title="Fast pages detail", slug="fast-pages-detail",
+            status="published",
+        )
+        cls.workshop = _make_workshop("fast-pages-ws-detail")
+
+    def test_anonymous_course_detail_is_cached(self):
+        cache.clear()
+        first = self.client.get("/courses/fast-pages-detail")
+        self.assertContains(first, "Fast pages detail")
+        from content.models import Module
+
+        Module.objects.create(
+            course=self.course, title="Late module", slug="late-module",
+            sort_order=99,
+        )
+        second = self.client.get("/courses/fast-pages-detail")
+        self.assertNotContains(
+            second, "Late module",
+            msg_prefix="repeat anonymous hit must come from the anon cache",
+        )
+        self.assertEqual(list(second.cookies.keys()), [])
+        cache.clear()
+        third = self.client.get("/courses/fast-pages-detail")
+        self.assertContains(third, "Late module")
+
+    def test_anonymous_workshop_detail_is_cached(self):
+        cache.clear()
+        first = self.client.get("/workshops/fast-pages-ws-detail")
+        self.assertContains(first, "fast-pages-ws-detail")
+        second = self.client.get("/workshops/fast-pages-ws-detail")
+        self.assertContains(second, "fast-pages-ws-detail")
+        self.assertEqual(
+            list(second.cookies.keys()), [],
+            msg="cookieless repeat workshop hit must set no cookie",
+        )
+
+    def test_authenticated_course_detail_keeps_csrf_cookie(self):
+        from django.contrib.auth import get_user_model
+
+        cache.clear()
+        user = get_user_model().objects.create_user(
+            email="detail-csrf@test.com", password="pw", email_verified=True,
+        )
+        self.client.force_login(user)
+        response = self.client.get("/courses/fast-pages-detail?view=overview")
+        self.assertContains(response, "Fast pages detail")
+        self.assertIn(
+            "csrftoken", response.cookies,
+            msg="authenticated form render must keep the CSRF cookie",
+        )
+
+    def test_course_enroll_post_without_token_is_rejected(self):
+        from django.contrib.auth import get_user_model
+        from django.test import Client
+
+        cache.clear()
+        user = get_user_model().objects.create_user(
+            email="detail-enroll@test.com", password="pw", email_verified=True,
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(user)
+        response = client.post("/courses/fast-pages-detail/enroll")
+        self.assertEqual(
+            response.status_code, 403,
+            msg="dropping ensure_csrf_cookie must not weaken CSRF checks",
+        )

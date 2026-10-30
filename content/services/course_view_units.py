@@ -94,36 +94,58 @@ def get_next_incomplete_unit_for_view(course, user, self_paced_view):
     return None
 
 
-def completed_units_by_module(user, course, modules, self_paced_view):
+def _all_syllabus_units(course):
+    units = []
+    for top_module in course.get_syllabus():
+        units.extend(top_module.units.all())
+        for child in top_module.children.all():
+            units.extend(child.units.all())
+    return units
+
+
+def completed_units_by_module(
+    user, course, modules, self_paced_view, *, raw_completed_ids=None,
+):
     ordered = get_units_ordered_from_syllabus(modules)
-    visible_ids = set()
-    for unit in course_units_for_view(ordered, self_paced_view):
-        visible_ids.add(unit.pk)
+    visible_units = course_units_for_view(ordered, self_paced_view)
+    if raw_completed_ids is None:
+        raw_completed_ids = set(
+            UserCourseProgress.objects.filter(
+                user=user, unit__module__course=course, completed_at__isnull=False,
+            ).values_list('unit_id', flat=True)
+        )
     completed_ids = set()
     completed_counts = Counter()
-    rows = UserCourseProgress.objects.filter(
-        user=user, unit__module__course=course, completed_at__isnull=False,
-    ).values_list('unit_id', 'unit__module_id')
-    for unit_id, module_id in rows:
-        if unit_id in visible_ids:
-            completed_ids.add(unit_id)
-            completed_counts[module_id] += 1
+    for unit in visible_units:
+        if unit.pk in raw_completed_ids:
+            completed_ids.add(unit.pk)
+            completed_counts[unit.module_id] += 1
     return completed_ids, dict(completed_counts)
 
 
-def course_progress_counts(user, course, self_paced_view):
-    units = required_course_units_for_view(course, self_paced_view)
-    total = units.count()
-    completed = UserCourseProgress.objects.filter(
-        user=user, unit__in=units, completed_at__isnull=False,
-    ).count()
+def course_progress_counts(
+    user, course, self_paced_view, *, completed_ids=None,
+):
+    required_ids = set()
+    for unit in course_units_for_view(_all_syllabus_units(course), self_paced_view):
+        if not unit.effective_is_bonus:
+            required_ids.add(unit.pk)
+    total = len(required_ids)
+    if completed_ids is None:
+        completed_ids = set(
+            UserCourseProgress.objects.filter(
+                user=user, unit__module__course=course, completed_at__isnull=False,
+            ).values_list('unit_id', flat=True)
+        )
+    completed = len(completed_ids & required_ids)
     return CourseProgressCounts(completed=completed, total=total)
 
 
 def reader_progress(course, unit, ordered_units, completed_ids, self_paced_view):
-    required_ids = set(required_course_units_for_view(
-        course, self_paced_view,
-    ).values_list('pk', flat=True))
+    required_ids = set()
+    for item in course_units_for_view(_all_syllabus_units(course), self_paced_view):
+        if not item.effective_is_bonus:
+            required_ids.add(item.pk)
     progress_ids = []
     visible_units = course_units_for_view(ordered_units, self_paced_view)
     for visible_unit in visible_units:

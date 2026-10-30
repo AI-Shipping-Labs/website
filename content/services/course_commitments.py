@@ -15,7 +15,7 @@ from django.utils.formats import date_format
 
 from accounts.services.timezones import is_valid_timezone
 from content.access import get_user_level
-from content.models import CohortEnrollment, CourseAccess, Unit
+from content.models import Cohort, CohortEnrollment, CourseAccess
 from content.models.cohort import COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.homework import Homework, Submission
@@ -29,10 +29,10 @@ from content.services.course_home import (
 )
 from content.services.course_schedule import cohort_projects, has_open_dated_enrollment
 from content.services.course_units import (
+    _can_view_session_event,
     build_module_week_dates,
-    decide_course_unit_access,
     decide_course_unit_drip_lock,
-    resolve_session_event,
+    preferred_dated_enrollment_cohorts,
 )
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
@@ -178,39 +178,97 @@ def _authored_event_row(unit, cohort):
     return row
 
 
-def _event_rows(course, user, cohort, timezone_name, now):
-    """Combine cohort occurrences with authored course session units.
+def _candidate_session_series_ids(course, user, cohort):
+    preferred_cohorts = []
+    if cohort is not None and cohort.course_id == course.pk:
+        preferred_cohorts.append(cohort)
+    if user.is_authenticated:
+        preferred_cohorts.extend(preferred_dated_enrollment_cohorts(user, course))
+    series_ids = []
+    seen = set()
+    for candidate in preferred_cohorts:
+        series_id = candidate.event_series_id
+        if candidate.mode != 'cohort' or not series_id or series_id in seen:
+            continue
+        seen.add(series_id)
+        series_ids.append(series_id)
+    today = timezone.now().date()
+    fallback_ids = (
+        Cohort.objects.filter(
+            course=course,
+            mode='cohort',
+            event_series__isnull=False,
+            start_date__lt=today,
+        )
+        .order_by('-start_date')
+        .values_list('event_series_id', flat=True)
+    )
+    for series_id in fallback_ids:
+        if series_id not in seen:
+            seen.add(series_id)
+            series_ids.append(series_id)
+    return series_ids
 
-    Occurrences provide dates, status, join links, recordings, and published
-    recaps. Authored units fill any gaps so the Office hours page still shows
-    the complete course session outline before a cohort or occurrence exists.
-    A shared ``series_position`` represents one session and is emitted once.
-    """
+
+def _resolve_first_session_event(course, units, user, cohort):
+    positions = []
+    for unit in units:
+        if unit.session_position is not None:
+            positions.append(unit.session_position)
+    if not positions:
+        return None
+    series_ids = _candidate_session_series_ids(course, user, cohort)
+    if not series_ids:
+        return None
+    events_by_key = {}
+    events = Event.objects.select_related('event_series', 'workshop').filter(
+        event_series_id__in=series_ids,
+        series_position__in=positions,
+        status__in=PUBLIC_EVENT_STATUSES,
+    ).order_by('pk')
+    for event in events:
+        key = (event.event_series_id, event.series_position)
+        events_by_key.setdefault(key, event)
+    return _first_entitled_session_event(units, series_ids, events_by_key, user)
+
+
+def _first_entitled_session_event(units, series_ids, events_by_key, user):
+    entitled_by_series = {}
+    for unit in units:
+        if unit.session_position is None:
+            continue
+        for series_id in series_ids:
+            event = events_by_key.get((series_id, unit.session_position))
+            if event is None:
+                continue
+            if series_id not in entitled_by_series:
+                entitled_by_series[series_id] = _can_view_session_event(user, event)
+            if entitled_by_series[series_id]:
+                return event
+    return None
+
+
+def _event_rows(course, user, cohort, timezone_name, now):
+    """Combine cohort occurrences with authored course session units."""
     units = _authored_event_units(course)
     units_by_position = {}
     for unit in units:
         if unit.session_position is not None:
             units_by_position.setdefault(unit.session_position, unit)
 
+    events = []
     if cohort is not None and cohort.event_series_id:
         events = list(Event.objects.filter(
             event_series_id=cohort.event_series_id,
             status__in=PUBLIC_EVENT_STATUSES,
         ).order_by('start_datetime', 'pk'))
     else:
-        # This is the same safe, entitlement-aware fallback used by the
-        # syllabus session page. Once one authored unit resolves, include the
-        # complete series so real occurrences without a matching unit are not
-        # lost. A hidden series never resolves for an unentitled user.
-        resolved_event = None
-        for unit in units:
-            resolved_event = resolve_session_event(unit, user, cohort=cohort)
-            if resolved_event is not None:
-                break
-        events = list(Event.objects.filter(
-            event_series_id=resolved_event.event_series_id,
-            status__in=PUBLIC_EVENT_STATUSES,
-        ).order_by('start_datetime', 'pk')) if resolved_event else []
+        resolved_event = _resolve_first_session_event(course, units, user, cohort)
+        if resolved_event is not None:
+            events = list(Event.objects.filter(
+                event_series_id=resolved_event.event_series_id,
+                status__in=PUBLIC_EVENT_STATUSES,
+            ).order_by('start_datetime', 'pk'))
 
     rows = []
     represented_positions = set()
@@ -229,7 +287,19 @@ def _event_rows(course, user, cohort, timezone_name, now):
     return rows
 
 
-def _homework_rows(course, user, cohort, timezone_name, today):
+def _homework_units_by_content_id(course):
+    units_by_content_id = {}
+    for module in _ordered_modules(course):
+        for unit in _all_module_units(module):
+            if unit.kind == 'homework' and unit.content_id:
+                units_by_content_id[unit.content_id] = unit
+    return units_by_content_id
+
+
+def _homework_rows(
+    course, user, cohort, timezone_name, today,
+    *, user_level=None, individual_access=None,
+):
     if cohort is None:
         return []
     homeworks = list(Homework.objects.filter(cohort=cohort).select_related('cohort').order_by(
@@ -237,17 +307,11 @@ def _homework_rows(course, user, cohort, timezone_name, today):
     ))
     if not homeworks:
         return []
-    units_by_content_id = {
-        unit.content_id: unit
-        for unit in Unit.objects.filter(
-            module__course=course, kind='homework',
-            content_id__in=[homework.content_id for homework in homeworks],
-        ).select_related('module__course', 'module__parent').order_by(
-            'module__sort_order', 'sort_order',
-        )
-    }
-    user_level = get_user_level(user)
-    individual_access = CourseAccess.objects.filter(user=user, course=course).exists()
+    units_by_content_id = _homework_units_by_content_id(course)
+    if user_level is None:
+        user_level = get_user_level(user)
+    if individual_access is None:
+        individual_access = CourseAccess.objects.filter(user=user, course=course).exists()
     submissions = set(Submission.objects.filter(
         student=user, homework__in=homeworks,
     ).values_list('homework_id', flat=True))
@@ -455,60 +519,90 @@ def _focus_module(course, cohort, now):
     return module
 
 
-def _focus_work_items(course, user, cohort, homework_rows, *, now, module=None):
+def _focus_work_items(
+    course, user, cohort, homework_rows,
+    *, now, module=None, user_level=None, individual_access=None,
+):
     """Keep authored homework visible even when no submission form was synced."""
     module = module or _focus_module(course, cohort, now)
     if module is None:
         return []
 
-    user_level = get_user_level(user)
-    individual_access = CourseAccess.objects.filter(user=user, course=course).exists()
-    homework_by_content_id = {
-        row['unit_content_id']: row
-        for row in homework_rows if row.get('unit_content_id')
-    }
-    suffix = (
-        f'?{urlencode({"cohort": cohort.external_key})}'
-        if cohort and cohort.mode == 'cohort' and cohort.external_key else ''
-    )
+    if user_level is None:
+        user_level = get_user_level(user)
+    if individual_access is None:
+        individual_access = CourseAccess.objects.filter(user=user, course=course).exists()
+    homework_by_content_id = {}
+    for row in homework_rows:
+        if row.get('unit_content_id'):
+            homework_by_content_id[row['unit_content_id']] = row
+    suffix = ''
+    if cohort and cohort.mode == 'cohort' and cohort.external_key:
+        suffix = f'?{urlencode({"cohort": cohort.external_key})}'
     items = []
     for unit in _all_module_units(module):
         if unit.kind != UNIT_KIND_HOMEWORK or unit.effective_is_bonus:
             continue
-        unit_content_id = str(unit.content_id) if unit.content_id else ''
-        commitment = homework_by_content_id.get(unit_content_id)
-        unit_access = _can_open_unit(
-            unit, user_level=user_level, individual_access=individual_access,
-            entitlement_mode=course.access_mode == 'entitlement',
-            is_staff=user.is_staff or user.is_superuser,
-            verified=user.email_verified,
-        ) and decide_course_unit_access(user, unit).has_access
-        drip = (
-            decide_course_unit_drip_lock(user, unit, today=now.date(), cohort=cohort)
-            if unit_access else None
-        )
-        can_open = unit_access and not drip.is_locked
-        unit_url = unit.get_absolute_url() + suffix if can_open else ''
-        url = commitment['url'] if commitment and commitment['url'] else unit_url
-        action = commitment['action'] if commitment and commitment['action'] else (
-            'Review homework' if commitment and commitment['closed']
-            else 'Open project step' if 'capstone' in unit.title.casefold()
-            else 'Open homework'
-        )
-        if commitment and commitment['when']:
-            due_soon = 0 <= (commitment['when'] - now).total_seconds() <= 7 * 24 * 60 * 60
-        else:
-            due_soon = False
-        items.append({
-            'unit': unit,
-            'content_id': unit_content_id,
-            'commitment': commitment,
-            'url': url,
-            'action': action if url else '',
-            'available_date': drip.available_date if drip and drip.is_locked else None,
-            'due_soon': due_soon,
-        })
+        items.append(_build_focus_work_item(
+            course, user, cohort, unit, homework_by_content_id,
+            suffix=suffix, now=now, user_level=user_level,
+            individual_access=individual_access,
+        ))
     return items
+
+
+def _focus_work_action(unit, commitment):
+    if commitment and commitment['action']:
+        return commitment['action']
+    if commitment and commitment['closed']:
+        return 'Review homework'
+    if 'capstone' in unit.title.casefold():
+        return 'Open project step'
+    return 'Open homework'
+
+
+def _build_focus_work_item(
+    course, user, cohort, unit, homework_by_content_id,
+    *, suffix, now, user_level, individual_access,
+):
+    unit_content_id = ''
+    if unit.content_id:
+        unit_content_id = str(unit.content_id)
+    commitment = homework_by_content_id.get(unit_content_id)
+    unit_access = _can_open_unit(
+        unit, user_level=user_level, individual_access=individual_access,
+        entitlement_mode=course.access_mode == 'entitlement',
+        is_staff=user.is_staff or user.is_superuser,
+        verified=user.email_verified,
+    )
+    drip = None
+    if unit_access:
+        drip = decide_course_unit_drip_lock(user, unit, today=now.date(), cohort=cohort)
+    can_open = unit_access and not drip.is_locked
+    unit_url = ''
+    if can_open:
+        unit_url = unit.get_absolute_url() + suffix
+    url = unit_url
+    if commitment and commitment['url']:
+        url = commitment['url']
+    action = ''
+    if url:
+        action = _focus_work_action(unit, commitment)
+    due_soon = False
+    if commitment and commitment['when']:
+        due_soon = 0 <= (commitment['when'] - now).total_seconds() <= 7 * 24 * 60 * 60
+    available_date = None
+    if drip and drip.is_locked:
+        available_date = drip.available_date
+    return {
+        'unit': unit,
+        'content_id': unit_content_id,
+        'commitment': commitment,
+        'url': url,
+        'action': action,
+        'available_date': available_date,
+        'due_soon': due_soon,
+    }
 
 
 def _next_linked_session(course, events):
@@ -583,7 +677,12 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
     # Homework and projects stay listed for a self-paced learner, undated.
     self_paced = is_self_paced_view(course, user, cohort)
     events = [] if self_paced else _event_rows(course, user, cohort, timezone_name, now)
-    assignments = _homework_rows(course, user, cohort, timezone_name, now.date())
+    user_level = get_user_level(user)
+    individual_access = CourseAccess.objects.filter(user=user, course=course).exists()
+    assignments = _homework_rows(
+        course, user, cohort, timezone_name, now.date(),
+        user_level=user_level, individual_access=individual_access,
+    )
     assignments += _project_rows(course, user, cohort, timezone_name, now)
     if self_paced:
         assignments = [_without_date(row) for row in assignments]
@@ -595,6 +694,7 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
         focus_module = _focus_module(course, cohort, now)
     focus_work_items = _focus_work_items(
         course, user, cohort, homework_rows, now=now, module=focus_module,
+        user_level=user_level, individual_access=individual_access,
     )
     focus_work_content_ids = {item['content_id'] for item in focus_work_items}
     for item in focus_work_items:

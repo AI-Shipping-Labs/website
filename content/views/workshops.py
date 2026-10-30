@@ -675,7 +675,7 @@ def _resolve_materials_for_render(workshop, can_access_pages,
     return materials, can_show
 
 
-@ensure_csrf_cookie
+@cache_anonymous_page(timeout=3600)
 def workshop_detail(request, slug):
     """Landing page: description, metadata, links to video and tutorial.
 
@@ -683,10 +683,16 @@ def workshop_detail(request, slug):
     and description even when ``landing_required_level > 0``, with the
     body replaced by an upgrade card.
 
-    Issue #652: ``@ensure_csrf_cookie`` guarantees the CSRF cookie is
-    set on the landing page so the inline register form (shown on the
-    pages-paywall for anonymous visitors) can POST to /api/register
-    without a 403.
+    Cached for anonymous sessionless GETs with a 1h TTL (per-slug
+    anonymous traffic is sparse, so the default 300s usually expired
+    before the next visitor; workshop content only changes via the
+    content sync pipeline). Nothing on this page renders
+    ``{% csrf_token %}`` for anonymous visitors — the signup companion
+    on the pages-paywall is the OAuth-first links card, and the email
+    register form lives on /accounts/register, which sets its own CSRF
+    cookie. (Issue #652 originally forced the cookie here so the
+    then-inline register form could POST /api/register; that form is
+    gone from this surface.)
 
     ``slug`` is the canonical public key. Dated legacy routes are handled
     by explicit redirect views before this route.

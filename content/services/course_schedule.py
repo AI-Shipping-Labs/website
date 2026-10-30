@@ -6,11 +6,23 @@ in this module grants course access or changes submission permissions.
 
 from datetime import UTC
 
+from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 
 from accounts.services.timezones import is_valid_timezone
-from content.models import Cohort, CohortEnrollment, Homework, Module, Unit
+from content.models import Cohort, CohortEnrollment, Homework
 from content.models.peer_review import CourseProject
+
+_PROJECT_EPOCH = 0
+
+
+def _bump_project_epoch(*_args, **_kwargs) -> None:
+    global _PROJECT_EPOCH
+    _PROJECT_EPOCH += 1
+
+
+post_save.connect(_bump_project_epoch, sender=CourseProject)
+post_delete.connect(_bump_project_epoch, sender=CourseProject)
 
 
 def _owned_cohorts(course, user):
@@ -186,6 +198,19 @@ def schedule_instant_iso(value):
     return value.astimezone(UTC).isoformat().replace('+00:00', 'Z')
 
 
+def _cohort_has_projects(projects, cohort) -> bool:
+    if (
+        getattr(cohort, '_has_projects_epoch', None) == _PROJECT_EPOCH
+        and getattr(cohort, '_has_projects_course_id', None) == cohort.course_id
+    ):
+        return cohort._has_projects_cached
+    has_projects = projects.filter(cohort=cohort).exists()
+    cohort._has_projects_cached = has_projects
+    cohort._has_projects_epoch = _PROJECT_EPOCH
+    cohort._has_projects_course_id = cohort.course_id
+    return has_projects
+
+
 def cohort_projects(course, cohort):
     """Project attempts for one cohort.
 
@@ -193,24 +218,46 @@ def cohort_projects(course, cohort):
     unscoped attempts apply only when the cohort has none of its own.
     """
     projects = CourseProject.objects.filter(course=course)
-    if cohort is not None and projects.filter(cohort=cohort).exists():
+    if cohort is not None and _cohort_has_projects(projects, cohort):
         return projects.filter(cohort=cohort)
     return projects.filter(cohort__isnull=True)
+
+
+def _syllabus_units_and_parents(course):
+    units = []
+    module_parents = {}
+    for top_module in course.get_syllabus():
+        module_parents[top_module.pk] = top_module.parent_id
+        for unit in top_module.units.all():
+            units.append({
+                'id': unit.pk,
+                'module_id': unit.module_id,
+                'kind': unit.kind,
+                'source_content_id': unit.source_content_id,
+            })
+        for child in top_module.children.all():
+            module_parents[child.pk] = child.parent_id
+            for unit in child.units.all():
+                units.append({
+                    'id': unit.pk,
+                    'module_id': unit.module_id,
+                    'kind': unit.kind,
+                    'source_content_id': unit.source_content_id,
+                })
+    return units, module_parents
 
 
 def build_deadline_context(course, cohort):
     """Map homework by content ID and projects by module, including ancestors."""
     if cohort is None:
         return {}, {}
-    homework_due = {
-        row['content_id']: row['due_date']
-        for row in Homework.objects.filter(cohort=cohort, content_id__isnull=False)
-        .values('content_id', 'due_date')
-    }
-    units = list(Unit.objects.filter(module__course=course)
-                 .values('id', 'module_id', 'kind', 'source_content_id'))
-    module_parents = dict(Module.objects.filter(course=course)
-                          .values_list('id', 'parent_id'))
+    homework_due = {}
+    homework_rows = Homework.objects.filter(
+        cohort=cohort, content_id__isnull=False,
+    ).values('content_id', 'due_date')
+    for row in homework_rows:
+        homework_due[row['content_id']] = row['due_date']
+    units, module_parents = _syllabus_units_and_parents(course)
     project_rows = list(cohort_projects(course, cohort)
                         .values('module_id', 'submission_due_at', 'review_due_at'))
     deadlines = {}

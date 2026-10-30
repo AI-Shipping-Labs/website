@@ -16,6 +16,7 @@ import uuid
 from community_base.curriculum.models import Course, Module, Unit
 from django.db import models
 from django.db.models import Prefetch
+from django.db.models.signals import post_delete, post_save
 
 from content.access import get_required_tier_name
 from content.curriculum_unit_validation import validate_unit
@@ -45,6 +46,18 @@ AISL_COURSE_FIELDS = (
 )
 
 _APPLIED = False
+_SYLLABUS_EPOCH = 0
+_NON_STRING_EXTENSION_FIELDS = (
+    'individual_price_eur',
+    'peer_review_enabled',
+    'peer_review_count',
+    'peer_review_deadline_days',
+)
+
+
+def _bump_syllabus_epoch(*_args, **_kwargs) -> None:
+    global _SYLLABUS_EPOCH
+    _SYLLABUS_EPOCH += 1
 
 
 def _dummy_sha1(seed: str) -> str:
@@ -81,8 +94,19 @@ def _ensure_provenance(obj) -> None:
         obj.source_checksum = _dummy_sha256(seed)
 
 
+def _get_cached_extension(course: Course) -> CourseExtension | None:
+    fields_cache = course._state.fields_cache
+    if 'aisl_extension' in fields_cache:
+        return fields_cache['aisl_extension']
+    if not course.pk:
+        return None
+    ext = CourseExtension.objects.filter(course_id=course.pk).first()
+    fields_cache['aisl_extension'] = ext
+    return ext
+
+
 def _get_extension(course: Course) -> CourseExtension:
-    ext = getattr(course, 'aisl_extension', None)
+    ext = _get_cached_extension(course)
     if ext is not None:
         return ext
     ext, _ = CourseExtension.objects.get_or_create(course=course)
@@ -90,31 +114,30 @@ def _get_extension(course: Course) -> CourseExtension:
     return ext
 
 
+def _default_extension_value(field: str, fallback):
+    if field == 'access_mode':
+        return ACCESS_MODE_TIER
+    if field == 'reader_navigation_scope':
+        return 'course'
+    if field == 'peer_review_enabled':
+        return False
+    if field == 'peer_review_count':
+        return 3
+    if field == 'peer_review_deadline_days':
+        return 7
+    return fallback
+
+
 def _install_extension_fields() -> None:
     for name in AISL_COURSE_FIELDS:
-        default = '' if name not in (
-            'individual_price_eur',
-            'peer_review_enabled',
-            'peer_review_count',
-            'peer_review_deadline_days',
-        ) else None
+        default = ''
+        if name in _NON_STRING_EXTENSION_FIELDS:
+            default = None
 
         def getter(self, field=name, default=default):
-            ext = getattr(self, 'aisl_extension', None)
-            if ext is None and self.pk:
-                ext = CourseExtension.objects.filter(course_id=self.pk).first()
+            ext = _get_cached_extension(self)
             if ext is None:
-                if field == 'access_mode':
-                    return ACCESS_MODE_TIER
-                if field == 'reader_navigation_scope':
-                    return 'course'
-                if field == 'peer_review_enabled':
-                    return False
-                if field == 'peer_review_count':
-                    return 3
-                if field == 'peer_review_deadline_days':
-                    return 7
-                return default
+                return _default_extension_value(field, default)
             return getattr(ext, field)
 
         def setter(self, value, field=name):
@@ -428,15 +451,29 @@ def _install_course_methods() -> None:
         ).count()
 
     def get_syllabus(self):
-        return self.modules.filter(parent__isnull=True).prefetch_related(
+        cached = getattr(self, '_syllabus_cache', None)
+        if (
+            cached is not None
+            and getattr(self, '_syllabus_cache_epoch', None) == _SYLLABUS_EPOCH
+        ):
+            return cached
+        unit_qs = Unit.objects.defer(
+            'body', 'body_html', 'homework', 'homework_html',
+        ).order_by('sort_order', 'id')
+        qs = self.modules.filter(parent__isnull=True).prefetch_related(
             Prefetch(
                 'children',
                 queryset=Module.objects.order_by('sort_order', 'id').prefetch_related(
-                    Prefetch('units', queryset=Unit.objects.order_by('sort_order', 'id')),
+                    Prefetch('units', queryset=unit_qs),
                 ),
             ),
-            Prefetch('units', queryset=Unit.objects.order_by('sort_order', 'id')),
+            Prefetch('units', queryset=unit_qs),
         ).order_by('sort_order', 'id')
+        qs.__class__ = _SyllabusQuerySet
+        qs._syllabus_course = self
+        self._syllabus_cache = qs
+        self._syllabus_cache_epoch = _SYLLABUS_EPOCH
+        return qs
 
     def get_next_unit_for(self, user):
         from content.services.course_units import get_all_units_ordered
@@ -614,7 +651,38 @@ class _UnitModuleRewriteQuerySet(_RewriteQuerySet):
             kwargs['source_content_id'] = kwargs.pop('content_id')
         if 'source_commit' in kwargs:
             kwargs['source_commit_sha'] = kwargs.pop('source_commit')
+        _bump_syllabus_epoch()
         return models.QuerySet.update(self, **kwargs)
+
+
+def _wire_syllabus_tree(course, top_modules) -> None:
+    empty_children = Module.objects.none()
+    empty_children._result_cache = []
+    for top_module in top_modules:
+        top_module.course = course
+        for unit in top_module.units.all():
+            unit.module = top_module
+        for child in top_module.children.all():
+            child.course = course
+            child.parent = top_module
+            prefetched = getattr(child, '_prefetched_objects_cache', None)
+            if prefetched is None:
+                prefetched = {}
+                child._prefetched_objects_cache = prefetched
+            prefetched.setdefault('children', empty_children)
+            for unit in child.units.all():
+                unit.module = child
+
+
+class _SyllabusQuerySet(_UnitModuleRewriteQuerySet):
+    def _fetch_all(self):
+        already_fetched = self._result_cache is not None
+        super()._fetch_all()
+        if already_fetched:
+            return
+        course = getattr(self, '_syllabus_course', None)
+        if course is not None and self._result_cache:
+            _wire_syllabus_tree(course, self._result_cache)
 
 
 def _install_identity_aliases(model) -> None:
@@ -671,8 +739,11 @@ def _install_module_unit_methods() -> None:
         return f'/courses/{self.course.slug}/{self.parent.slug}/{self.slug}'
 
     def module_is_leaf(self):
-        if self.pk is None:
+        if self.pk is None or self.parent_id is not None:
             return True
+        prefetched = getattr(self, '_prefetched_objects_cache', None)
+        if prefetched is not None and 'children' in prefetched:
+            return not bool(prefetched['children'])
         return not self.children.exists()
 
     def unit_url(self):
@@ -761,4 +832,8 @@ def apply() -> None:
     _wrap_inits_and_saves()
     _install_course_methods()
     _install_module_unit_methods()
+    post_save.connect(_bump_syllabus_epoch, sender=Module)
+    post_delete.connect(_bump_syllabus_epoch, sender=Module)
+    post_save.connect(_bump_syllabus_epoch, sender=Unit)
+    post_delete.connect(_bump_syllabus_epoch, sender=Unit)
     _APPLIED = True

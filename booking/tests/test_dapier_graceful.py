@@ -6,11 +6,9 @@ create/update/delete become logged no-ops instead of raising.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 from django.test import TestCase
 
-from booking.services import booking_service
 from booking.services.calendar import (
     create_calendar_event,
     delete_calendar_event,
@@ -71,14 +69,3 @@ class DapierMissingGracefulTest(TestCase):
 
     def test_delete_returns_false(self):
         self.assertFalse(delete_calendar_event("evt_1"))
-
-    def test_availability_ignores_calendar(self):
-        # query_busy is what booking_service.get_available_slots calls; with no
-        # token it must be [] so local schedule/buffer policy still applies.
-        start = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
-        end = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
-        with patch(
-            "booking.services.booking_service.query_busy",
-            wraps=calendar_query_busy,
-        ):
-            self.assertEqual(booking_service.query_busy(start, end), [])

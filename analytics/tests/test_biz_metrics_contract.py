@@ -19,7 +19,11 @@ from django.test import TestCase
 from analytics.activity import record_lesson_open
 from analytics.models import UserActivity, UserAttribution
 from content.models import Course, Module, Unit
-from payments.models import ConversionAttribution, Tier
+from payments.models import (
+    BILLING_PERIOD_CHOICES,
+    ConversionAttribution,
+    Tier,
+)
 
 User = get_user_model()
 
@@ -68,6 +72,13 @@ EXPECTED_EVENT_LITERALS = (
     (UserActivity.EVENT_RESOURCE_VIEW, "resource_view"),
 )
 
+# The collector SQL buckets conversions per billing_period via a CASE over
+# these exact values ('' -> 'one-off', anything else -> 'other'). A value
+# rename here would silently move conversions into the 'other' bucket, so
+# the choice values are part of the cross-repo contract too.
+EXPECTED_BILLING_PERIOD_VALUES = ("monthly", "yearly")
+EXPECTED_ONE_OFF_BILLING_PERIOD = ""
+
 
 class BizMetricsSourceContractTest(TestCase):
     @classmethod
@@ -109,6 +120,13 @@ class BizMetricsSourceContractTest(TestCase):
         for constant, literal in EXPECTED_EVENT_LITERALS:
             with self.subTest(literal=literal):
                 self.assertEqual(constant, literal)
+
+    def test_billing_period_values_match_external_sql_contract(self):
+        values = tuple(value for value, _label in BILLING_PERIOD_CHOICES)
+        self.assertEqual(values, EXPECTED_BILLING_PERIOD_VALUES)
+        field = ConversionAttribution._meta.get_field("billing_period")
+        self.assertTrue(field.blank)
+        self.assertEqual(field.default, EXPECTED_ONE_OFF_BILLING_PERIOD)
 
     def test_lesson_open_row_carries_sql_join_keys(self):
         row = record_lesson_open(self.user, unit=self.unit)

@@ -15,12 +15,20 @@ Covers the structural expectations the spec calls out:
   active page (server-rendered, no JS required).
 """
 
+# Cohesion exception to the file-size cap: keep the rendered-sidebar contract
+# and its shared fixtures in the canonical focused sidebar test module.
+
 import re
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from studio.templatetags.studio_filters import studio_sidebar_state
+from studio.tests.sidebar_expectations import (
+    PEOPLE_LABELS,
+    STAFF_ANCHOR_COUNT,
+    SUPERUSER_ANCHOR_COUNT,
+)
 
 User = get_user_model()
 
@@ -253,7 +261,12 @@ class StudioSidebarStructureTest(TestCase):
                 )
 
     def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
-        for superuser, expected_count in ((False, 51), (True, 54)):
+        # Cohesion exception to the function-size cap: both roles must satisfy
+        # the same anchor-count, keyboard-focus, and privileged-link contract.
+        for superuser, expected_count in (
+            (False, STAFF_ANCHOR_COUNT),
+            (True, SUPERUSER_ANCHOR_COUNT),
+        ):
             with self.subTest(superuser=superuser):
                 response = self._get_studio_dashboard(superuser=superuser)
                 anchors = self._sidebar_anchors(response)
@@ -276,6 +289,16 @@ class StudioSidebarStructureTest(TestCase):
                     self.assertNotIn('href="/studio/users/new/"', rendered)
                     self.assertNotIn('href="/studio/api-tokens/"', rendered)
                     self.assertNotIn('href="/studio/api-keys/"', rendered)
+
+    def test_people_section_labels_match_shared_expectations(self):
+        # Guard: the scheduled Playwright sidebar-reorg suite reads the same
+        # list, so a new People entry must update sidebar_expectations.py.
+        response = self._get_studio_dashboard(superuser=True)
+        body = response.content.decode()
+        start = body.index('id="studio-section-people"')
+        end = body.index('</ul>', start)
+        labels = re.findall(r'<span>([^<]*)</span>', body[start:end])
+        self.assertEqual([label.strip() for label in labels], PEOPLE_LABELS)
 
     # ------------------------------------------------------------------
     # Preserved test-id hooks

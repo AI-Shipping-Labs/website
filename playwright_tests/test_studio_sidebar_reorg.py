@@ -14,6 +14,9 @@ buttons, links, aria attributes) rather than full HTML substring
 matches.
 """
 
+# Cohesion exception to the file-size cap: preserve the canonical sidebar
+# acceptance command and shared browser fixtures for this navigation contract.
+
 import os
 
 import pytest
@@ -29,6 +32,11 @@ from playwright_tests.conftest import (
 )
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
+)
+from studio.tests.sidebar_expectations import (
+    PEOPLE_LABELS,
+    STAFF_ANCHOR_COUNT,
+    SUPERUSER_ANCHOR_COUNT,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -240,7 +248,9 @@ class TestStaffLandsInStudio:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 53)
+        _assert_all_sidebar_anchors_have_keyboard_focus(
+            focus_page, SUPERUSER_ANCHOR_COUNT
+        )
         focus_page.close()
 
 
@@ -458,7 +468,9 @@ class TestNonSuperuserGating:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 0
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 50)
+        _assert_all_sidebar_anchors_have_keyboard_focus(
+            focus_page, STAFF_ANCHOR_COUNT
+        )
         focus_page.close()
 
 
@@ -692,21 +704,7 @@ class TestPlanningSection:
 
         _section_button(page, "people").click()
         people_labels = page.locator("#studio-section-people a span").all_inner_texts()
-        assert [label.strip() for label in people_labels if label.strip()] == [
-            "Users",
-            "Call profiles",
-            "Call requests",
-            "Imports",
-            "Instructors",
-            "Tier overrides",
-            "Tags",
-            "Merge accounts",
-            "Payment mismatches",
-            "Subscription reconciliation",
-            "New user",
-            "CRM",
-            "AI Assistant",
-        ]
+        assert [label.strip() for label in people_labels] == PEOPLE_LABELS
 
         planning.click()
         planning_labels = page.locator(

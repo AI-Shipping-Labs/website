@@ -9,10 +9,12 @@ live published set, so stored ``body_html`` never carries an internal href
 that 404s.
 """
 
+from community_base.content_sync.rendering import strip_leading_title_h1
 from django.test import SimpleTestCase, TestCase
 
+import topics.rendering as topic_rendering_module
 from topics.models import STATUS_DRAFT, TopicPage
-from topics.rendering import rewrite_relative_md_links
+from topics.rendering import render_topic_body, rewrite_relative_md_links
 
 
 class RewriteRelativeMdLinksPureTest(SimpleTestCase):
@@ -81,6 +83,21 @@ class RewriteRelativeMdLinksPureTest(SimpleTestCase):
             rewrite_relative_md_links('![Diagram](missing.md)', {'rag'}),
             'Diagram',
         )
+
+    def test_strip_leading_title_h1_comes_from_content_sync_rendering(self):
+        self.assertIs(
+            topic_rendering_module.strip_leading_title_h1,
+            strip_leading_title_h1,
+        )
+
+    def test_render_topic_body_strips_matching_leading_title_h1(self):
+        rendered = render_topic_body(
+            '# RAG\n\nSee [Index](index.md).',
+            'RAG',
+            published_slugs={'index'},
+        )
+        self.assertNotIn('<h1', rendered)
+        self.assertIn('href="/topics/"', rendered)
 
 
 class TopicPageSaveSlugResolutionTest(TestCase):

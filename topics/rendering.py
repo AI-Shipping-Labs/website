@@ -17,7 +17,7 @@ text with no anchor, so a stored ``body_html`` never carries an internal
 import os
 import re
 
-from community_base.curriculum.rendering import strip_leading_title_h1
+from community_base.content_sync.rendering import strip_leading_title_h1
 from community_base.knowledge_base.rendering import render_markdown
 
 _MD_LINK_PATTERN = re.compile(

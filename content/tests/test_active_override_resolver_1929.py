@@ -16,6 +16,7 @@ from content.access import (
     get_active_overrides_by_user,
     get_user_level,
     resolve_effective_tier,
+    resolve_effective_tier_model,
 )
 from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
@@ -161,3 +162,26 @@ class ResolveEffectiveTierTest(TierSetupMixin, TestCase):
             (effective.name, effective.slug, effective.level, effective.source),
             ('Free', 'free', 0, 'base'),
         )
+
+    def test_privacy_and_grace_effective_tier_share_owner_and_handle_missing_membership(self):
+        """D20: privacy and monthly_payment_grace delegate to resolve_effective_tier_model."""
+        from accounts.services.privacy import _effective_tier as privacy_effective_tier
+        from payments.models import Membership
+        from payments.services.monthly_payment_grace import (
+            _effective_tier as grace_effective_tier,
+        )
+
+        set_membership(self.user, tier=self.basic_tier)
+        TierOverride.objects.create(
+            user=self.user, override_tier=self.main_tier, expires_at=_at(10, 30),
+        )
+        self.assertEqual(resolve_effective_tier_model(self.user), self.main_tier)
+        self.assertEqual(privacy_effective_tier(self.user), self.main_tier)
+        self.assertEqual(grace_effective_tier(self.user), self.main_tier)
+
+        TierOverride.objects.filter(user=self.user).delete()
+        Membership.objects.filter(user=self.user).delete()
+        fresh_user = User.objects.get(pk=self.user.pk)
+        self.assertEqual(grace_effective_tier(fresh_user), self.free_tier)
+        self.assertEqual(privacy_effective_tier(fresh_user), self.free_tier)
+

@@ -26,7 +26,11 @@ from django.utils import timezone
 
 from accounts.models import User
 from community.models import CommunityAuditLog
-from content.access import LEVEL_MAIN, get_active_override, get_user_level
+from content.access import (
+    LEVEL_MAIN,
+    get_user_level,
+    resolve_effective_tier_model,
+)
 from email_app.package_mail import send_package_mail
 from integrations.config import get_config
 from payments.exceptions import (
@@ -201,15 +205,7 @@ def qualify_monthly_failure(invoice, subscription, *, price_to_tier=None):
 
 def _effective_tier(user):
     """Return canonical strongest current membership tier (base or override)."""
-    # Issue #1579: the base tier lives on payments.Membership.
-    tier = user.membership.tier
-    # Source-specific courtesy grants may coexist.  The shared access resolver
-    # orders them by tier strength (then expiry), matching ``get_user_level``;
-    # choosing the newest row can under-report an older, stronger grant.
-    override = get_active_override(user)
-    if override and (tier is None or override.override_tier.level > tier.level):
-        return override.override_tier
-    return tier or Tier.objects.filter(slug="free").first()
+    return resolve_effective_tier_model(user, fallback_to_free=True)
 
 
 def _audit(grace, action, *, actor, reason="", old_base=None, new_base=None,

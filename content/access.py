@@ -257,7 +257,37 @@ class EffectiveTier:
         return self.source == 'override'
 
 
-def resolve_effective_tier(user, override):
+_UNSET_OVERRIDE = object()
+
+
+def resolve_effective_tier_model(user, override=_UNSET_OVERRIDE, *, fallback_to_free=False):
+    """Return the effective ``Tier`` model instance for ``user`` (base or override).
+
+    When ``override`` is omitted, resolves :func:`get_active_override`.
+    Applies the same rule as :func:`resolve_effective_tier`: the active
+    override wins iff its level exceeds the stored membership tier level.
+    When ``fallback_to_free=True`` and neither a stored tier nor an active
+    override applies, falls back to the ``slug='free'`` ``Tier`` row.
+    """
+    from payments.models import Membership, Tier
+
+    if override is _UNSET_OVERRIDE:
+        override = get_active_override(user)
+    membership = Membership.for_user(user)
+    tier = None
+    if membership.tier_id:
+        tier = membership.tier
+    base_level = 0
+    if tier is not None:
+        base_level = tier.level
+    if override is not None and override.override_tier.level > base_level:
+        return override.override_tier
+    if tier is None and fallback_to_free:
+        return Tier.objects.filter(slug='free').first()
+    return tier
+
+
+def resolve_effective_tier(user, override=_UNSET_OVERRIDE):
     """Return the :class:`EffectiveTier` for ``user`` given its active override.
 
     ``user`` should have ``membership__tier`` loaded; ``override`` is the
@@ -266,6 +296,8 @@ def resolve_effective_tier(user, override):
     ``max(base, override)``. Staff escalation is deliberately not applied:
     Studio displays the stored or overridden tier for staff accounts.
     """
+    if override is _UNSET_OVERRIDE:
+        override = get_active_override(user)
     membership = user.membership
     tier = membership.tier if membership.tier_id else None
     base_level = tier.level if tier is not None else 0

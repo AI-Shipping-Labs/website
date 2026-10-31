@@ -24,6 +24,7 @@ from django.utils.crypto import salted_hmac
 
 from accounts.models import PrivacyRequestLog
 from accounts_ext.models import AccountSession
+from content.access import resolve_effective_tier_model
 from email_app.package_mail import send_package_mail
 from integrations.config import (
     get_config,
@@ -1371,24 +1372,7 @@ def _tier_snapshot(tier):
 
 
 def _effective_tier(user):
-    # Issue #1579: the base tier lives on payments.Membership.
-    base_tier = Membership.for_user(user).tier
-    override_model = _model("payments", "TierOverride")
-    if override_model is None:
-        return base_tier
-    active = (
-        override_model.objects.filter(
-            user=user,
-            is_active=True,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related("override_tier")
-        .order_by("-override_tier__level")
-        .first()
-    )
-    if active and (base_tier is None or active.override_tier.level > base_tier.level):
-        return active.override_tier
-    return base_tier
+    return resolve_effective_tier_model(user)
 
 
 def _child_values(plan_model, user, related_name):

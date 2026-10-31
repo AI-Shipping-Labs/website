@@ -1,6 +1,6 @@
 # Infrastructure and Deployment
 
-If you are an operator bringing up a fresh environment (not a developer running locally), see [`_docs/configuration.md`](configuration.md) first — it covers the OAuth login + Studio integration setup. This file documents infrastructure, CI/CD, ECS env vars, and bastion / remote-DB access.
+If you are an operator bringing up a fresh environment (not a developer running locally), see [`_docs/configuration.md`](configuration.md) first — it covers the OAuth login + Studio integration setup. This file documents the Coolify runtime infrastructure, CI/CD, runtime env vars, and bastion / remote-DB access.
 
 A fresh environment that uses Zoom also needs Marketplace configuration outside
 the application: follow [configuration section 10](configuration.md#10-zoom-events)
@@ -45,42 +45,46 @@ must print nothing.
 
 ## Infrastructure
 
-The app runs on AWS ECS Fargate behind an ALB, with Docker images stored in ECR.
+The app runs on Contabo Coolify (`https://coolify.169.58.119.163.sslip.io`) behind Coolify's Traefik proxy, with immutable `linux/amd64` Docker images stored in GitHub Container Registry (`ghcr.io/ai-shipping-labs/website`). The earlier AWS ECS Fargate runtime and ECR repository are retired; see [`coolify-deployment.md`](coolify-deployment.md), [`coolify-dual-deploy.md`](coolify-dual-deploy.md), and [`coolify-networking.md`](coolify-networking.md).
 
 | Component | Resource |
 |-----------|----------|
-| ECS Cluster | `ai-shipping-labs` |
-| ECR Repo | `387546586013.dkr.ecr.eu-west-1.amazonaws.com/ai-shipping-labs` |
-| RDS | `ai-shipping-labs` (PostgreSQL, private VPC) |
-| ALB | `aisl-alb` |
-| Dev URL | https://dev.aishippinglabs.com |
+| Coolify Source Service | `aisl-staging` (`mekt9kz74fvbixla6olinuma`) — migration-capable source `web` and production `worker` |
+| Coolify Rolling Web App | `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) — public production web routes |
+| Image Registry | `ghcr.io/ai-shipping-labs/website` (`deploy-<run_id>-<attempt>-<40-char-sha>`) |
+| Networks | `coolify` (PostgreSQL DNS/connectivity) and `mekt9kz74fvbixla6olinuma` (Service UUID / Traefik) |
+| Dev URL | https://dev.aishippinglabs.com (Traefik file-provider route to `web-mekt9kz74fvbixla6olinuma:8000`; see [`coolify-dev-route.md`](coolify-dev-route.md)) |
 | Prod URL | https://aishippinglabs.com |
-| Region | `eu-west-1` |
+| AWS Region (S3 / SES / Secrets Manager) | `eu-west-1` |
 
-The ECS task runs two containers from the same Docker image:
+Three runtime containers run from the same GHCR Docker image (`scripts/entrypoint_init.py`):
 
-- `ai-shipping-labs` — gunicorn web server (essential)
-- `ai-shipping-labs-worker` — Django-Q2 `qcluster` background worker (non-essential)
+- `web-mekt9kz74fvbixla6olinuma` (`aisl-staging` Service `web`) — sole migrator (`RUN_MIGRATIONS=true`, `BOOT_MODE` unset), runs `manage.py migrate`, R1 reconciliation/schedule suppression, and `setup_schedules`, then starts Gunicorn
+- `worker-mekt9kz74fvbixla6olinuma` (`aisl-staging` Service `worker`) — background worker (`BOOT_MODE=worker`, `RUN_MIGRATIONS=false`), skips `migrate`, runs R1 reconciliation/schedule suppression and `setup_schedules`, then starts Django-Q2 `qcluster`
+- `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) — public rolling web (`BOOT_MODE=web`, `RUN_MIGRATIONS=false`), skips `migrate`, runs R1 reconciliation/schedule suppression and `setup_schedules`, then starts Gunicorn behind `/opt/rolling-launch.py`
 
-On startup, the entrypoint (`scripts/entrypoint_init.py`) runs `manage.py migrate` before starting the main process. The `email_app` migration `0013_create_django_q_cache_table` creates the `django_q_cache` `DatabaseCache` table as part of `migrate`, so it is applied automatically on every deployment without a separate `createcachetable` step on every container boot.
+The `email_app` migration `0013_create_django_q_cache_table` creates the `django_q_cache` `DatabaseCache` table as part of `migrate`, so it is applied automatically on every deployment without a separate `createcachetable` step on every container boot.
 
-The deployed version tag is set via the `VERSION` environment variable and displayed in the page footer.
+The deployed version tag is baked into the image `VERSION` environment variable (the full 40-character commit SHA) and returned by `/ping` and displayed in the page footer.
 
 ### Prepare app and infrastructure env
 
-Before the app can boot in ECS, provision the ALB/ECS/ECR/RDS resources above, create the Secrets Manager records below, and make sure the task definition carries the platform environment variables in this section. Most rows here are read at process start, used by Django/ECS directly, or intentionally excluded from Studio; rows that also have Studio overrides call that out explicitly.
+The Coolify Service Compose definition and Application environment carry the platform environment variables in this section (`deploy/coolify/topology.py` owns the protected runtime contract). Most rows here are read at process start, used by Django or the entrypoint directly, or intentionally excluded from Studio; rows that also have Studio overrides call that out explicitly.
 
-Set in the ECS task definition (plain environment variables):
+Set in the Coolify Service/Application environment or image build:
 
 | Variable | Example | Purpose |
 |----------|---------|---------|
-| `VERSION` | `20260327-124723-02ce799` | Displayed in the page footer, set automatically by deploy scripts |
-| `DEBUG` | `false` | Django debug mode. Truthy values: `1`, `true`, `yes`. Anything else (including `0`, `false`, `no`, empty) is falsy. Production must set this to `false` to enforce the `SECRET_KEY` guard. |
-| `ALLOWED_HOSTS` | `dev.aishippinglabs.com` | Comma-separated list of allowed hosts |
+| `VERSION` | `e79168d6974422fa345132c45b81467efd7eeaab` | Baked into the image at build time (`GITHUB_SHA`); displayed in the page footer and `/ping`. Must not be overridden in Coolify runtime env (`reject_version_override`). |
+| `DEBUG` | `0` | Django debug mode. Truthy values: `1`, `true`, `yes`. Anything else (including `0`, `false`, `no`, empty) is falsy. Production must set this to `0` / `false` to enforce the `SECRET_KEY` guard. |
+| `ALLOWED_HOSTS` | `dev.aishippinglabs.com,aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
-| `SITE_BASE_URL` | `https://dev.aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
-| `RUN_MIGRATIONS` | `true` on web, `false` on worker | Entrypoint dispatch flag. Only the web container runs `migrate`; the worker starts `qcluster`. Set by the Coolify topology (`deploy/coolify/topology.py`). |
-| `RELAY_BASE_URL` / `RELAY_API_KEY` | `true` in prod | Required so transactional/campaign email deliver through Relay. Missing values fail `manage.py check` when `DEBUG=False`. |
+| `SITE_BASE_URL` | `https://aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
+| `BOOT_MODE` | unset on source `web`, `worker` on source `worker`, `web` on rolling `web` | Entrypoint role selector (`scripts/entrypoint_init.py`). `web` and `worker` skip `migrate` on boot; when unset, `RUN_MIGRATIONS` selects web-migrator vs worker. |
+| `RUN_MIGRATIONS` | `true` on source `web`, `false` on `worker` and rolling `web` | Entrypoint migration flag. Only the source `web` container runs `migrate`. Set by the Coolify topology (`deploy/coolify/topology.py`). |
+| `SERVING_BOOT_SMOKE_CHECK_ENABLED` | `false` on source Service | Controls the pre-Django raw-env smoke check in `scripts/entrypoint_init.py` (defaults to `true` when unset). |
+| `GUNICORN_WORKERS` / `GUNICORN_THREADS` | `2` / `4` | Gunicorn worker and thread counts for `scripts/gunicorn_runtime.py`. |
+| `RELAY_BASE_URL` / `RELAY_API_KEY` | configured in prod | Required so transactional/campaign email deliver through Relay. Missing values fail `manage.py check` when `DEBUG=False`. |
 | `S3_ENABLED` | `true` in prod | Uploads content-sync images to S3. Defaults true — a missing var resolves to true so uploads run; content sync only skips image upload when the flag is explicitly `false` (or under `TESTING`). Keep it `true` in prod so uploads never depend on the default drifting. |
 | `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
 | `SLACK_ENVIRONMENT` | `development` on dev, `production` on prod | Slack routing mode. Non-production modes ignore production Slack channel IDs and require dev/test channel overrides before posting. Can be managed in Studio for normal routing changes after the startup gate is enabled. |
@@ -102,20 +106,20 @@ environment that has not saved an override.
 | `SYNC_RUNNING_THRESHOLD_MINUTES` | `30` | Minutes a sync may remain running before the watchdog marks it failed. |
 | `EXPECT_WORKER` | `true` | Set `false` only for a one-off environment intentionally running without django-q. |
 
-Set via AWS Secrets Manager (injected as ECS secrets):
+Set as secret environment variables in Coolify (Service `aisl-staging` and Application `aishl-production-rolling-web`):
 
-| Variable | Secret ID | Purpose |
-|----------|-----------|---------|
-| `DATABASE_URL` | `ai-shipping-labs/database-url` (dev) / `ai-shipping-labs/database-url-prod` (prod) | PostgreSQL connection string |
-| `SECRET_KEY` | `ai-shipping-labs/django-secret-key` | Django secret key. Required at startup when `DEBUG=false`: the app raises `ImproperlyConfigured` and exits if it is unset, empty, or equal to the in-tree dev fallback. The fallback `django-insecure-dev-only-do-not-use-in-production` is rejected on purpose so a copy-paste from local dev cannot satisfy the production guard. |
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string on the `coolify` network |
+| `SECRET_KEY` | Django secret key. Required at startup when `DEBUG=false`: the app raises `ImproperlyConfigured` and exits if it is unset, empty, or equal to the in-tree dev fallback. The fallback `django-insecure-dev-only-do-not-use-in-production` is rejected on purpose so a copy-paste from local dev cannot satisfy the production guard. |
 
-Fetched at runtime by the Django app (not injected via ECS):
+Fetched at runtime by the Django app when no direct PEM is configured in Studio or the Coolify environment:
 
 | Secret ID | Purpose |
 |-----------|---------|
 | `ai-shipping-labs/github-app-private-key` | GitHub App PEM key for private content repo sync |
 
-The app fetches this from Secrets Manager automatically if no direct PEM is set. The secret path and region can be configured in Studio with `GITHUB_APP_PRIVATE_KEY_SECRET_ID` and `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`; otherwise the app uses `ai-shipping-labs/github-app-private-key` in `eu-west-1`. Fallback order: Studio PEM → local PEM file → env var → Studio secret path → default Secrets Manager path.
+Why the AWS Secrets Manager fallback is kept: neither the production/dev `IntegrationSetting` database rows (`GET /api/v1/settings/GITHUB_APP_PRIVATE_KEY` reports `source="default"`, `configured=false`) nor the Coolify container environments (`GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_PRIVATE_KEY_FILE` are unset) store the PEM directly. `integrations/services/github_app.py:_resolve_github_app_private_key()` therefore retains the AWS Secrets Manager fallback (`GITHUB_APP_PRIVATE_KEY_SECRET_ID`, default `ai-shipping-labs/github-app-private-key` in `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`, default `eu-west-1`). Fallback order: Studio PEM → local PEM file (`GITHUB_APP_PRIVATE_KEY_FILE`) → `GITHUB_APP_PRIVATE_KEY` env var → Studio secret path → default Secrets Manager path.
 
 When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it.
 
@@ -124,7 +128,7 @@ The app also has test-only/internal env controls:
 | Variable | Scope | Purpose |
 |----------|-------|---------|
 | `DJANGO_TEST_DB_NAME` | CI/test | File-backed SQLite test DB for `--keepdb` caching. |
-| `Q_SYNC` | test/debug | Runs django-q tasks synchronously when `true`; do not set in ECS services. |
+| `Q_SYNC` | test/debug | Runs django-q tasks synchronously when `true`; do not set in deployed services. |
 | `DJANGO_QCLUSTER_PROCESS` | internal | Set by `scripts/entrypoint_init.py` before starting `qcluster`; operators should not set it manually. |
 
 ### GitHub App (content sync)
@@ -159,7 +163,7 @@ A `200` with the full repo name means it works. A `404` means the installation i
 
 ## Cache backend (required for the worker dashboard)
 
-django-q writes cluster heartbeats to Django's cache backend. The `/studio/worker/` dashboard reads them back via `Stat.get_all()` to decide whether the cluster is alive. If the cache backend is per-process — which is the default `LocMemCache` — the gunicorn / runserver process never sees heartbeats written by the qcluster process, and the dashboard reports "Worker NOT running" forever, even when the cluster is healthy. The same problem exists per-container: a `FileBasedCache` works on a single host but is invisible across ECS task containers because each container has its own ephemeral disk.
+django-q writes cluster heartbeats to Django's cache backend. The `/studio/worker/` dashboard reads them back via `Stat.get_all()` to decide whether the cluster is alive. If the cache backend is per-process — which is the default `LocMemCache` — the gunicorn / runserver process never sees heartbeats written by the qcluster process, and the dashboard reports "Worker NOT running" forever, even when the cluster is healthy. The same problem exists per-container: a `FileBasedCache` works inside a single container but is invisible across separate web and worker containers because each container has its own filesystem.
 
 The project ships a dedicated `django_q` cache for this. It is `LocMemCache` during tests (single-process, fast, isolated) and `DatabaseCache` everywhere else.
 
@@ -169,7 +173,7 @@ The project ships a dedicated `django_q` cache for this. It is `LocMemCache` dur
 | `CACHES['django_q']['LOCATION']` | `django-q-test` | `django_q_cache` (a DB table) |
 | `Q_CLUSTER['cache']` | `django_q` | `django_q` |
 
-`DatabaseCache` requires a one-time table creation. The `email_app` migration `0013_create_django_q_cache_table` runs `createcachetable django_q_cache` as a `RunPython` step so the table is created on a fresh `manage.py migrate` everywhere — local dev, CI test DB, dev/prod ECS — without a separate one-shot command. To recreate it manually if the table is dropped:
+`DatabaseCache` requires a one-time table creation. The `email_app` migration `0013_create_django_q_cache_table` runs `createcachetable django_q_cache` as a `RunPython` step so the table is created on a fresh `manage.py migrate` everywhere — local dev, CI test DB, and the Coolify runtime — without a separate one-shot command. To recreate it manually if the table is dropped:
 
 ```bash
 uv run python manage.py createcachetable django_q_cache
@@ -209,7 +213,7 @@ Course-db remains a manual CSV import from Studio and is not scheduled automatic
 
 Staff can review scheduled import history in Studio at `/studio/imports/`. Superusers can disable or re-enable the Slack and Stripe daily schedules from that page; disabling pauses the django-q schedule without deleting historical `ImportBatch` rows. After three consecutive failed scheduled batches for the same source, the app sends one admin alert with the source, latest batch id, summary, and Studio review path. A later successful scheduled batch resets that failure streak.
 
-Why DatabaseCache: the application database is the only thing every web and worker process is guaranteed to share, in every deployment topology — local SQLite, multi-container ECS, future hosts. No extra infrastructure (Redis, EFS) needed. The latency cost (one query per heartbeat read) is negligible at the dashboard's request rate.
+Why DatabaseCache: the application database is the only thing every web and worker process is guaranteed to share, in every deployment topology — local SQLite, multi-container Coolify, future hosts. No extra infrastructure (Redis, EFS) needed. The latency cost (one query per heartbeat read) is negligible at the dashboard's request rate.
 
 We deliberately do not use Redis: avoiding the operational dependency is a product decision. Do not add Redis, Memcached, or another cache service for request-path helpers.
 
@@ -247,20 +251,19 @@ docker compose --profile setup up setup
 Each Compose app service supplies a `command:`. `entrypoint.sh` execs those
 arguments when present, so setup, web, worker, and watcher run the commands
 in `docker-compose.yml` instead of falling through to
-`scripts.entrypoint_init`. Production ECS is unchanged: serving tasks start
-with no command, and `BOOT_MODE` / `RUN_MIGRATIONS` dispatch stays in
-`scripts/entrypoint_init.py`.
+`scripts.entrypoint_init`. Deployed Coolify containers start with an empty
+argv (or `/opt/rolling-launch.py` on the rolling web Application), and
+`BOOT_MODE` / `RUN_MIGRATIONS` dispatch stays in `scripts/entrypoint_init.py`.
 
-For ECS, the same Docker image runs both containers. A disposable Node build
-stage installs the npm lockfile and compiles minified CSS; only that bundle is
-copied into the Python image before `collectstatic` fingerprints and creates
-gzip/Brotli variants. Node, npm, `node_modules`, and Tailwind are absent from
-the runtime image. `scripts/entrypoint_init.py` imports Django once, applies
-migrations only when `RUN_MIGRATIONS=true`, runs `manage.py check --fail-level
-ERROR`, then starts gunicorn for the web container or `qcluster` for the worker
-container. The web container is essential; the worker container is
-non-essential but should be alive for background jobs and Studio worker
-health.
+For the Coolify runtime, the same GHCR Docker image runs the source `web`
+migrator, the source `worker`, and the rolling public `web` container. A
+disposable Node build stage installs the npm lockfile and compiles minified
+CSS; only that bundle is copied into the Python image before `collectstatic`
+fingerprints and creates gzip/Brotli variants. Node, npm, `node_modules`, and
+Tailwind are absent from the runtime image. `scripts/entrypoint_init.py`
+imports Django once, applies migrations only when `RUN_MIGRATIONS=true` on the
+source `web` container, runs R1 reconciliation and schedule registration, then
+starts gunicorn for web containers or `qcluster` for the worker container.
 
 After a fresh setup or deploy, manually reconcile recurring jobs when needed:
 
@@ -285,14 +288,12 @@ The response body is the deployed `VERSION` tag.
 
 ## CI/CD
 
-Two GitHub Actions workflows handle deployment:
+Two GitHub Actions workflows handle deployment and production release attestation:
 
-- `deploy-dev.yml` — runs all validation gates, then builds one exact-head GHCR image and deploys the existing split Coolify runtime. Triggers automatically on push to `main`; [`coolify-deployment.md`](coolify-deployment.md) owns its target and verification contract.
-- `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox. Promotes the current dev image tag to the prod ECS service. Optionally accepts a specific tag.
+- `deploy-dev.yml` — runs all validation gates, then builds one exact-head GHCR image and deploys the split Coolify runtime (`aisl-staging` source web and worker followed by `aishl-production-rolling-web`). Triggers automatically on push to `main`; [`coolify-deployment.md`](coolify-deployment.md) owns its target and verification contract.
+- `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox (`confirmProdDeploy`). Runs `deploy.coolify.attest_production` to attest that the green `Deploy Dev` release is running and healthy across both Coolify resources without restarting containers, then verifies production sitemap and robots. Uses `concurrency.group` `production-coolify-attestation` with `cancel-in-progress: false`.
 
-Manual Production Deployment (`deploy-prod.yml`), Emergency Production Web Rollback (`prod-emergency-web-rollback.yml`), and Emergency Production Worker Rollback (`prod-emergency-worker-rollback.yml`) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
-
-The production ECS workflow uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access. The Coolify workflow uses the environment names documented in [`coolify-deployment.md`](coolify-deployment.md).
+Both workflows use the `coolify-staging` GitHub environment documented in [`coolify-deployment.md`](coolify-deployment.md).
 
 ### Lockfile contract
 
@@ -313,25 +314,24 @@ If a deploy fails at the "Install dependencies" step with a message about `uv.lo
 
 ## Deploying and redeploying manually
 
-There is no local deploy script. The AWS ECS runtime and its ECR repository are retired, and the `deploy/deploy*.sh` / `deploy/update_task_def.py` helpers were removed with it. Every deploy goes through `Deploy Dev` on push to `main` (or `workflow_dispatch`), which deploys the exact-head GHCR image to the split Coolify runtime; [`coolify-deployment.md`](coolify-deployment.md) owns the target, verification, and redeploy contract.
+There is no local deploy script. The AWS ECS runtime and its ECR repository are retired, and the `deploy/deploy*.sh` / `deploy/update_task_def.py` helpers and `prod-emergency-*` ECS workflows were removed with it. Every deploy goes through `Deploy Dev` on push to `main` (or `workflow_dispatch`), which deploys the exact-head GHCR image to the split Coolify runtime; [`coolify-deployment.md`](coolify-deployment.md) owns the target, verification, and redeploy contract.
 
-### Emergency production rollback
+### Emergency production diagnostics and rollback
 
-Warning: the three `prod-emergency-*` workflows below still target the retired ECS services and cannot succeed against the Coolify runtime. Use the Coolify redeploy path in [`coolify-deployment.md`](coolify-deployment.md) until they are replaced.
+Keep the expanded schema and follow [`expand-contract-releases.md`](expand-contract-releases.md). Do not reverse schema migrations during an incident rollback.
 
-Keep the expanded schema. Do not reverse migrations. Emergency rollback does not rewrite `.prod-versions`.
+For read-only incident diagnostics against the Coolify runtime:
 
-Web-only: dispatch `Emergency Production Web Rollback` (`.github/workflows/prod-emergency-web-rollback.yml`). Service `ai-shipping-labs-prod`, family `ai-shipping-labs-prod:<revision>`. Success is three consecutive `https://aishippinglabs.com/ping` matches of `expectedTag`.
+1. Check `https://aishippinglabs.com/ping` and `https://dev.aishippinglabs.com/ping`.
+2. Run `uv run python deploy/coolify/verify_dual_runtime.py` to inspect `web-mekt9kz74fvbixla6olinuma` and `worker-mekt9kz74fvbixla6olinuma` container health, shared image identity, networks, and the worker's own-host heartbeat probe without exposing environment secrets.
+3. Query `uv run asl raw GET /api/diagnostics/boot-timing`, `uv run asl raw GET /api/diagnostics/schedules`, and `uv run asl worker failed-tasks` for application boot and worker state.
 
-Worker-only: dispatch `Emergency Production Worker Rollback` (`.github/workflows/prod-emergency-worker-rollback.yml`). Service `ai-shipping-labs-worker-prod`, family `ai-shipping-labs-worker-prod:<revision>`. Confirm the run, pass that family/revision and the immutable `expectedTag`. `update-service` uses `--desired-count 1` because worker services are woken from a 0 baseline. Success is PRIMARY `taskDefinition` equal to the requested ARN, `runningCount >= desiredCount`, and at least one RUNNING task whose containers are all RUNNING. Do not treat `https://aishippinglabs.com/ping` as worker proof; that only observes web.
-
-If both services need restoring, dispatch two serialized runs. They share `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`.
+To roll back to a prior known-good immutable GHCR release (`ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<40-char-sha>`), either push a revert commit to `main` so `Deploy Dev` builds and rolls out the revert, or re-promote the prior image, digest, and 40-character SHA through `uv run python -m deploy.coolify.deploy_exact_release` as documented in [`coolify-deployment.md`](coolify-deployment.md#emergency-rollback). That helper updates both `web` and `worker` in Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, verifies fresh `boot-timing` evidence and `running:healthy` on both roles, and then updates Application `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) and requires three consecutive matching `/ping` probes on production and DEV. Do not treat `https://aishippinglabs.com/ping` alone as worker recovery proof; `/ping` only observes web.
 
 ### Canonical-host redirect verification
 
-After deploying the website canonical-host middleware and applying the
-corresponding production ALB listener/rule change, run the read-only redirect
-contract check:
+After deploying the website canonical-host middleware and proxy routing rules,
+run the read-only redirect contract check:
 
 ```bash
 uv run python deploy/verify_canonical_redirects.py https://aishippinglabs.com
@@ -340,10 +340,7 @@ uv run python deploy/verify_canonical_redirects.py https://aishippinglabs.com
 The verifier disables automatic redirect following. It checks HTTP apex,
 HTTP `www`, and HTTPS `www` for both `/` and a path with a query string,
 requires an exact `301` to the clean apex HTTPS URL, and confirms the target
-returns `200` without another redirect. Do not add this check to the automatic
-production deploy gate until the external ALB change is applied: the website
-must be deployed first so Django can safely receive and canonicalize that
-traffic.
+returns `200` without another redirect.
 
 ## Production access model
 
@@ -360,32 +357,25 @@ curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
 
 Use the API for production user state, SES event history, email logs,
 integration-setting metadata, and narrow operator writes that already
-exist as API endpoints. The settings metadata endpoint is:
+exist as API endpoints. The settings metadata endpoint uses `Bearer` auth:
 
 ```bash
-curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
+curl -sS -H "Authorization: Bearer $API_SHIPPING_LABS_API_TOKEN" \
   https://aishippinglabs.com/api/v1/settings/<key>
 ```
 
-ECS inspection is separate from application data. The local `.env` may
-provide `ECS_AWS_ACCESS_KEY_ID` / `ECS_AWS_SECRET_ACCESS_KEY`, which can
-describe known ECS services and task definitions:
+Coolify runtime inspection is separate from application data. To inspect the
+live source containers (`web-mekt9kz74fvbixla6olinuma` and
+`worker-mekt9kz74fvbixla6olinuma`) and public `/ping` without printing
+secrets:
 
 ```bash
-AWS_ACCESS_KEY_ID="$ECS_AWS_ACCESS_KEY_ID" \
-AWS_SECRET_ACCESS_KEY="$ECS_AWS_SECRET_ACCESS_KEY" \
-aws ecs describe-services \
-  --cluster ai-shipping-labs \
-  --services ai-shipping-labs-prod ai-shipping-labs-worker-prod \
-  --region eu-west-1
+uv run python deploy/coolify/verify_dual_runtime.py
 ```
 
-Those ECS deploy credentials are not general production-admin
-credentials. In particular, they may not be able to list SES
-configuration sets, SNS topics, Secrets Manager values, or task
-definitions by wildcard. For SES/SNS wiring, inspect the
-`DataTalksClub/aws-infra` repo (AISL resources under `main/aisl/`) and
-file/track infra issues there when permissions are missing.
+For remaining AWS infrastructure (S3/CloudFront CDN, SES/SNS email events,
+RDS), inspect the `DataTalksClub/aws-infra` repo (AISL resources under
+`main/aisl/`) and file/track infra issues there when changes are needed.
 
 ## Database access
 

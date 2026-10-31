@@ -90,3 +90,91 @@ other configuration field, and the shared minute cron invoking
 `/home/alexey/tmp/bin/coolify-rolling-web.py`. Disable only the separate AISL
 five-minute cron line that invokes `/home/alexey/tmp/bin/aisl-auto-deploy.py`,
 and retain its private rollback copy. Never disable the shared poller.
+
+## Emergency diagnostics
+
+The retired AWS ECS emergency workflows (`prod-emergency-diagnostics.yml`,
+`prod-emergency-web-rollback.yml`, `prod-emergency-worker-rollback.yml`) were
+deleted because they targeted the retired `ai-shipping-labs` ECS cluster. Use
+the read-only Coolify and application diagnostics surfaces below instead:
+
+1. Check public revision readiness on both endpoints:
+
+```bash
+curl -fsSL https://aishippinglabs.com/ping
+curl -fsSL https://dev.aishippinglabs.com/ping
+```
+
+2. Run the read-only dual-runtime inventory check over SSH (uses
+   `deploy/coolify/dual_runtime_snapshot.py` and never prints environment
+   secrets):
+
+```bash
+uv run python deploy/coolify/verify_dual_runtime.py
+```
+
+Pass `--expected-image ghcr.io/ai-shipping-labs/website:<tag>` and
+`--expected-sha <40-char-sha>` when verifying a specific release. The helper
+confirms that `web-mekt9kz74fvbixla6olinuma` and
+`worker-mekt9kz74fvbixla6olinuma` are `running` and `healthy`, share one
+immutable GHCR image, stay attached to `coolify` and `mekt9kz74fvbixla6olinuma`,
+and pass the worker's own-host Django-Q heartbeat probe within the last 90
+seconds.
+
+3. Inspect application-level boot timing, schedule reconciliation, and recent
+   worker tasks through the authenticated production API (never print token
+   values):
+
+```bash
+uv run asl raw GET /api/diagnostics/boot-timing
+uv run asl raw GET /api/diagnostics/schedules
+uv run asl worker failed-tasks
+```
+
+## Emergency rollback
+
+Keep the expanded database schema and follow
+[`expand-contract-releases.md`](expand-contract-releases.md). Never reverse
+schema migrations during an incident rollback.
+
+To roll back to a prior known-good release:
+
+1. Record the current state with `uv run python deploy/coolify/verify_dual_runtime.py`
+   and `curl -fsSL https://aishippinglabs.com/ping`.
+2. Identify the target release from the last known-good `Deploy Dev` run
+   summary or `COOLIFY_SOURCE_BOOT_RECEIPT`:
+   - immutable image tag `ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<40-char-sha>`
+   - registry manifest digest `sha256:<64-hex>`
+   - full 40-character commit SHA
+3. Either push a revert commit to `main` so `Deploy Dev` builds and deploys a
+   fresh exact-head image, or re-promote the known-good immutable GHCR image
+   directly through the fail-closed release helper using the `coolify-staging`
+   environment credentials:
+
+```bash
+uv run python -m deploy.coolify.deploy_exact_release \
+  --image "ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<sha>" \
+  --digest "sha256:<64-hex>" \
+  --sha "<40-char-sha>"
+```
+
+`deploy.coolify.deploy_exact_release` updates both `web` and `worker` in
+Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, waits for fresh
+`boot-timing` evidence and `running:healthy` on both source roles, and only then
+promotes Application `aishl-production-rolling-web`
+(`w3mxfr6wzjnpg3hqaw3y0obq`) and verifies three consecutive matching `/ping`
+responses on production and DEV.
+
+4. After the helper finishes, confirm both source containers and public `/ping`
+   match the restored release:
+
+```bash
+uv run python deploy/coolify/verify_dual_runtime.py \
+  --expected-image "ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<sha>" \
+  --expected-sha "<40-char-sha>"
+```
+
+Do not treat `https://aishippinglabs.com/ping` alone as worker recovery proof;
+`/ping` only observes web. Worker recovery requires `worker-mekt9kz74fvbixla6olinuma`
+in `running:healthy` state with its own-host heartbeat probe passing and a
+fresh `boot_timing:worker` record for the target SHA.

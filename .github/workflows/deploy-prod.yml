@@ -13,11 +13,11 @@ on:
         description: "Release tag or full SHA (optional, defaults to current DEV release)"
         required: false
 
-# Retain conservative serialization with emergency production operations.
+# Serialize manual production release attestation runs.
 # Deploy Dev already deploys both Coolify runtimes; this workflow attests the
 # exact fully green release without restarting either runtime a second time.
 concurrency:
-  group: production-ecs-mutation
+  group: production-coolify-attestation
   cancel-in-progress: false
 
 jobs:

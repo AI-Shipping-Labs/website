@@ -18,31 +18,21 @@ Boot mode dispatch (issue #1141 Phase 2A)
 
 All containers share the same Docker ENTRYPOINT. ``entrypoint.sh`` execs
 ``$@`` when arguments are present (local Compose ``command:``), and only
-starts this module when argv is empty. ECS web/worker/predeploy must not
-rely on a command override to select a run mode; they start with no
-arguments and the ``BOOT_MODE`` env var selects what this process does.
-It untangles two concerns the old ``RUN_MIGRATIONS`` flag conflated:
-web-vs-worker role dispatch, and whether this boot runs ``migrate``.
+starts this module when argv is empty. Deployed web and worker containers
+start with no arguments and the ``BOOT_MODE`` / ``RUN_MIGRATIONS`` env vars
+select what this process does:
 
-* ``BOOT_MODE=predeploy`` -> ``django.setup`` -> ``migrate`` ->
-  ``check --fail-level ERROR`` -> exit 0. NO schedules, NO gunicorn, NO
-  qcluster. This is the single pre-deploy one-off task (``aws ecs
-  run-task``) that ``deploy/deploy_dev.sh`` runs BEFORE rolling the
-  service. A non-zero exit from migrate or check propagates so the task
-  fails and the deploy aborts without rolling the service. It is the
-  SINGLE migrator (#336) and it runs the #529 misconfig gate against the
-  real serving env.
 * ``BOOT_MODE=web`` -> ``django.setup`` -> R1 reconcile/suppression ->
-  register schedules -> gunicorn bind. SKIPS migrate and check (they ran in
-  the pre-deploy task), so the serving container binds fast.
+  register schedules -> gunicorn bind. SKIPS migrate (the source Service
+  ``web`` container owns migrations), so the rolling serving container binds
+  fast.
 * ``BOOT_MODE=worker`` -> ``django.setup`` -> R1 reconcile/suppression ->
-  register schedules -> qcluster. SKIPS migrate and check.
-* ``BOOT_MODE`` ABSENT -> no-infra serving path, keyed off
-  ``RUN_MIGRATIONS`` as before: web (``RUN_MIGRATIONS=true``) migrates ->
-  schedules -> gunicorn; worker schedules -> qcluster. The expensive
-  ``check --fail-level ERROR`` step is skipped by default on serving boot
-  because deploy CI already runs it before the image is built. Set
-  ``SERVING_BOOT_CHECK_ENABLED=true`` to restore the old serving-boot gate.
+  register schedules -> qcluster. SKIPS migrate.
+* ``BOOT_MODE`` ABSENT -> legacy serving path keyed off
+  ``RUN_MIGRATIONS``: web (``RUN_MIGRATIONS=true``) migrates ->
+  R1 reconcile/suppression -> schedules -> gunicorn; worker
+  (``RUN_MIGRATIONS!=true``) runs R1 reconcile/suppression -> schedules ->
+  qcluster.
 
 Before Django setup, every mode runs a cheap raw-env smoke check. It catches
 the high-value production email misconfig guarded by ``email_app.E001`` without
@@ -93,7 +83,6 @@ from scripts.gunicorn_runtime import gunicorn_worker_count as _gunicorn_worker_c
 logger = logging.getLogger(__name__)
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
-_SCHEMA_BARRIER_CACHE_PREFIX = "r1_serving_schema_ready"
 
 
 def _truthy_env(name, *, default=False):
@@ -150,9 +139,9 @@ def persist_boot_timing(role, phases):
     are produced in a different container; the per-process ``default``
     ``LocMemCache`` cannot carry them across the container boundary).
 
-    The build ``tag`` comes from the ``VERSION`` env var
-    (``{DATE}-{SHORT_SHA}``, set by ``deploy/update_task_def.py``), falling
-    back to ``"unknown"`` for local runs.
+    The build ``tag`` comes from the ``VERSION`` env var (the full commit
+    SHA baked into the image at build time), falling back to ``"unknown"`` for
+    local runs.
 
     Fail-safe: the entire write is wrapped in a broad ``except`` that logs the
     traceback and swallows it -- exactly the discipline ``_register_schedules``
@@ -237,59 +226,6 @@ def _suppress_r1_incompatible_schedules():
     call_command("suppress_r1_incompatible_schedules", verbosity=0)
 
 
-def _schema_barrier_key():
-    version = os.environ.get("VERSION") or "unknown"
-    return f"{_SCHEMA_BARRIER_CACHE_PREFIX}:{version}"
-
-
-def _schema_barrier_timeout_seconds():
-    raw = os.environ.get("R1_SCHEMA_BARRIER_TIMEOUT_SECONDS", "900")
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        value = 0
-    if value <= 0:
-        raise RuntimeError(
-            "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS must be a positive integer",
-        )
-    return value
-
-
-def _publish_serving_schema_ready():
-    """Publish a version-scoped marker after web migrate/reconciliation."""
-    from django.core.cache import caches
-
-    key = _schema_barrier_key()
-    caches["django_q"].set(key, os.environ.get("VERSION") or "unknown", timeout=3600)
-    print(f"Published serving schema readiness marker {key}", flush=True)
-
-
-def _wait_for_serving_schema_ready():
-    """Block a combined-task worker until its web sibling finishes R1 setup."""
-    from django.core.cache import caches
-
-    key = _schema_barrier_key()
-    expected = os.environ.get("VERSION") or "unknown"
-    deadline = time.monotonic() + _schema_barrier_timeout_seconds()
-    last_error = None
-    while time.monotonic() < deadline:
-        try:
-            if caches["django_q"].get(key) == expected:
-                print(f"Serving schema readiness marker observed: {key}", flush=True)
-                return
-            last_error = None
-        except Exception as exc:
-            # An old dev schema may not have django_q_cache yet. The web
-            # migrator creates it; retry without allowing qcluster to start.
-            last_error = exc
-        time.sleep(1)
-    detail = f" Last cache error: {last_error!r}." if last_error else ""
-    raise RuntimeError(
-        "Timed out waiting for the combined-task web container to migrate and "
-        f"reconcile schema marker {key}; qcluster was not started.{detail}",
-    )
-
-
 def _reconcile_r1_expand():
     """Repair compatibility writes before web serves or a worker consumes."""
 
@@ -368,9 +304,8 @@ def _run_migrate(phases):
     Migrations run from a SINGLE container per deploy. Two containers (web +
     worker) starting in parallel from the same image race any migration with
     both DDL and data steps (e.g. integrations.0021) and deadlock against the
-    same database (issue #336). Under ``BOOT_MODE`` the sole migrator is the
-    ``predeploy`` one-off task; in the legacy fallback it is the web container
-    (``RUN_MIGRATIONS=true``).
+    same database (issue #336). The sole migrator is the source Service web
+    container (``RUN_MIGRATIONS=true`` with ``BOOT_MODE`` absent).
     """
     from django.core.management import call_command
 
@@ -381,84 +316,6 @@ def _run_migrate(phases):
         record=phases,
     )
     print("Database migrations applied successfully.", flush=True)
-
-
-def _run_check(phases):
-    """Run the #529 system-check gate, timed. Propagates on Error-level checks.
-
-    Issue #529: defence-in-depth gate against a misconfigured deploy. Runs
-    against the actual platform env vars (real DEBUG, real Relay values). If a
-    registered system check fires at Error level (e.g. email_app.E002 when
-    Relay credentials are missing from the task definition), ``call_command`` raises,
-    the process exits non-zero, and the deploy halts. Under ``BOOT_MODE`` this
-    runs in the ``predeploy`` one-off task (so a bad config fails the DEPLOY
-    before any container serves); in the legacy fallback it runs on the
-    serving boot as before.
-    """
-    from django.core.management import call_command
-
-    print("Run Django system checks (fail on Error level)", flush=True)
-    _timed(
-        "check",
-        lambda: call_command("check", "--fail-level", "ERROR"),
-        record=phases,
-    )
-
-
-def _run_seed_content_sources(phases):
-    """Seed package content sources, timed. Propagates on failure.
-
-    Issue #1662: a repo's ``ContentSource`` row must exist before the GitHub
-    webhook for a push is accepted (the receiver 404s unknown repos), and the
-    operator-facing create paths (Studio form / JSON import) need a human
-    session. Running the idempotent, pure-database seed here -- the sole-
-    migrator predeploy boot -- bootstraps every newly declared source on the
-    first deploy that runs the pre-deploy gate, so no source is ever missing
-    from a fresh environment. A failure propagates like the rest of the gate:
-    the one-off task exits non-zero and the deploy aborts before anything
-    serves.
-    """
-    from django.core.management import call_command
-
-    print("Seed package content sources", flush=True)
-    _timed(
-        "seed_content_sources",
-        lambda: call_command("seed_content_sources"),
-        record=phases,
-    )
-
-
-def _serving_boot_check_enabled():
-    """Return whether legacy serving boot should run ``manage.py check``.
-
-    This defaults OFF as the no-infra fast-start path: the deploy workflow
-    already runs the same Error-level Django check before build, and paying it
-    again inside every ECS serving container dominates cold-start time. Keep a
-    simple env override for incident response and local parity checks.
-    """
-    value = os.environ.get("SERVING_BOOT_CHECK_ENABLED", "")
-    return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _run_predeploy(phases):
-    """``BOOT_MODE=predeploy``: migrate + #529 check + seed, then exit 0.
-
-    Runs NO schedules, NO gunicorn, NO qcluster. A non-zero exit from migrate,
-    check, or the content-source seed propagates (the exception is not caught
-    here) so the pre-deploy
-    one-off ECS task fails and ``deploy/deploy_dev.sh`` aborts the deploy
-    WITHOUT rolling the service. This is the single migrator (#336) and the
-    #529 misconfig gate, moved off every serving container's pre-bind path.
-
-    We deliberately do NOT persist ``boot_timing:web``/``:worker`` from here:
-    a predeploy task is not a serving container. The per-phase BOOT_TIMING
-    lines for ``django_setup`` / ``migrate`` / ``check`` / the seed are still
-    emitted by ``_timed`` so the pre-deploy task's CloudWatch logs remain
-    diagnosable.
-    """
-    _run_migrate(phases)
-    _run_check(phases)
-    _run_seed_content_sources(phases)
 
 
 def _initialize_runtime_observability():
@@ -472,17 +329,8 @@ def _finalize_serving(role, phases, boot_start):
     """Register schedules, emit the total line, and persist boot timing.
 
     Shared by the ``web`` and ``worker`` serving paths (issue #1141 Phase 2A)
-    and the legacy fallback. ``migrate`` and ``check`` are NOT run here under
-    ``BOOT_MODE`` -- they were decoupled into the pre-deploy task.
+    and the legacy fallback.
     """
-    barrier_role = os.environ.get("R1_SCHEMA_BARRIER_ROLE", "")
-    if barrier_role == "worker":
-        _timed(
-            "wait_for_serving_schema",
-            _wait_for_serving_schema_ready,
-            record=phases,
-        )
-
     # R1 web runs this after migrate and before serving. The worker rolls only
     # after web is verified, then reconciles any writes made by the overlapping
     # production web before it can consume queue work.
@@ -494,13 +342,6 @@ def _finalize_serving(role, phases, boot_start):
         _suppress_r1_incompatible_schedules,
         record=phases,
     )
-
-    if barrier_role == "web":
-        _timed(
-            "publish_serving_schema",
-            _publish_serving_schema_ready,
-            record=phases,
-        )
 
     # Issue #708: register the django-q schedules on every boot for both web
     # and worker. Idempotent; failures are logged and swallowed so a bad
@@ -526,17 +367,10 @@ def _finalize_serving(role, phases, boot_start):
 
 
 def _run_legacy(phases, boot_start):
-    """``BOOT_MODE`` ABSENT: no-infra serving path.
-
-    Keyed off ``RUN_MIGRATIONS`` as before so a partial rollout without
-    ``BOOT_MODE`` never leaves the DB un-migrated:
+    """``BOOT_MODE`` ABSENT: legacy serving path keyed off ``RUN_MIGRATIONS``.
 
     * web (``RUN_MIGRATIONS=true``): migrate -> schedules -> gunicorn
     * worker (``RUN_MIGRATIONS!=true``): schedules -> qcluster
-
-    ``manage.py check --fail-level ERROR`` remains available behind
-    ``SERVING_BOOT_CHECK_ENABLED=true`` but defaults off in deployed serving
-    tasks because the deploy workflow runs the same check before build.
     """
     run_migrations = os.environ.get("RUN_MIGRATIONS") == "true"
 
@@ -548,18 +382,10 @@ def _run_legacy(phases, boot_start):
             flush=True,
         )
 
-    if _serving_boot_check_enabled():
-        # If explicitly enabled, keep the safe ordering: migrate first so a
-        # fresh DB has tables such as django_q_cache before ORM-backed checks.
-        _run_check(phases)
-    else:
-        print(
-            "Skipping Django system checks on serving boot "
-            "(SERVING_BOOT_CHECK_ENABLED is not true)",
-            flush=True,
-        )
-
-    _finalize_serving("web" if run_migrations else "worker", phases, boot_start)
+    role = "worker"
+    if run_migrations:
+        role = "web"
+    _finalize_serving(role, phases, boot_start)
 
     if run_migrations:
         _start_gunicorn(_gunicorn_worker_count())
@@ -585,15 +411,9 @@ def main():
     # integrations.apps.ready() -> Logfire). See issue #1141 Phase 1.
     _timed("django_setup", django.setup, record=phases)
 
-    # Issue #1141 Phase 2A: dispatch on BOOT_MODE (predeploy / web / worker),
-    # falling back to the legacy RUN_MIGRATIONS behavior when it is absent.
+    # Dispatch on BOOT_MODE (web / worker), falling back to the legacy
+    # RUN_MIGRATIONS behavior when it is absent.
     boot_mode = os.environ.get("BOOT_MODE")
-
-    if boot_mode == "predeploy":
-        # Migrate + #529 check, then return -> process exits 0 (unless a
-        # phase raised, which propagates and fails the pre-deploy task).
-        _run_predeploy(phases)
-        return
 
     if boot_mode == "web":
         _finalize_serving("web", phases, boot_start)

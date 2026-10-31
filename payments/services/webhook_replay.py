@@ -27,6 +27,7 @@ from payments.models import (
 )
 from payments.services.import_stripe import CONFIGURATION_ERRORS
 from payments.services.stripe_client import _get_stripe_client
+from payments.services.stripe_client import stripe_get as _val
 from payments.services.subscription_resolution import resolve_subscription_user
 from payments.services.webhook_dispatch import (
     CANCELLATION_EVENT_TYPES,
@@ -47,12 +48,6 @@ class ReplayError(Exception):
         self.code = code
         self.message = message
         self.http_status = http_status
-
-
-def _val(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
 
 
 def _key_live():

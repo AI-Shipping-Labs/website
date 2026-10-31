@@ -11,7 +11,13 @@ from accounts.models import IMPORT_SOURCE_STRIPE
 from accounts.services.import_users import ImportRow, register_import_adapter
 from integrations.config import get_config
 from payments.models import Tier
-from payments.services.stripe_client import _subscription_period_end, _subscription_price_id
+from payments.services.stripe_client import (
+    _subscription_period_end,
+    _subscription_price_id,
+)
+from payments.services.stripe_client import (
+    stripe_get as _get,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -155,9 +161,3 @@ def _price_to_tier_map():
             if price_id:
                 mapping[price_id] = tier
     return mapping
-
-
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)

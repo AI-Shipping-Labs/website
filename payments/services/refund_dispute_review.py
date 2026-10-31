@@ -14,6 +14,7 @@ from payments.exceptions import (
     WebhookUnmatchedUserError,
 )
 from payments.services.stripe_client import _get_stripe_client
+from payments.services.stripe_client import stripe_get as _value
 from payments.services.subscription_resolution import resolve_subscription_user
 
 REFUND_EVENT_TYPES = frozenset({"charge.refunded"})
@@ -66,12 +67,6 @@ class RefundDisputeReview:
         if self.currency:
             parts.append(f"currency={self.currency}")
         return "; ".join(parts)
-
-
-def _value(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
 
 
 def safe_stripe_id(value, prefix):

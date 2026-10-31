@@ -19,7 +19,13 @@ from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
     _price_to_tier_map,
 )
-from payments.services.stripe_client import _subscription_period_end, _subscription_price_id
+from payments.services.stripe_client import (
+    _subscription_period_end,
+    _subscription_price_id,
+)
+from payments.services.stripe_client import (
+    stripe_get as _get,
+)
 
 __all__ = [
     "ChangeRecord",
@@ -338,9 +344,3 @@ def _write_audit_row(record):
         stripe_subscription_id=record.subscription_id or "",
     )
     return event_id
-
-
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)

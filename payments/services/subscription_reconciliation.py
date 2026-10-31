@@ -49,6 +49,9 @@ from payments.services.stripe_client import (
     _subscription_period_end,
     _subscription_price_id,
 )
+from payments.services.stripe_client import (
+    stripe_get as _get,
+)
 from payments.services.stripe_tags import reconcile_stripe_status_tags
 from payments.services.subscription_transition import apply_ended_subscription
 
@@ -259,12 +262,6 @@ def _list_subscriptions_for_customer(customer_id):
         reverse=True,
     )
     return subscriptions
-
-
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
 
 
 @dataclass

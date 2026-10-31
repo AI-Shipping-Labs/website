@@ -28,6 +28,7 @@ user is avoided because amount-based matching covers the same case.
 from __future__ import annotations
 
 from payments.models import Tier
+from payments.services.stripe_client import stripe_get as _get
 
 
 def resolve_subscription_tier(subscription, price_id, price_to_tier):
@@ -86,9 +87,3 @@ def _tier_by_slug(slug):
         return Tier.objects.get(slug=slug)
     except Tier.DoesNotExist:
         return None
-
-
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)

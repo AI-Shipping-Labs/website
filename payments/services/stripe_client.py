@@ -40,6 +40,13 @@ def _tier_for_price_id(price_id):
     return tier
 
 
+def stripe_get(obj, key, default=None):
+    """Read a key from a dict or attribute from a Stripe object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def _stripe_value(obj, key):
     """Read a StripeObject/dict field without tripping over mapping methods."""
     if obj is None:

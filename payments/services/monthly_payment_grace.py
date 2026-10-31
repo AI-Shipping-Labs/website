@@ -48,6 +48,7 @@ from payments.models import (
     Tier,
 )
 from payments.services.import_stripe import CONFIGURATION_ERRORS, _price_to_tier_map
+from payments.services.stripe_client import stripe_get as _get
 from payments.services.subscription_resolution import resolve_subscription_user
 
 GRACE_HOURS = 168
@@ -57,12 +58,6 @@ MAX_DELIVERY_ATTEMPTS = 8
 DUNNING_STATUSES = frozenset({"past_due", "unpaid"})
 RECOVERY_STATUSES = frozenset({"active", "trialing"})
 _MODE_UNSET = object()
-
-
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
 
 
 def _id(value):

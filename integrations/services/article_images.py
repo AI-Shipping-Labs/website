@@ -27,7 +27,11 @@ from content.sync_parsers.media import (
     _resolve_image_path,
     rewrite_cover_image_url,
 )
-from integrations.config import get_config, s3_content_upload_enabled
+from integrations.config import (
+    build_s3_content_client,
+    get_config,
+    s3_content_upload_enabled,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -147,14 +151,7 @@ def _encode(image, output_format):
 
 
 def _s3_client():
-    kwargs = {"region_name": get_config("AWS_S3_CONTENT_REGION", "eu-central-1")}
-    access_key = get_config("AWS_ACCESS_KEY_ID")
-    secret_key = get_config("AWS_SECRET_ACCESS_KEY")
-    if access_key:
-        kwargs["aws_access_key_id"] = access_key
-    if secret_key:
-        kwargs["aws_secret_access_key"] = secret_key
-    return boto3.client("s3", **kwargs)
+    return build_s3_content_client(client_factory=boto3.client)
 
 
 def _store_variant(*, client, bucket, key, data, content_type, dry_run=False):

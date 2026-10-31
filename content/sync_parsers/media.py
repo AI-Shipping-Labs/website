@@ -17,7 +17,11 @@ from content.sync_parsers.checkout_view import (
     checkout_walk,
 )
 from content.sync_parsers.common import IMAGE_EXTENSIONS, logger
-from integrations.config import get_config, s3_content_upload_enabled
+from integrations.config import (
+    build_s3_content_client,
+    get_config,
+    s3_content_upload_enabled,
+)
 
 
 def _image_base_url(repo_name):
@@ -289,7 +293,6 @@ def _upload_images_to_s3_from_checkout(content_dir, source):
         }
 
     bucket = get_config('AWS_S3_CONTENT_BUCKET')
-    region = get_config('AWS_S3_CONTENT_REGION', 'eu-central-1')
 
     if not bucket:
         logger.info('AWS_S3_CONTENT_BUCKET not configured, skipping image upload')
@@ -299,12 +302,7 @@ def _upload_images_to_s3_from_checkout(content_dir, source):
     stats = {'uploaded': 0, 'skipped': 0, 'errors': []}
 
     try:
-        s3 = boto3.client(
-            's3',
-            region_name=region,
-            aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
-        )
+        s3 = build_s3_content_client(client_factory=boto3.client)
     except (BotoCoreError, ClientError) as e:
         logger.warning('Failed to create S3 client: %s', e)
         return {

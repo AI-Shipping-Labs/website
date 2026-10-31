@@ -22,7 +22,7 @@ from urllib.parse import unquote, urlparse
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from integrations.config import get_config
+from integrations.config import build_s3_content_client, get_config
 from integrations.services.banner_generator import (
     DEFAULT_FORMAT,
     DEFAULT_SIZE,
@@ -527,17 +527,8 @@ def delete_generated_banner_object(content_type, url):
         )
         return False
 
-    region = get_config('AWS_S3_CONTENT_REGION', 'eu-west-1')
-    client_kwargs = {'region_name': region}
-    access_key = get_config('AWS_ACCESS_KEY_ID')
-    secret_key = get_config('AWS_SECRET_ACCESS_KEY')
-    if access_key and secret_key:
-        client_kwargs.update(
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-        )
     try:
-        s3 = boto3.client('s3', **client_kwargs)
+        s3 = build_s3_content_client(client_factory=boto3.client)
         s3.delete_object(Bucket=bucket, Key=key)
     except (BotoCoreError, ClientError) as exc:
         logger.warning(

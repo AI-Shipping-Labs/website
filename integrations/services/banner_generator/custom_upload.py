@@ -28,7 +28,7 @@ from urllib.parse import unquote, urlparse
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
-from integrations.config import get_config
+from integrations.config import build_s3_content_client, get_config
 from integrations.services.banner_generator.content_models import (
     SUPPORTED_CONTENT_TYPES,
 )
@@ -118,22 +118,8 @@ def is_upload_enabled():
 
 
 def _s3_client():
-    """Construct a boto3 S3 client from the content-bucket config keys.
-
-    Reuses the same credential resolution as the sync pipeline and the
-    banner render task: region + optional explicit access/secret keys read
-    via ``get_config`` so a Studio override or the ECS task role both work.
-    """
-    region = get_config('AWS_S3_CONTENT_REGION', 'eu-west-1')
-    client_kwargs = {'region_name': region}
-    access_key = get_config('AWS_ACCESS_KEY_ID')
-    secret_key = get_config('AWS_SECRET_ACCESS_KEY')
-    if access_key and secret_key:
-        client_kwargs.update(
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-        )
-    return boto3.client('s3', **client_kwargs)
+    """Construct a boto3 S3 client from the content-bucket config keys."""
+    return build_s3_content_client(client_factory=boto3.client)
 
 
 def _validate(upload):

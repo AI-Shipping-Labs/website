@@ -299,3 +299,47 @@ class S3DisabledErrorFlowsToSyncLogPartialTest(TestCase):
         sync_log.errors = []  # clean no-op from TESTING short-circuit
         sync_log.status = 'partial' if sync_log.errors else 'success'
         self.assertEqual(sync_log.status, 'success')
+
+
+class S3ContentClientConsolidationTest(TestCase):
+    """D19: all content S3 callers share ``build_s3_content_client`` and default to ``eu-west-1``."""
+
+    def setUp(self):
+        clear_config_cache()
+        IntegrationSetting.objects.filter(key='AWS_S3_CONTENT_REGION').delete()
+
+    def tearDown(self):
+        clear_config_cache()
+        IntegrationSetting.objects.filter(key='AWS_S3_CONTENT_REGION').delete()
+
+    def test_default_region_and_client_factory_shared_across_callers(self):
+        from unittest.mock import MagicMock, patch
+
+        from django.conf import settings as dj_settings
+
+        from integrations.config import (
+            DEFAULT_S3_CONTENT_REGION,
+            build_s3_content_client,
+            s3_content_region,
+        )
+        from integrations.services import article_images
+        from integrations.services.banner_generator import custom_upload
+
+        self.assertEqual(DEFAULT_S3_CONTENT_REGION, 'eu-west-1')
+        with patch.object(dj_settings, 'AWS_S3_CONTENT_REGION', None):
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop('AWS_S3_CONTENT_REGION', None)
+                self.assertEqual(s3_content_region(), 'eu-west-1')
+
+                factory = MagicMock()
+                build_s3_content_client(client_factory=factory)
+                factory.assert_called_once_with('s3', region_name='eu-west-1')
+
+                with patch.object(article_images.boto3, 'client') as article_boto:
+                    article_images._s3_client()
+                    article_boto.assert_called_once_with('s3', region_name='eu-west-1')
+
+                with patch.object(custom_upload.boto3, 'client') as banner_boto:
+                    custom_upload._s3_client()
+                    banner_boto.assert_called_once_with('s3', region_name='eu-west-1')
+

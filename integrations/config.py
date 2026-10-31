@@ -425,6 +425,29 @@ def s3_content_upload_enabled():
     return raw
 
 
+DEFAULT_S3_CONTENT_REGION = "eu-west-1"
+
+
+def s3_content_region():
+    """Return the configured AWS region for the content S3 bucket."""
+    return get_config("AWS_S3_CONTENT_REGION", DEFAULT_S3_CONTENT_REGION)
+
+
+def build_s3_content_client(*, client_factory=None):
+    """Build a boto3 S3 client for the content bucket with unified region/credentials."""
+    if client_factory is None:
+        import boto3  # noqa: PLC0415
+
+        client_factory = boto3.client
+    kwargs = {"region_name": s3_content_region()}
+    access_key = get_config("AWS_ACCESS_KEY_ID")
+    secret_key = get_config("AWS_SECRET_ACCESS_KEY")
+    if access_key and secret_key:
+        kwargs["aws_access_key_id"] = access_key
+        kwargs["aws_secret_access_key"] = secret_key
+    return client_factory("s3", **kwargs)
+
+
 def recording_auto_publish_on_s3_upload_enabled():
     """True when a successful S3 recording upload should auto-publish the event.
 

@@ -20,8 +20,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils.http import url_has_allowed_host_and_scheme
 
+from accounts.return_context import sanitize_return_url
 from content.models import Cohort, Course
 from content.services.course_schedule import select_display_cohort
 from plans.models import Sprint
@@ -111,11 +111,7 @@ def _pod_for_viewer(request, pod_id, slug=None, sprint_slug=None):
 
 def _safe_next(request, fallback):
     candidate = request.POST.get('next') or request.GET.get('next') or ''
-    if candidate and url_has_allowed_host_and_scheme(
-        candidate, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
-    ):
-        return candidate
-    return fallback
+    return sanitize_return_url(candidate, request=request, default=fallback)
 
 
 def _page_number(raw, total_pages):

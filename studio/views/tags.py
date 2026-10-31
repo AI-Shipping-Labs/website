@@ -10,48 +10,30 @@ redirect back to the page the operator clicked from (typically a user
 detail page) so the operator stays in context.
 """
 
-from urllib.parse import urlsplit
-
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from accounts.return_context import get_referer_url, sanitize_return_url
 from accounts.utils.tags import delete_tag, rename_tag, tags_with_user_counts
 from studio.decorators import staff_required
 
 
 def _safe_redirect_url(request):
-    """Return a safe redirect target derived from the ``Referer`` header.
+    """Return a safe redirect target derived from ``next`` or ``Referer``.
 
-    Falls back to the Studio user list if no referer is present or the
-    referer points to a different host (defence-in-depth against open
-    redirects, even though staff_required already gates the surface).
+    Falls back to the Studio user list if neither is present or if they
+    point to an external host / unsafe scheme.
     """
-    explicit_next = request.POST.get('next') or ''
+    explicit_next = sanitize_return_url(
+        request.POST.get('next') or '',
+        request=request,
+        default='',
+    )
     if explicit_next:
-        parsed_next = urlsplit(explicit_next)
-        if not parsed_next.netloc:
-            return explicit_next
-
-    referer = request.META.get('HTTP_REFERER', '')
-    if not referer:
-        return reverse('studio_user_list')
-
-    parsed = urlsplit(referer)
-    request_host = request.get_host()
-    # An absolute URL on a different host is rejected.
-    if parsed.netloc and parsed.netloc != request_host:
-        return reverse('studio_user_list')
-
-    # Strip the scheme + host so we redirect to a relative URL only; this
-    # avoids leaking host info into the Location header.
-    relative = parsed.path
-    if parsed.query:
-        relative = f'{relative}?{parsed.query}'
-    if parsed.fragment:
-        relative = f'{relative}#{parsed.fragment}'
-    return relative or reverse('studio_user_list')
+        return explicit_next
+    return get_referer_url(request, default=reverse('studio_user_list'))
 
 
 @staff_required

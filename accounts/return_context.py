@@ -50,18 +50,15 @@ def _path_with_query_and_fragment(parsed_url):
     return path
 
 
-def sanitize_verification_return_path(value, *, request=None, default=""):
-    """Return a safe content-return path for email verification links.
+def sanitize_return_url(value, *, request=None, default=DEFAULT_RETURN_URL):
+    """Return a normalized local path/query/fragment URL, or ``default`` if unsafe.
 
-    Verification emails are long-lived account-action links, so they use a
-    stricter sanitizer than generic ``next`` handling:
-
-    - relative paths are allowed;
-    - same-host absolute URLs are allowed but stored as relative paths;
-    - auth/logout/admin/member-only destinations are rejected via the same
-      exclusion list used for logout redirects;
-    - malformed, empty, protocol-relative, external, or control-character
-      values fall back to ``default``.
+    Accepts relative local paths (``/path?...#...``) and, when ``request`` is
+    provided, same-host absolute URLs whose scheme satisfies ``request.is_secure()``,
+    normalizing them to relative ``/path?...#...``. Rejects external hosts,
+    non-HTTP(S) schemes (``javascript:``, ``data:``), protocol-relative URLs
+    (``//evil.example``), non-slash relative paths, backslashes, and control
+    characters.
     """
     if not isinstance(value, str):
         return default
@@ -84,10 +81,34 @@ def sanitize_verification_return_path(value, *, request=None, default=""):
             require_https=request.is_secure(),
         ):
             return default
-        value = _path_with_query_and_fragment(parsed)
-    else:
-        value = sanitize_next_url(value, default="")
+        return _path_with_query_and_fragment(parsed)
 
+    return sanitize_next_url(value, default=default)
+
+
+def get_referer_url(request, default=DEFAULT_RETURN_URL):
+    """Read and sanitize ``HTTP_REFERER`` into a local relative URL, or ``default``."""
+    return sanitize_return_url(
+        request.META.get("HTTP_REFERER", ""),
+        request=request,
+        default=default,
+    )
+
+
+def sanitize_verification_return_path(value, *, request=None, default=""):
+    """Return a safe content-return path for email verification links.
+
+    Verification emails are long-lived account-action links, so they use a
+    stricter sanitizer than generic ``next`` handling:
+
+    - relative paths are allowed;
+    - same-host absolute URLs are allowed but stored as relative paths;
+    - auth/logout/admin/member-only destinations are rejected via the same
+      exclusion list used for logout redirects;
+    - malformed, empty, protocol-relative, external, or control-character
+      values fall back to ``default``.
+    """
+    value = sanitize_return_url(value, request=request, default="")
     if not value or should_skip_logout_redirect(value):
         return default
     return value

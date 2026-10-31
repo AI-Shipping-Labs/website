@@ -28,9 +28,9 @@ from django.http import Http404, HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from accounts.return_context import sanitize_return_url
 from accounts.utils.activation import mark_activated
 from bookclub.config import get_book_club_slack_url
 from bookclub.models import (
@@ -569,11 +569,12 @@ def chapter_read(request, slug, number):
             user=request.user, chapter=chapter,
         ).delete()
 
-    next_url = request.POST.get('next')
-    if not next_url or not url_has_allowed_host_and_scheme(
-        next_url, allowed_hosts={request.get_host()},
-    ):
-        next_url = f'{book.get_absolute_url()}#chapter-{number}'
+    fallback_url = f'{book.get_absolute_url()}#chapter-{number}'
+    next_url = sanitize_return_url(
+        request.POST.get('next'),
+        request=request,
+        default=fallback_url,
+    )
     return redirect(next_url)
 
 

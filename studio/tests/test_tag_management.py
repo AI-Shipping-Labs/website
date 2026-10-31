@@ -257,6 +257,22 @@ class StudioTagRenameViewTest(TestCase):
         )
         self.assertRedirects(response, '/studio/users/')
 
+    def test_rename_rejects_javascript_and_external_next(self):
+        """D18 security: javascript: and external next values fall back safely."""
+        for unsafe_next in (
+            'javascript:alert(1)',
+            'data:text/html,<script>alert(1)</script>',
+            'https://evil.example.com/phish',
+            '//evil.example.com/phish',
+            'relative/no-leading-slash',
+        ):
+            with self.subTest(next_url=unsafe_next):
+                response = self.client.post(
+                    '/studio/tags/paid-user/rename',
+                    {'new': 'paid-user', 'next': unsafe_next},
+                )
+                self.assertRedirects(response, '/studio/users/')
+
     def test_rename_anonymous_user_redirects_to_login(self):
         self.client.logout()
         response = self.client.post(

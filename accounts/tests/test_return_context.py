@@ -6,7 +6,9 @@ from accounts.return_context import (
     LOGOUT_REDIRECT_EXCLUDED_PREFIXES,
     append_next,
     get_next_url,
+    get_referer_url,
     sanitize_next_url,
+    sanitize_return_url,
     sanitize_verification_return_path,
     should_skip_logout_redirect,
 )
@@ -225,3 +227,52 @@ class GetNextUrlTest(TestCase):
             {"next": "/courses/demo"},
         )
         self.assertEqual(get_next_url(request), "/courses/demo")
+
+
+@tag('core')
+class SanitizeReturnUrlTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def test_normalizes_same_host_url_and_rejects_unsafe_targets(self):
+        request = self.factory.post("/studio/tags/paid/rename")
+        self.assertEqual(
+            sanitize_return_url(
+                "http://testserver/studio/users/1/?tab=notes#member-notes",
+                request=request,
+                default="/fallback/",
+            ),
+            "/studio/users/1/?tab=notes#member-notes",
+        )
+        for unsafe in (
+            "javascript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "https://evil.example.com/phish",
+            "//evil.example.com/phish",
+            "relative/no-leading-slash",
+        ):
+            with self.subTest(value=unsafe):
+                self.assertEqual(
+                    sanitize_return_url(unsafe, request=request, default="/fallback/"),
+                    "/fallback/",
+                )
+
+    def test_secure_request_rejects_http_scheme_and_referer_normalizes(self):
+        secure_req = self.factory.post("/books/slug", secure=True)
+        self.assertEqual(
+            sanitize_return_url(
+                "http://testserver/books/slug",
+                request=secure_req,
+                default="/books/",
+            ),
+            "/books/",
+        )
+        ref_req = self.factory.post(
+            "/studio/crm/1/undo",
+            HTTP_REFERER="http://testserver/studio/crm/?filter=active",
+        )
+        self.assertEqual(
+            get_referer_url(ref_req, default="/studio/crm/"),
+            "/studio/crm/?filter=active",
+        )
+

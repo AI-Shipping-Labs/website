@@ -36,6 +36,7 @@ def _asl_compat(log):
         if isinstance(entry, dict) and 'asl_compat' in entry:
             return entry['asl_compat']
     return {}
+from accounts.return_context import get_referer_url
 from integrations.services import content_sync_queue
 from integrations.services.content_sync_queue import (
     enqueue_content_sync,
@@ -1044,27 +1045,8 @@ _OBJECT_TRIGGER_MODEL_ALLOWLIST = {
 
 
 def _safe_redirect_target(request, fallback_url):
-    """Return a same-host HTTP_REFERER if present, otherwise ``fallback_url``.
-
-    Mirrors the standard "redirect back to where the user came from" pattern
-    but defends against open-redirect by only honouring referers from the
-    same host. ``fallback_url`` is an already-resolved URL string.
-    """
-    referer = request.META.get('HTTP_REFERER', '')
-    if not referer:
-        return fallback_url
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(referer)
-    except Exception:
-        return fallback_url
-    # Empty netloc means a relative URL — same-host by definition.
-    if not parsed.netloc:
-        return referer
-    request_host = request.get_host()
-    if parsed.netloc == request_host:
-        return referer
-    return fallback_url
+    """Return a validated local redirect URL from HTTP_REFERER, else ``fallback_url``."""
+    return get_referer_url(request, default=fallback_url)
 
 
 @staff_required

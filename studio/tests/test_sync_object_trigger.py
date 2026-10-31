@@ -572,7 +572,16 @@ class SyncObjectTriggerRedirectTest(TestCase):
             HTTP_REFERER=f'http://testserver{edit_url}',
         )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], f'http://testserver{edit_url}')
+        self.assertEqual(response['Location'], edit_url)
+
+    def test_rejects_javascript_referer(self):
+        """D18 security: javascript: scheme in HTTP_REFERER is rejected."""
+        response = self.client.post(
+            f'/studio/sync/object/article/{self.article.pk}/trigger/',
+            HTTP_REFERER='javascript:alert(1)',
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/studio/sync/')
 
     def test_redirects_to_dashboard_when_no_referer(self):
         response = self.client.post(

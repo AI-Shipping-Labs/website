@@ -17,7 +17,6 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.lifecycle import (
@@ -27,6 +26,7 @@ from accounts.lifecycle import (
     lifecycle_label,
     normalize_account_lifecycle,
 )
+from accounts.return_context import get_referer_url
 from accounts.utils.tags import list_all_tags, normalize_tag, user_ids_with_exact_tag
 from community.models import STATUS_BOOKED, BookedCall
 from community.slack_config import get_slack_plan_sprints_user_token
@@ -479,18 +479,10 @@ def crm_slack_ingest_review(request):
 
 
 def _safe_back(request):
-    """Redirect target after an undo: the referring page, else CRM list.
-
-    Only a same-host referer is honoured so the redirect cannot be aimed
-    off-site by a crafted Referer header.
-    """
-    referer = request.META.get("HTTP_REFERER", "")
-    if referer and url_has_allowed_host_and_scheme(
-        referer,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return redirect(referer)
+    """Redirect target after an undo: the referring page, else CRM list."""
+    target = get_referer_url(request, default="")
+    if target:
+        return redirect(target)
     return redirect("studio_crm_list")
 
 

@@ -105,6 +105,19 @@ class EmailCampaign(models.Model):
             'state. unsubscribed=False is always enforced.'
         ),
     )
+    # Verify-or-delete campaigns: when set on an ``unverified_only`` campaign
+    # the email promises that an account which is still unverified this many
+    # days after the send is deleted. The send is one wave (no staged
+    # release) and the deletion is a separate, explicit, re-checked job.
+    verify_deadline_days = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            'Only for unverified_only campaigns. Days recipients have to '
+            'verify their email before the account is deleted. Null = a '
+            'plain re-permission campaign with no deletion promise.'
+        ),
+    )
     # Issue #1076: optional event-registrant audience. Null = the historical
     # tier/tag/Slack audience (unchanged). Non-null scopes the audience to
     # everyone registered for that event (``EventRegistration.user``), with

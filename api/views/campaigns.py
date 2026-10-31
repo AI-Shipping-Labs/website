@@ -58,6 +58,7 @@ WRITABLE_FIELDS = {
     "target_tags_none",
     "slack_filter",
     "audience_verification",
+    "verify_deadline_days",
     "target_event",
     "is_archived",
 }
@@ -83,6 +84,7 @@ _CAMPAIGN_EXAMPLE = {
     "target_tags_none": ["unsubscribed"],
     "slack_filter": "any",
     "audience_verification": "verified_only",
+    "verify_deadline_days": None,
     "target_event": None,
     "status": "draft",
     "is_archived": False,
@@ -198,6 +200,7 @@ def _serialize_campaign(campaign):
         "target_tags_none": list(campaign.target_tags_none or []),
         "slack_filter": campaign.slack_filter,
         "audience_verification": campaign.audience_verification,
+        "verify_deadline_days": campaign.verify_deadline_days,
         "target_event": campaign.target_event_id,
         "status": campaign.status,
         "is_archived": campaign.is_archived,
@@ -269,6 +272,15 @@ def _collect_campaign_values(data, *, existing=None):
             errors["audience_verification"] = "Unknown audience verification."
         values["audience_verification"] = audience_verification
 
+    if "verify_deadline_days" in data:
+        days = data["verify_deadline_days"]
+        if days is None:
+            values["verify_deadline_days"] = None
+        elif isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= 30:
+            errors["verify_deadline_days"] = "Must be an integer 1-30 or null."
+        else:
+            values["verify_deadline_days"] = days
+
     for field in ("target_tags_any", "target_tags_none"):
         if field in data:
             raw = data[field]
@@ -299,6 +311,28 @@ def _collect_campaign_values(data, *, existing=None):
             errors["is_archived"] = "Must be a boolean."
         else:
             values["is_archived"] = data["is_archived"]
+
+    effective_days = values.get(
+        "verify_deadline_days",
+        getattr(existing, "verify_deadline_days", None),
+    )
+    effective_audience = values.get(
+        "audience_verification",
+        getattr(
+            existing,
+            "audience_verification",
+            EmailCampaign.AUDIENCE_VERIFICATION_VERIFIED_ONLY,
+        ),
+    )
+    if (
+        effective_days
+        and effective_audience
+        != EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+        and "verify_deadline_days" not in errors
+    ):
+        errors["verify_deadline_days"] = (
+            "Only valid with audience_verification=unverified_only."
+        )
 
     return values, errors
 
@@ -382,6 +416,14 @@ def _apply_campaign_values(campaign, values):
                     "audience_verification": {
                         "type": "string",
                         "enum": _AUDIENCE_VERIFICATION_ENUM,
+                    },
+                    "verify_deadline_days": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": (
+                            "Days to verify before the account is deleted "
+                            "(1-30). Only with unverified_only."
+                        ),
                     },
                     "target_event": {
                         "type": "integer",
@@ -515,6 +557,14 @@ def campaigns_collection(request):
                     "audience_verification": {
                         "type": "string",
                         "enum": _AUDIENCE_VERIFICATION_ENUM,
+                    },
+                    "verify_deadline_days": {
+                        "type": "integer",
+                        "nullable": True,
+                        "description": (
+                            "Days to verify before the account is deleted "
+                            "(1-30). Only with unverified_only."
+                        ),
                     },
                     "target_event": {
                         "type": "integer",

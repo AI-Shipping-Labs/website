@@ -136,6 +136,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
 PROMOTIONAL_EMAIL_TYPES = {
     "campaign",
     "campaign_repermission",
+    "campaign_verify_deadline",
     "workshop_announcement",
     "sprint_week_start",
     "sprint_week_note_prompt",

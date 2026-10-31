@@ -11,5 +11,6 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = frozenset(
         "payment_grace_failure_team", "payment_grace_reminder_member",
         "payment_grace_expired_member", "checkout_payment_failed",
         "maven_welcome", "maven_removal", "campaign_repermission",
+        "campaign_verify_deadline",
     }
 )

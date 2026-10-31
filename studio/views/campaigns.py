@@ -33,7 +33,7 @@ from email_app.services.campaign_recipients import (
     campaign_recipient_mode,
 )
 from email_app.services.campaign_repermission import (
-    repermission_body,
+    monitored_message_parts,
 )
 from email_app.services.campaign_test_send import TEST_EMAIL_FOOTER_NOTE as TEST_EMAIL_FOOTER_NOTE
 from email_app.services.campaign_waves import (
@@ -627,7 +627,7 @@ def campaign_detail(request, campaign_id):
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
 
     preview_body = (
-        repermission_body(campaign.body, preview=True)
+        monitored_message_parts(campaign, preview=True)[0]
         if campaign.audience_verification
         == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
         else campaign.body

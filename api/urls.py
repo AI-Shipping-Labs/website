@@ -42,6 +42,11 @@ from api.views.call_profiles import (
     call_profile_detail,
     call_profiles_collection,
 )
+from api.views.campaign_verify import (
+    campaign_deleted_users,
+    campaign_unverified_deletion,
+    unverified_audit_view,
+)
 from api.views.campaigns import (
     campaign_detail,
     campaign_recipient_assume_sent,
@@ -494,6 +499,21 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/recipients",
         campaign_recipients,
         name="api_campaign_recipients",
+    ),
+    path(
+        "campaigns/unverified-audit",
+        unverified_audit_view,
+        name="api_campaign_unverified_audit",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/unverified-deletion",
+        campaign_unverified_deletion,
+        name="api_campaign_unverified_deletion",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/deleted-users",
+        campaign_deleted_users,
+        name="api_campaign_deleted_users",
     ),
     path(
         "campaigns/<int:campaign_id>/waves",

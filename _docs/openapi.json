@@ -1718,7 +1718,8 @@
                       ],
                       "target_tags_none": [
                         "unsubscribed"
-                      ]
+                      ],
+                      "verify_deadline_days": null
                     }
                   ]
                 }
@@ -1804,6 +1805,11 @@
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "verify_deadline_days": {
+                    "description": "Days to verify before the account is deleted (1-30). Only with unverified_only.",
+                    "nullable": true,
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -1848,7 +1854,8 @@
                   ],
                   "target_tags_none": [
                     "unsubscribed"
-                  ]
+                  ],
+                  "verify_deadline_days": null
                 }
               }
             },
@@ -1961,6 +1968,40 @@
         ]
       }
     },
+    "/api/campaigns/unverified-audit": {
+      "get": {
+        "description": "Read-only counts of accounts with an unverified email, bucketed by signup age, with the segments that decide who can be emailed and who is protected from deletion.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "by_signup_age": {
+                    "under_30_days": {
+                      "total": 10
+                    }
+                  },
+                  "generated_at": "2026-10-31T17:00:00+00:00",
+                  "unverified": {
+                    "emailable": 3790,
+                    "total": 3800
+                  },
+                  "verified_total": 1200
+                }
+              }
+            },
+            "description": "Counts per age bucket and segment."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          }
+        },
+        "summary": "Audit unverified accounts by signup age",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/campaigns/{campaign_id}": {
       "get": {
         "parameters": [
@@ -2005,7 +2046,8 @@
                   ],
                   "target_tags_none": [
                     "unsubscribed"
-                  ]
+                  ],
+                  "verify_deadline_days": null
                 }
               }
             },
@@ -2088,6 +2130,11 @@
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "verify_deadline_days": {
+                    "description": "Days to verify before the account is deleted (1-30). Only with unverified_only.",
+                    "nullable": true,
+                    "type": "integer"
                   }
                 },
                 "type": "object"
@@ -2128,7 +2175,8 @@
                   ],
                   "target_tags_none": [
                     "unsubscribed"
-                  ]
+                  ],
+                  "verify_deadline_days": null
                 }
               }
             },
@@ -2145,6 +2193,62 @@
           }
         },
         "summary": "Update a campaign draft",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/deleted-users": {
+      "get": {
+        "description": "Pages through ``DeletedUserArchive`` rows written before each deletion. Pass the last returned ``id`` as ``after``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "results": [
+                    {
+                      "email": "a@example.com",
+                      "id": 1
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            },
+            "description": "Archive rows plus the total."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          }
+        },
+        "summary": "Export the backup of accounts deleted for a campaign",
         "tags": [
           "Campaigns"
         ]
@@ -2357,6 +2461,92 @@
           }
         },
         "summary": "Retry a campaign recipient",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/unverified-deletion": {
+      "post": {
+        "description": "Only for an ``unverified_only`` campaign with ``verify_deadline_days``. Considers recipients whose email was confirmed sent at least that many days ago, re-checks each account, archives it, then deletes it. ``dry_run`` (default true) counts without writing. A real run needs ``confirm: \"delete\"`` and is bounded per call: repeat with ``after`` set to the returned ``last_delivery_id`` until ``complete`` is true.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "after": 0,
+                "dry_run": true,
+                "limit": 500
+              },
+              "schema": {
+                "properties": {
+                  "after": {
+                    "type": "integer"
+                  },
+                  "confirm": {
+                    "enum": [
+                      "delete"
+                    ],
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 17,
+                  "complete": false,
+                  "deadline_days": 7,
+                  "deleted": 0,
+                  "dry_run": true,
+                  "due_deliveries": 3700,
+                  "last_delivery_id": 9000,
+                  "processed": 500,
+                  "reasons": {
+                    "deletable": 480,
+                    "verified": 20
+                  }
+                }
+              }
+            },
+            "description": "Counts for this call."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "Not a verify-or-delete campaign."
+          },
+          "422": {
+            "description": "Invalid body or missing confirmation."
+          }
+        },
+        "summary": "Delete accounts that ignored a verify-or-delete campaign",
         "tags": [
           "Campaigns"
         ]

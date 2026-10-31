@@ -145,6 +145,7 @@ class CampaignsListTest(CampaignsApiTestBase):
                 "target_tags_none",
                 "slack_filter",
                 "audience_verification",
+                "verify_deadline_days",
                 "target_event",
                 "status",
                 "is_archived",

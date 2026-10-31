@@ -293,3 +293,13 @@ expire on their original TTL.
 
 Test vs live: n/a. Tests use a short override (for example 1 second)
 to prove expiry without waiting an hour.
+
+## Verify-or-delete campaign
+
+For clearing out accounts that never confirmed their email, as a one-off operator action rather than the daily purge.
+
+1. Create an `unverified_only` campaign with `verify_deadline_days` set (API `POST /api/campaigns`, 1-30). The send is Studio-only. The campaign sends everyone in one wave (no staged release) with a "confirm within N days or the account is deleted" block and a one-click `/api/verify-email` link whose token lives N+7 days.
+2. `GET /api/campaigns/unverified-audit` is the read-only count of unverified accounts by signup age and segment (emailable, unsubscribed, bounced, logged in, staff, Stripe, paid tier).
+3. After N days, `POST /api/campaigns/<id>/unverified-deletion` runs the purge. Default is a dry run. A real run needs `{"dry_run": false, "confirm": "delete"}` and is bounded per call: repeat with `after` set to the returned `last_delivery_id` until `complete` is true.
+4. Only recipients with a confirmed `SENT` delivery of that campaign are candidates, and each is re-checked inside the delete transaction. Skipped, with a reason count: verified, inactive, staff, changed email, bounced or complained, unsubscribed, ever logged in, Stripe ids, paid tier or override, and any reverse relation outside the signup/mail/event-registration bookkeeping set.
+5. Every deleted account is written to `DeletedUserArchive` first, in the same transaction. `GET /api/campaigns/<id>/deleted-users` exports it (page with `after`).

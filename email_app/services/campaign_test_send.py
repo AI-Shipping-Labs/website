@@ -6,10 +6,7 @@ from email_app.services.campaign_message import (
     CampaignMessage,
     prepare_campaign_message,
 )
-from email_app.services.campaign_repermission import (
-    REPERMISSION_EMAIL_TYPE,
-    repermission_body,
-)
+from email_app.services.campaign_repermission import monitored_message_parts
 
 TEST_EMAIL_FOOTER_NOTE = (
     "Test send only. This address is not linked to a subscriber record, "
@@ -33,11 +30,9 @@ def _repermission_message(campaign, user, subject):
         raise CampaignTestRecipientError(
             "Re-permission test sends require an active subscribed user."
         )
+    body, email_type = monitored_message_parts(campaign, user=user)
     return prepare_campaign_message(
-        user,
-        subject,
-        repermission_body(campaign.body, user=user),
-        email_type=REPERMISSION_EMAIL_TYPE,
+        user, subject, body, email_type=email_type,
     )
 
 

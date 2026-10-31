@@ -17,8 +17,7 @@ from email_app.services.campaign_message import (
     prepare_campaign_message,
 )
 from email_app.services.campaign_repermission import (
-    REPERMISSION_EMAIL_TYPE,
-    repermission_body,
+    monitored_message_parts,
 )
 from email_app.services.relay_campaigns import (
     RelayCampaignDeliveryAmbiguous,
@@ -165,6 +164,11 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
 
             partitions = []
             remaining = users
+            if campaign.verify_deadline_days:
+                # Verify-or-delete: one send to everyone, no staged release.
+                if remaining:
+                    partitions.append(remaining)
+                remaining = []
             if remaining:
                 partitions.append(remaining[:PILOT_WAVE_SIZE])
                 remaining = remaining[PILOT_WAVE_SIZE:]
@@ -434,7 +438,7 @@ def _finalize_delivery_sent(delivery_id, claim_token, message_id):
             # transaction remains usable for the defensive lookup.
             with transaction.atomic():
                 email_type = (
-                    REPERMISSION_EMAIL_TYPE
+                    monitored_message_parts(delivery.campaign, preview=True)[1]
                     if delivery.campaign.audience_verification
                     == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
                     else 'campaign'
@@ -658,14 +662,17 @@ def send_campaign_batch(
                 campaign.audience_verification
                 == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
             )
+            if monitored:
+                message_body, message_type = monitored_message_parts(
+                    campaign, user=user,
+                )
+            else:
+                message_body, message_type = campaign.body, 'campaign'
             prepared = prepare_campaign_message(
                 user,
                 campaign.subject,
-                (
-                    repermission_body(campaign.body, user=user)
-                    if monitored else campaign.body
-                ),
-                email_type=(REPERMISSION_EMAIL_TYPE if monitored else 'campaign'),
+                message_body,
+                email_type=message_type,
             )
         except ObjectDoesNotExist:
             if _mark_pending_terminal(

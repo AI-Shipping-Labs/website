@@ -1,8 +1,11 @@
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
+from django.core import mail
 from django.test import TestCase
 from freezegun import freeze_time
+from icalendar import Calendar
 
 from booking.models import (
     STATUS_CANCELED,
@@ -19,6 +22,7 @@ from booking.services.booking_service import (
     get_available_slots,
     reschedule_booking,
 )
+from booking.services.calendar import send_calendar_invite_failure_alert
 
 
 def _next_monday() -> date:
@@ -175,7 +179,7 @@ class BookingServicesTest(TestCase):
         mock_del_zoom.assert_called_once_with("zm-123")
         mock_del_cal.assert_called_once_with("gcal-123")
 
-    def test_generate_ics(self):
+    def test_generate_ics_matches_fixture_and_email_attachment(self):
         booking = Booking(
             host=self.host,
             invitee_name="Jane Doe",
@@ -187,9 +191,44 @@ class BookingServicesTest(TestCase):
             discussion_topic="Sprint Help",
         )
         ics = generate_ics(booking)
-        self.assertIn("BEGIN:VCALENDAR", ics)
-        self.assertIn("DTSTART:20261019T100000Z", ics)
-        self.assertIn("DTEND:20261019T103000Z", ics)
-        self.assertIn("Jane Doe", ics)
-        self.assertIn("https://zoom.test/j/123", ics)
-        self.assertIn("END:VCALENDAR", ics)
+        fixture_path = Path(__file__).parent / "fixtures" / "booking_invite_expected.ics"
+        expected_lines = fixture_path.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(ics.splitlines(), expected_lines)
+        self.assertIn("\r\n", ics)
+
+        sent = send_calendar_invite_failure_alert(
+            booking,
+            ics_content=ics,
+            reason="Google Calendar event creation returned no event ID.",
+        )
+        self.assertTrue(sent)
+        self.assertEqual(len(mail.outbox), 1)
+        filename, attached_ics, mimetype = mail.outbox[0].attachments[0]
+        self.assertEqual(filename, "booking.ics")
+        self.assertEqual(attached_ics.splitlines(), expected_lines)
+        self.assertIn("text/calendar", mimetype)
+
+    def test_generate_ics_escapes_rfc5545_special_characters(self):
+        booking = Booking(
+            host=self.host,
+            invitee_name="Jane, Jr.; Doe",
+            invitee_email="jane@example.com",
+            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            manage_token="test-token-escape",
+            zoom_join_url="https://zoom.test/j/123",
+            discussion_topic="Line 1\nLine 2; with, punctuation",
+        )
+        ics = generate_ics(booking)
+        self.assertIn("DESCRIPTION:Topic: Line 1\\nLine 2\\; with\\, punctuation", ics)
+        parsed = Calendar.from_ical(ics)
+        vevents = [comp for comp in parsed.walk() if comp.name == "VEVENT"]
+        self.assertEqual(len(vevents), 1)
+        self.assertEqual(
+            str(vevents[0].get("description")),
+            "Topic: Line 1\nLine 2; with, punctuation\nZoom Link: https://zoom.test/j/123\n",
+        )
+        self.assertEqual(
+            str(vevents[0].get("summary")),
+            "30-min meeting: Jane, Jr.; Doe and Alexey Test",
+        )

@@ -1,0 +1,20 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//AI Shipping Labs//Booking//EN
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VEVENT
+SUMMARY:30-min meeting: Jane Doe and Alexey Test
+DTSTART:20261019T100000Z
+DTEND:20261019T103000Z
+DTSTAMP:20261022T070000Z
+UID:booking-test-token-123@aishippinglabs.com
+ATTENDEE;CN="Alexey Test";ROLE=REQ-PARTICIPANT:mailto:alexey.test@example.
+ com
+ATTENDEE;CN="Jane Doe";ROLE=REQ-PARTICIPANT:mailto:jane@example.com
+DESCRIPTION:Topic: Sprint Help\nZoom Link: https://zoom.test/j/123\n
+LOCATION:https://zoom.test/j/123
+ORGANIZER;CN="Alexey Test":mailto:alexey.test@example.com
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR

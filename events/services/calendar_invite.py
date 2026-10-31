@@ -423,3 +423,43 @@ def generate_feed_ics(events_qs):
         ))
 
     return cal.to_ical()
+
+
+def _add_booking_attendee(vevent, name, email):
+    attendee = vCalAddress(f'mailto:{email}')
+    attendee.params['cn'] = vText(name)
+    attendee.params['role'] = vText('REQ-PARTICIPANT')
+    vevent.add('attendee', attendee)
+
+
+def generate_booking_ics(booking, *, dtstamp=None):
+    """Generate an RFC 5545 iCalendar string for a 1:1 ``Booking``."""
+    cal = Calendar()
+    cal.add('prodid', '-//AI Shipping Labs//Booking//EN')
+    cal.add('version', '2.0')
+    cal.add('calscale', 'GREGORIAN')
+    cal.add('method', 'REQUEST')
+
+    vevent = ICalEvent()
+    vevent.add('uid', f'booking-{booking.manage_token}@aishippinglabs.com')
+    vevent.add('dtstamp', dtstamp or timezone.now())
+    vevent.add('dtstart', booking.start_datetime)
+    vevent.add('dtend', booking.end_datetime)
+    vevent.add(
+        'summary',
+        f'30-min meeting: {booking.invitee_name} and {booking.host.name}',
+    )
+    vevent.add(
+        'description',
+        f'Topic: {booking.discussion_topic}\nZoom Link: {booking.zoom_join_url}\n',
+    )
+    vevent.add('location', vText(booking.zoom_join_url or ''))
+    organizer = vCalAddress(f'mailto:{booking.host.email}')
+    organizer.params['cn'] = vText(booking.host.name)
+    vevent.add('organizer', organizer)
+    _add_booking_attendee(vevent, booking.host.name, booking.host.email)
+    _add_booking_attendee(vevent, booking.invitee_name, booking.invitee_email)
+    vevent.add('status', 'CONFIRMED')
+    cal.add_component(vevent)
+    return cal.to_ical().decode('utf-8')
+

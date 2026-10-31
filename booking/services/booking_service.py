@@ -469,34 +469,8 @@ def cancel_booking(booking: Booking) -> Booking:
     return booking
 
 
-def generate_ics(booking: Booking) -> str:
+def generate_ics(booking: Booking, *, dtstamp=None) -> str:
     """Generate an RFC 5545 iCalendar string for the booking."""
-    dt_stamp = dj_timezone.now().strftime("%Y%m%dT%H%M%SZ")
-    dt_start = booking.start_datetime.strftime("%Y%m%dT%H%M%SZ")
-    dt_end = booking.end_datetime.strftime("%Y%m%dT%H%M%SZ")
-    uid = f"booking-{booking.manage_token}@aishippinglabs.com"
-    summary = f"30-min meeting: {booking.invitee_name} and {booking.host.name}"
-    description = f"Topic: {booking.discussion_topic}\\nZoom Link: {booking.zoom_join_url}\\n"
+    from events.services.calendar_invite import generate_booking_ics
 
-    lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//AI Shipping Labs//Booking//EN",
-        "CALSCALE:GREGORIAN",
-        "METHOD:REQUEST",
-        "BEGIN:VEVENT",
-        f"UID:{uid}",
-        f"DTSTAMP:{dt_stamp}",
-        f"DTSTART:{dt_start}",
-        f"DTEND:{dt_end}",
-        f"SUMMARY:{summary}",
-        f"DESCRIPTION:{description}",
-        f"LOCATION:{booking.zoom_join_url}",
-        f"ORGANIZER;CN={booking.host.name}:mailto:{booking.host.email}",
-        f"ATTENDEE;CN={booking.host.name};ROLE=REQ-PARTICIPANT:mailto:{booking.host.email}",
-        f"ATTENDEE;CN={booking.invitee_name};ROLE=REQ-PARTICIPANT:mailto:{booking.invitee_email}",
-        "STATUS:CONFIRMED",
-        "END:VEVENT",
-        "END:VCALENDAR",
-    ]
-    return "\r\n".join(lines) + "\r\n"
+    return generate_booking_ics(booking, dtstamp=dtstamp)

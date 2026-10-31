@@ -31,19 +31,8 @@ from plans.services.partner_intro_emails import (
     preview_partner_intro_emails,
     send_partner_intro_emails,
 )
-
-# Re-export the model names the original ``plans/services.py`` carried in
-# its namespace so existing patch targets like
-# ``plans.services.Deliverable.objects.create`` keep resolving after the
-# module became this package.
 from plans.services.plan_lifecycle import (
-    Checkpoint,
-    Deliverable,
     MoveUnfinishedItemsError,
-    NextStep,
-    Plan,
-    SprintEnrollment,
-    Week,
     carry_over_unfinished_tasks,
     count_total_unfinished,
     count_unfinished_carry_over_items,
@@ -67,13 +56,7 @@ from plans.services.progress import annotate_plan_progress
 __all__ = [
     'PLAN_READY_ACTION_STATUSES',
     'PLAN_READY_EMAIL_PUBLIC_ERROR',
-    'Checkpoint',
-    'Deliverable',
     'MoveUnfinishedItemsError',
-    'NextStep',
-    'Plan',
-    'SprintEnrollment',
-    'Week',
     'annotate_plan_progress',
     'accountability_partners_by_user',
     'assign_accountability_partners',

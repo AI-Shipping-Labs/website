@@ -55,7 +55,7 @@
         <p class="text-xs font-medium uppercase tracking-widest text-accent">Your sprint plan</p>
         <h3 class="mt-2 text-lg font-semibold text-foreground" data-testid="dashboard-plan-preparing-heading">Your plan is being prepared</h3>
         <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">Alexey is using your onboarding answers to prepare your sprint plan. This usually takes 1-2 business days, and you will get a bell notification and email when it is ready.</p>
-        <a href="{% url 'onboarding_start' %}" class="{% button_classes 'secondary' 'mt-5' %}" data-testid="dashboard-plan-preparing-cta">Review onboarding answers</a>
+        <a href="{% url 'onboarding_start' %}" class="{% button_classes 'secondary' extra='mt-5' %}" data-testid="dashboard-plan-preparing-cta">Review onboarding answers</a>
       </div>
     </div>
     {% endif %}
@@ -139,7 +139,7 @@
         {% if free_unlock_event_count %}<li><a href="/events" class="group -mx-2 flex min-h-[44px] items-start gap-3 rounded-md px-2 py-1 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="calendar" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span class="min-w-0 flex-1">{{ free_unlock_event_count }} member-only event{{ free_unlock_event_count|pluralize }} in the next 30 days</span><i data-lucide="arrow-right" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-accent" aria-hidden="true"></i></a></li>{% endif %}
         {% if not free_unlock_sprint and not free_unlock_book and not free_unlock_event_count %}<li class="flex items-start gap-3"><i data-lucide="lock" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span>Personal sprint plans, cohorts, and community support.</span></li>{% endif %}
       </ul>
-      <a href="/membership" class="{% button_classes 'secondary' 'mt-5' %}" data-testid="free-plan-teaser-cta">View paid memberships</a>
+      <a href="/membership" class="{% button_classes 'secondary' extra='mt-5' %}" data-testid="free-plan-teaser-cta">View paid memberships</a>
     </div>
   </section>
   {% endif %}

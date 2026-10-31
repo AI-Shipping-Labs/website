@@ -47,7 +47,7 @@ class ButtonClassesTagTest(TestCase):
 
     def test_extra_classes_are_appended(self):
         self.assertEqual(
-            button_classes('primary', 'w-full sm:w-auto'),
+            button_classes('primary', extra='w-full sm:w-auto'),
             f"{_compose_button_classes('primary', 'md')} w-full sm:w-auto",
         )
 
@@ -112,18 +112,6 @@ class ButtonClassesTagTest(TestCase):
         self.assertIn('text-base', result)
         self.assertIn('min-h-[44px]', result)
         self.assertIn('bg-accent', result)
-
-    def test_positional_extra_still_works_without_size_argument(self):
-        """Legacy ``{% button_classes 'secondary' 'shrink-0' %}`` still works.
-
-        The size scale rollout must not break any existing call site that
-        passes a positional second argument as the ``extra`` classes.
-        """
-        result = button_classes('secondary', 'shrink-0')
-        self.assertEqual(
-            result,
-            f"{_compose_button_classes('secondary', 'md')} shrink-0",
-        )
 
     def test_size_lg_with_extra_appends_classes_after_canonical(self):
         result = button_classes('primary', size='lg', extra='w-full sm:w-auto')

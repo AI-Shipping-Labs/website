@@ -77,7 +77,7 @@ def _compose_button_classes(variant, size):
 
 
 @register.simple_tag
-def button_classes(variant, size_or_extra='', size='md', extra=''):
+def button_classes(variant, *, size='md', extra=''):
     """Return canonical product-surface button classes.
 
     Signature: ``{% button_classes variant size='md' extra='' %}``.
@@ -91,25 +91,9 @@ def button_classes(variant, size_or_extra='', size='md', extra=''):
     - ``lg``: ``min-h-[44px] px-6 py-3 text-base`` — marketing-page hero
       CTAs and pricing conversion buttons.
 
-    Backwards compatibility: the original tag accepted a positional second
-    argument that meant ``extra``. To keep every existing call site
-    (``{% button_classes 'secondary' 'shrink-0' %}``) byte-for-byte
-    unchanged, a positional second argument is treated as ``extra`` when it
-    does not match ``{'sm', 'md', 'lg'}``. Callers using the new size
-    parameter should always pass it by name: ``size='sm'``.
-
     The final class string is composed in this order: base, size, variant,
     extra. Per-call overrides therefore win the cascade.
     """
-    # Positional second arg compatibility shim: a bare positional string that
-    # is not a known size is the legacy ``extra`` argument.
-    positional_extra = ''
-    if size_or_extra:
-        if size_or_extra in PRODUCT_BUTTON_SIZE_CLASSES:
-            size = size_or_extra
-        else:
-            positional_extra = size_or_extra
-
     if variant not in PRODUCT_BUTTON_VARIANT_CLASSES:
         raise TemplateSyntaxError(
             f"Unknown button_classes variant: {variant!r}. "
@@ -122,12 +106,8 @@ def button_classes(variant, size_or_extra='', size='md', extra=''):
         )
 
     classes = _compose_button_classes(variant, size)
-    # The keyword ``extra`` wins over a positional second arg if both are
-    # supplied; in practice no call site passes both, but documenting the
-    # precedence keeps the behaviour deterministic.
-    trailing = extra or positional_extra
-    if trailing:
-        return f'{classes} {trailing}'
+    if extra:
+        return f'{classes} {extra}'
     return classes
 
 

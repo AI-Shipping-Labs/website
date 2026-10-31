@@ -364,7 +364,7 @@ class CarryOverServiceTest(TestCase):
         # Make the Deliverable insert blow up after checkpoints copied so
         # we can prove the whole thing rolled back (no partial copy).
         with mock.patch(
-            'plans.services.Deliverable.objects.create',
+            'plans.services.plan_lifecycle.Deliverable.objects.create',
             side_effect=DatabaseError('boom'),
         ):
             with self.assertRaises(DatabaseError):

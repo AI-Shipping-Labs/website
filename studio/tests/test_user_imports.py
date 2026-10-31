@@ -488,7 +488,7 @@ class ScheduledImportTaskTest(ImportRegistryMixin, TestCase):
             batch.save()
             return batch
 
-        with patch("accounts.tasks.run_import_batch", side_effect=fake_run) as mock_run:
+        with patch("accounts.tasks.imports.run_import_batch", side_effect=fake_run) as mock_run:
             batch_id = run_scheduled_import(IMPORT_SOURCE_STRIPE)
 
         mock_run.assert_called_once()
@@ -524,7 +524,7 @@ class ScheduledImportTaskTest(ImportRegistryMixin, TestCase):
         self.assertEqual(stripe_batch.status, ImportBatch.STATUS_COMPLETED)
         self.assertEqual(stripe_batch.users_created, 1)
 
-    @patch("accounts.tasks.mail_admins")
+    @patch("accounts.tasks.imports.mail_admins")
     def test_alerts_once_after_three_failure_streak(self, mock_mail_admins):
         import_users.ADAPTERS.clear()
         register_import_adapter(
@@ -547,7 +547,7 @@ class ScheduledImportTaskTest(ImportRegistryMixin, TestCase):
         self.assertFalse(ImportBatch.objects.get(pk=second).params.get("failure_alert_sent", False))
         self.assertFalse(ImportBatch.objects.get(pk=fourth).params.get("failure_alert_sent", False))
 
-    @patch("accounts.tasks.mail_admins")
+    @patch("accounts.tasks.imports.mail_admins")
     def test_success_resets_failure_alert_streak(self, mock_mail_admins):
         import_users.ADAPTERS.clear()
         failing = lambda: (_ for _ in ()).throw(CommandError("Stripe config missing"))

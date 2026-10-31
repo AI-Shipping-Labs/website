@@ -30,12 +30,8 @@ audit trail explains why those rows exist::
     diagnostic_code = "backfilled via process_missed_bounces"
     raw_payload = {"backfill": True, "source": "...", "ran_at": "..."}
 
-The command branches on ``hasattr(user, "bounce_state")`` so it works
-both before and after issue #766 lands. When the structured
-``bounce_state`` field is available, it is written along with
-``bounce_recorded_at`` and ``last_bounce_diagnostic``. Otherwise the
-legacy ``bounced`` tag path is used (matches
-``api.views.ses_events._mark_permanent_bounce``).
+The command writes the structured ``bounce_state`` field along with
+``bounce_recorded_at`` and ``last_bounce_diagnostic``.
 """
 
 import uuid
@@ -45,12 +41,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from accounts.utils.tags import add_tag
 from email_app.models import SesEvent
 
 User = get_user_model()
 
-TAG_BOUNCED = "bounced"
 BACKFILL_DIAGNOSTIC = "backfilled via process_missed_bounces"
 BACKFILL_SOURCE = "process_missed_bounces"
 
@@ -319,35 +313,21 @@ def _mark_permanent_bounce(user):
     """Apply the permanent-bounce side-effects to ``user``.
 
     Returns the ``action_taken`` string for the synthetic SesEvent row.
-    Branches on ``hasattr(user, "bounce_state")`` so the command works
-    whether issue #766 has landed yet or not.
     """
-    if hasattr(user, "bounce_state"):
-        # #766-world: structured bounce_state field replaces the tag.
-        bounce_state_enum = getattr(type(user), "BounceState", None)
-        permanent_value = (
-            getattr(bounce_state_enum, "PERMANENT", "permanent")
-            if bounce_state_enum is not None
-            else "permanent"
-        )
-        user.bounce_state = permanent_value
-        user.bounce_recorded_at = timezone.now()
-        user.last_bounce_diagnostic = BACKFILL_DIAGNOSTIC
-        user.unsubscribed = True
-        user.save(
-            update_fields=[
-                "bounce_state",
-                "bounce_recorded_at",
-                "last_bounce_diagnostic",
-                "unsubscribed",
-            ]
-        )
-        return "unsubscribed and set bounce_state=PERMANENT (backfill)"
-
-    # Pre-#766 world: legacy tag-based bookkeeping. Mirrors
-    # ``api.views.ses_events._mark_permanent_bounce``.
-    if not user.unsubscribed:
-        user.unsubscribed = True
-        user.save(update_fields=["unsubscribed"])
-    add_tag(user, TAG_BOUNCED)
-    return f"unsubscribed and tagged {TAG_BOUNCED} (backfill)"
+    bounce_state_enum = getattr(type(user), "BounceState", None)
+    permanent_value = "permanent"
+    if bounce_state_enum is not None:
+        permanent_value = getattr(bounce_state_enum, "PERMANENT", "permanent")
+    user.bounce_state = permanent_value
+    user.bounce_recorded_at = timezone.now()
+    user.last_bounce_diagnostic = BACKFILL_DIAGNOSTIC
+    user.unsubscribed = True
+    user.save(
+        update_fields=[
+            "bounce_state",
+            "bounce_recorded_at",
+            "last_bounce_diagnostic",
+            "unsubscribed",
+        ]
+    )
+    return "unsubscribed and set bounce_state=PERMANENT (backfill)"

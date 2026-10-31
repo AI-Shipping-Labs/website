@@ -27,6 +27,7 @@ from analytics.request_context import (
     clear_current_request,
     set_current_request,
 )
+from website.request_ip import client_ip_from_request
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +117,8 @@ def delete_analytics_cookies(response, *, cookie_names=ANALYTICS_COOKIES):
 # --- Helpers -------------------------------------------------------------
 
 def _client_ip(request):
-    """Return the client IP, preferring X-Forwarded-For first hop."""
-    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if xff:
-        return xff.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR', '') or ''
+    """Return the client IP via the single trusted-proxy hop extractor."""
+    return client_ip_from_request(request)
 
 
 def _hash_ip(ip):

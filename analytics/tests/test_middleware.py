@@ -376,6 +376,48 @@ class IpHashPrivacyTest(TestCase):
         v = CampaignVisit.objects.get()
         self.assertEqual(v.ip_hash, '')
 
+    @override_settings(IP_HASH_SALT='test_salt', Q_CLUSTER=SYNC_Q_CLUSTER)
+    def test_spoofed_xff_ignored_for_analytics_ip_hash(self):
+        """D17 security: spoofed X-Forwarded-For cannot forge analytics ip_hash."""
+        c = make_browser_client()
+        c.get(
+            '/blog?utm_source=newsletter&utm_campaign=launch',
+            REMOTE_ADDR='8.8.8.8',
+            HTTP_X_FORWARDED_FOR='198.51.100.99',
+        )
+        direct_visit = CampaignVisit.objects.get()
+        expected = hashlib.sha256(b'8.8.8.8test_salt').hexdigest()
+        self.assertEqual(direct_visit.ip_hash, expected)
+        CampaignVisit.objects.all().delete()
+
+        c.get(
+            '/blog?utm_source=newsletter&utm_campaign=launch',
+            REMOTE_ADDR='10.0.1.8',
+            HTTP_X_FORWARDED_FOR='198.51.100.99, 8.8.8.8',
+        )
+        proxied_visit = CampaignVisit.objects.get()
+        self.assertEqual(proxied_visit.ip_hash, expected)
+
+    def test_spoofed_xff_ignored_for_privacy_request_context(self):
+        """D17 security: spoofed X-Forwarded-For cannot forge privacy audit IP."""
+        from django.test import RequestFactory
+
+        from accounts.services.privacy import request_context_from_request
+
+        rf = RequestFactory()
+        spoofed_direct = rf.get(
+            '/account/',
+            REMOTE_ADDR='8.8.8.8',
+            HTTP_X_FORWARDED_FOR='198.51.100.99',
+        )
+        spoofed_prepended = rf.get(
+            '/account/',
+            REMOTE_ADDR='10.0.1.8',
+            HTTP_X_FORWARDED_FOR='198.51.100.99, 8.8.8.8',
+        )
+        self.assertEqual(request_context_from_request(spoofed_direct)['ip'], '8.8.8.8')
+        self.assertEqual(request_context_from_request(spoofed_prepended)['ip'], '8.8.8.8')
+
 
 @override_settings(IP_HASH_SALT='', Q_CLUSTER=SYNC_Q_CLUSTER)
 class CampaignSlugCacheTest(TestCase):

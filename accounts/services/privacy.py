@@ -32,6 +32,7 @@ from integrations.config import (
     validate_email_config_value,
 )
 from payments.models import Membership
+from website.request_ip import client_ip_from_request
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,7 @@ class _PrivacyCorrelations:
 def request_context_from_request(request):
     """Return the minimal request metadata used by privacy audit logs."""
     return {
-        "ip": request.META.get("HTTP_X_FORWARDED_FOR", "").split(",")[0].strip() or request.META.get("REMOTE_ADDR", ""),
+        "ip": client_ip_from_request(request),
         "user_agent": request.META.get("HTTP_USER_AGENT", ""),
     }
 

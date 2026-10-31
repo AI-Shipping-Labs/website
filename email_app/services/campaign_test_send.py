@@ -23,8 +23,12 @@ def _repermission_message(campaign, user, subject):
         raise CampaignTestRecipientError(
             "Re-permission test sends require an existing controlled user."
         )
+    # A verify-or-delete test only previews the message and link, so an
+    # already-verified operator account may receive it (the link is a no-op
+    # for them). A re-permission test keeps requiring an unverified user.
+    already_verified = user.email_verified and not campaign.verify_deadline_days
     if (
-        not user.is_active or user.unsubscribed or user.email_verified
+        not user.is_active or user.unsubscribed or already_verified
         or user.bounce_state == User.BounceState.PERMANENT
     ):
         raise CampaignTestRecipientError(

@@ -133,6 +133,26 @@ class PurgeDecisionTest(PurgeBase):
         for user in protected.values():
             self.assertTrue(self.exists(user))
 
+    def test_main_tier_and_active_tier_override_users_are_never_deleted(self):
+        from payments.models import TierOverride
+
+        main = self.recipient("main-paid", tier=self.main_tier)
+        overridden = self.recipient("override-paid")
+        TierOverride.objects.create(
+            user=overridden,
+            original_tier=self.free_tier,
+            override_tier=self.main_tier,
+            expires_at=timezone.now() + timedelta(days=30),
+            is_active=True,
+        )
+
+        result = self.run_purge()
+
+        self.assertEqual(result["deleted"], 0)
+        self.assertEqual(result["reasons"], {"paid_tier": 2})
+        self.assertTrue(self.exists(main))
+        self.assertTrue(self.exists(overridden))
+
     def test_account_with_real_activity_is_blocked_by_its_relation(self):
         enrolled = self.recipient("enrolled")
         course = Course.objects.create(title="C", slug="c", status="published")

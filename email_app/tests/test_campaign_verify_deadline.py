@@ -96,3 +96,47 @@ class VerifyDeadlineMessageTest(TierSetupMixin, TestCase):
             waves[0].deliveries.count(), campaign.deliveries.count(),
         )
         self.assertGreater(campaign.deliveries.count(), 100)
+
+
+@tag("core")
+class VerifyDeadlineTestSendTest(TierSetupMixin, TestCase):
+    def make_campaign(self, **fields):
+        values = {
+            "subject": "Confirm your email",
+            "body": "Hi, Alexey here.",
+            "audience_verification": "unverified_only",
+            "verify_deadline_days": 7,
+        }
+        values.update(fields)
+        return EmailCampaign.objects.create(**values)
+
+    def test_verified_operator_gets_the_deadline_test_with_unsubscribe_link(self):
+        from email_app.services.campaign_test_send import _test_message
+
+        operator = create_user_with_membership(
+            email="operator@example.com", tier=self.free_tier, email_verified=True,
+        )
+
+        message = _test_message(
+            self.make_campaign(), operator, operator.email, "[TEST] s",
+        )
+
+        self.assertIn("within 7 days", message.body_markdown)
+        self.assertIn("/api/verify-email?token=", message.body_markdown)
+        self.assertIn("/api/unsubscribe", message.unsubscribe_url)
+
+    def test_repermission_test_still_rejects_a_verified_user(self):
+        from email_app.services.campaign_test_send import (
+            CampaignTestRecipientError,
+            _test_message,
+        )
+
+        operator = create_user_with_membership(
+            email="operator2@example.com", tier=self.free_tier, email_verified=True,
+        )
+
+        with self.assertRaises(CampaignTestRecipientError):
+            _test_message(
+                self.make_campaign(verify_deadline_days=None),
+                operator, operator.email, "[TEST] s",
+            )

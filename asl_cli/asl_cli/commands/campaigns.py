@@ -51,6 +51,10 @@ CAMPAIGN_FLAGS = [
     click.option("--target-tags-none", default=None, help="Comma-separated tags."),
     click.option("--slack-filter", default=None),
     click.option("--audience-verification", default=None),
+    click.option(
+        "--verify-deadline-days", type=int, default=None,
+        help="Verify-or-delete: days before unverified accounts are deleted.",
+    ),
     click.option("--target-event", type=int, default=None, help="Event id."),
     click.option("--is-archived/--no-is-archived", default=None),
 ]
@@ -85,6 +89,21 @@ def campaigns_update(campaign_id, fmt, **kwargs):
         if key in body and isinstance(body[key], str):
             body[key] = [t.strip() for t in body[key].split(",") if t.strip()]
     emit(get_client().patch(f"{API}/campaigns/{campaign_id}", json_body=body), fmt)
+
+
+@campaigns.command("test-send")
+@click.argument("campaign_id", type=int)
+@click.option("--recipient", required=True, help="Exactly one test address.")
+@format_option
+def campaigns_test_send(campaign_id, recipient, fmt):
+    """Send a TEST of a campaign to ONE address (never the campaign itself)."""
+    emit(
+        get_client().post(
+            f"/studio/campaigns/{campaign_id}/test-send",
+            json_body={"test_recipients": recipient},
+        ),
+        fmt,
+    )
 
 
 groups = [campaigns]

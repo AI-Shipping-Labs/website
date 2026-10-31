@@ -68,6 +68,7 @@ def send_relay_transactional(
     safe_correlation,
     cc=None,
     calendar=None,
+    sender_id=None,
 ):
     """Send one named template through Relay with a stable logical key."""
     existing = _claim_delivery(template_key, idempotency_key, safe_correlation)
@@ -80,6 +81,7 @@ def send_relay_transactional(
         idempotency_key,
         cc=cc,
         calendar=calendar,
+        sender_id=sender_id,
     )
     response = _post_relay(payload, template_key, idempotency_key, safe_correlation)
     return _handle_response(response, template_key, idempotency_key, safe_correlation)
@@ -128,7 +130,7 @@ def _claim_delivery(template_key, idempotency_key, safe_correlation):
     return None
 
 
-def _build_payload(recipient, template_key, context, idempotency_key, *, cc, calendar):
+def _build_payload(recipient, template_key, context, idempotency_key, *, cc, calendar, sender_id=None):
     payload = {
         "email": recipient,
         "template_key": template_key,
@@ -140,6 +142,8 @@ def _build_payload(recipient, template_key, context, idempotency_key, *, cc, cal
         payload["cc"] = list(cc)
     if calendar is not None:
         payload["calendar_alternative"] = calendar
+    if sender_id:
+        payload["from_email"] = sender_id
     return payload
 
 

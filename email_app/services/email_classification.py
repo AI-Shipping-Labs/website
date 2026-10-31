@@ -206,6 +206,16 @@ def get_sender_for_kind(email_kind):
     return get_config(key, default)
 
 
+def get_calendar_sender():
+    """Sender and iCalendar ORGANIZER for event calendar invites.
+
+    Uses the content@ (promotional) mailbox, not noreply@: Gmail only
+    auto-adds an invite when the organizer is a sender the invitee has
+    interacted with, and members have not interacted with noreply@.
+    """
+    return get_sender_for_kind(EMAIL_KIND_PROMOTIONAL)
+
+
 def get_sender_for_email_type(email_type):
     """Resolve the configured From address for a specific email type.
 
@@ -228,3 +238,9 @@ def get_sender_for_email_type(email_type):
         return get_sender_for_kind(EMAIL_KIND_PROMOTIONAL)
 
     return get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
+
+
+def relay_sender_id(sender):
+    """Relay sender id (the mailbox local part) for a configured sender address."""
+    mailbox = str(sender or "").rsplit("<", 1)[-1].rstrip("> ").strip()
+    return mailbox.split("@", 1)[0].lower()

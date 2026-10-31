@@ -12,6 +12,10 @@ from email_app.relay_transactional import (
     recipient_template_context,
     send_relay_transactional,
 )
+from email_app.services.email_classification import (
+    get_calendar_sender,
+    relay_sender_id,
+)
 from email_app.services.relay_templates import relay_template_subject
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
@@ -148,5 +152,6 @@ def _send_calendar_email(
         idempotency_key=idempotency_key,
         safe_correlation=safe_correlation,
         calendar=calendar,
+        sender_id=relay_sender_id(get_calendar_sender()),
     )
     return result.message_id

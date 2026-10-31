@@ -167,11 +167,11 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
             "Bearer db-relay-key",
         )
 
-    @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL="settings@example.com")
+    @override_settings(RELAY_PROMOTIONAL_FROM_EMAIL="settings@example.com")
     def test_calendar_invite_organizer_uses_db_sender(self):
         from events.services.calendar_invite import generate_ics
 
-        set_integration("RELAY_TRANSACTIONAL_FROM_EMAIL", "calendar@example.com", "email")
+        set_integration("RELAY_PROMOTIONAL_FROM_EMAIL", "calendar@example.com", "email")
         event = SimpleNamespace(
             title="Runtime Config Event",
             slug="runtime-config-event",

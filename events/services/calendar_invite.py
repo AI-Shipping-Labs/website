@@ -33,8 +33,7 @@ from icalendar import Calendar, vCalAddress, vText
 from icalendar import Event as ICalEvent
 
 from email_app.services.email_classification import (
-    EMAIL_KIND_TRANSACTIONAL,
-    get_sender_for_kind,
+    get_calendar_sender,
 )
 from integrations.config import site_base_url
 
@@ -269,10 +268,9 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     else:
         vevent.add('location', vText(community_url))
 
-    # Organizer — pulled from the transactional sender so the
-    # subscribed entry shows the same "AI Shipping Labs" identity as
-    # the per-event email invites.
-    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
+    # Organizer — the calendar sender, the same identity the per-event
+    # email invites are sent from.
+    from_email = get_calendar_sender()
     organizer_email = normalize_calendar_organizer_email(from_email)
     organizer = vCalAddress(f'mailto:{organizer_email}')
     organizer.params['cn'] = vText('AI Shipping Labs')

@@ -192,7 +192,7 @@ class GenerateSeriesIcsTest(TestCase):
 
 @tag('core')
 @override_settings(
-    RELAY_TRANSACTIONAL_FROM_EMAIL=(
+    RELAY_PROMOTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
 )
@@ -295,7 +295,7 @@ class LegacySesSettingTest(TierSetupMixin, TestCase):
 
 @tag('core')
 @override_settings(
-    RELAY_TRANSACTIONAL_FROM_EMAIL=(
+    RELAY_PROMOTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
 )
@@ -426,7 +426,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
 
 @tag('core')
 @override_settings(
-    RELAY_TRANSACTIONAL_FROM_EMAIL=(
+    RELAY_PROMOTIONAL_FROM_EMAIL=(
         'AI Shipping Labs <series-calendar@aishippinglabs.com>'
     ),
 )

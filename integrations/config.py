@@ -576,6 +576,27 @@ def is_enabled(key):
     return get_bool_config(key, default=False)
 
 
+def get_int_config(key, default, *, minimum=1, maximum=None, use_settings=True):
+    """Resolve an integer config value across DB, settings, env, and default.
+
+    Rejects booleans and non-integer strings/floats; enforces ``minimum``
+    (default 1) and optional ``maximum``, returning ``default`` on any
+    invalid or out-of-range value.
+    """
+    raw = get_config(key, default, use_settings=use_settings)
+    if isinstance(raw, bool):
+        return default
+    try:
+        value = int(str(raw).strip(), 10)
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None and value < minimum:
+        return default
+    if maximum is not None and value > maximum:
+        return default
+    return value
+
+
 def _read_shared_stamp(key, label):
     """Read one memoized shared stamp, returning None when unavailable."""
     try:

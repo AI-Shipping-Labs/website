@@ -5,22 +5,13 @@ in Studio settings, then environment, then the default below), so operators
 change them without a redeploy.
 """
 
-from integrations.config import get_bool_config, get_config
+from integrations.config import get_bool_config, get_config, get_int_config
 
 MEETING_MINUTE_OPTIONS = (30, 45, 60, 90)
 
 
 def _int_config(key, default, *, minimum=None, maximum=None):
-    raw = get_config(key, str(default))
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return default
-    if minimum is not None and value < minimum:
-        return default
-    if maximum is not None and value > maximum:
-        return default
-    return value
+    return get_int_config(key, default, minimum=minimum, maximum=maximum)
 
 
 def enabled_course_slugs():

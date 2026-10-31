@@ -1,6 +1,6 @@
 """Runtime configuration for content-sync watchdog thresholds."""
 
-from integrations.config import get_config
+from integrations.config import get_int_config
 
 DEFAULT_SYNC_QUEUED_THRESHOLD_MINUTES = 10
 DEFAULT_SYNC_RUNNING_THRESHOLD_MINUTES = 30
@@ -8,12 +8,7 @@ DEFAULT_SYNC_RUNNING_THRESHOLD_MINUTES = 30
 
 def _positive_int_config(key, default):
     """Return a positive integer setting, falling back on invalid values."""
-    raw_value = get_config(key, default)
-    try:
-        value = int(raw_value)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
+    return get_int_config(key, default, minimum=1)
 
 
 def sync_queued_threshold_minutes():

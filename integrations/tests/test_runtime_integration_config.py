@@ -12,6 +12,7 @@ from integrations.config import (
     clear_config_cache,
     get_bool_config,
     get_config,
+    get_int_config,
     is_enabled,
     reset_local_config_cache,
 )
@@ -252,4 +253,48 @@ class GetBoolConfigConsolidationTest(RuntimeConfigTestCase):
         with patch.dict(os.environ, {"SES_WEBHOOK_VALIDATION_ENABLED": "false"}):
             with override_settings(DEBUG=False, SES_WEBHOOK_VALIDATION_ENABLED=True):
                 self.assertTrue(ses_service._ses_validation_enabled())
+
+
+class GetIntConfigConsolidationTest(RuntimeConfigTestCase):
+    """D16: ``get_int_config`` is the single integer config parser."""
+
+    def test_get_int_config_pins_bounds_and_decimal_parsing(self):
+        self.assertEqual(get_int_config("D16_UNSET_KEY", 10), 10)
+        with override_settings(D16_INT_TEST=" 25 "):
+            self.assertEqual(get_int_config("D16_INT_TEST", 10, minimum=1, maximum=30), 25)
+            self.assertEqual(get_int_config("D16_INT_TEST", 10, minimum=1, maximum=20), 10)
+        with override_settings(D16_INT_TEST="0"):
+            self.assertEqual(get_int_config("D16_INT_TEST", 10, minimum=1), 10)
+            self.assertEqual(get_int_config("D16_INT_TEST", 10, minimum=0), 0)
+
+    def test_divergent_callers_reject_floats_and_booleans(self):
+        """Edge case: ``ingest_plan_sprints`` and ``sync_config`` no longer coerce floats/bools."""
+        from crm.tasks.ingest_plan_sprints import (
+            FIRST_RUN_LOOKBACK_DAYS,
+            _first_run_lookback_days,
+        )
+        from crm.tasks.ingest_plan_sprints import (
+            _positive_int_config as crm_positive_int,
+        )
+        from integrations.sync_config import (
+            DEFAULT_SYNC_QUEUED_THRESHOLD_MINUTES,
+            sync_queued_threshold_minutes,
+        )
+
+        for invalid in (3.9, "3.9", True, False, "0", "-5", "abc", ""):
+            with self.subTest(value=invalid):
+                with override_settings(
+                    PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS=invalid,
+                    SYNC_QUEUED_THRESHOLD_MINUTES=invalid,
+                ):
+                    self.assertEqual(_first_run_lookback_days(), FIRST_RUN_LOOKBACK_DAYS)
+                    self.assertEqual(
+                        crm_positive_int("PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS", 7),
+                        7,
+                    )
+                    self.assertEqual(
+                        sync_queued_threshold_minutes(),
+                        DEFAULT_SYNC_QUEUED_THRESHOLD_MINUTES,
+                    )
+
 

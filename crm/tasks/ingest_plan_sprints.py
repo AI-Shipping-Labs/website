@@ -34,7 +34,7 @@ from community.slack_config import get_slack_plan_sprints_channel_id
 from crm.models import SlackChannelIngest, SlackMessage, SlackThread
 from crm.services.slack_note_sync import sync_thread_to_interview_note
 from crm.tasks.apply_plan_sprint_progress import apply_progress_for_threads
-from integrations.config import get_config, is_enabled
+from integrations.config import get_int_config, is_enabled
 from plans.models import Plan
 
 logger = logging.getLogger(__name__)
@@ -87,20 +87,14 @@ def _lock_postgres_lease_channel(channel_id):
 
 def _first_run_lookback_days():
     """Resolve the first-run lookback window (Studio-overridable, default 7)."""
-    raw = get_config('PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS', FIRST_RUN_LOOKBACK_DAYS)
-    try:
-        days = int(raw)
-    except (TypeError, ValueError):
-        return FIRST_RUN_LOOKBACK_DAYS
-    return days if days > 0 else FIRST_RUN_LOOKBACK_DAYS
+    return _positive_int_config(
+        'PLAN_SPRINTS_FIRST_RUN_LOOKBACK_DAYS',
+        FIRST_RUN_LOOKBACK_DAYS,
+    )
 
 
 def _positive_int_config(key, default):
-    try:
-        value = int(get_config(key, default))
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
+    return get_int_config(key, default, minimum=1)
 
 
 def _ts_to_datetime(ts):

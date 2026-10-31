@@ -438,8 +438,8 @@ class BoundedPurgeQueryPlanTest(TestCase):
                     ses_message_id=f"query-{user.pk}",
                 )
             with patch(
-                "accounts.tasks.purge_unverified_users.get_config",
-                side_effect=lambda key, default: default,
+                "integrations.config.get_config",
+                side_effect=lambda key, default, **kwargs: default,
             ):
                 with CaptureQueriesContext(connection) as queries:
                     purge_unverified_users()
@@ -510,14 +510,14 @@ class BoundedPurgeQueryPlanTest(TestCase):
                 raise DatabaseError("first batch unavailable")
             return _related_user_ids(relation, batch_ids)
 
-        def config(key, default):
+        def config(key, default, **kwargs):
             return {
                 "PURGE_UNVERIFIED_BATCH_SIZE": 2,
                 "PURGE_UNVERIFIED_MAX_BATCHES": 2,
             }.get(key, default)
 
         with patch(
-            "accounts.tasks.purge_unverified_users.get_config",
+            "integrations.config.get_config",
             side_effect=config,
         ), patch(
             "accounts.tasks.purge_unverified_users._related_user_ids",
@@ -539,14 +539,14 @@ class BoundedPurgeQueryPlanTest(TestCase):
             for index in range(5)
         ]
 
-        def config(key, default):
+        def config(key, default, **kwargs):
             return {
                 "PURGE_UNVERIFIED_BATCH_SIZE": 2,
                 "PURGE_UNVERIFIED_MAX_BATCHES": 1,
             }.get(key, default)
 
         with patch(
-            "accounts.tasks.purge_unverified_users.get_config",
+            "integrations.config.get_config",
             side_effect=config,
         ):
             first = purge_unverified_users()
@@ -585,11 +585,11 @@ class BoundedPurgeQueryPlanTest(TestCase):
 
 class PurgeConfigTest(TestCase):
     def test_invalid_batch_overrides_fall_back_to_safe_defaults(self):
-        invalid_values = ("", "not-an-int", "0", "-3", None)
+        invalid_values = ("", "not-an-int", "0", "-3", "3.9", 3.9, True, False, None)
         for invalid in invalid_values:
             with self.subTest(value=invalid):
                 with patch(
-                    "accounts.tasks.purge_unverified_users.get_config",
+                    "integrations.config.get_config",
                     return_value=invalid,
                 ):
                     self.assertEqual(

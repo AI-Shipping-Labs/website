@@ -17,7 +17,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
-from integrations.config import get_config
+from integrations.config import get_int_config
 
 logger = logging.getLogger(__name__)
 
@@ -72,12 +72,7 @@ class _PassResult:
 
 def _positive_int_config(key, default):
     """Resolve a positive integer IntegrationSetting with a safe fallback."""
-    raw = get_config(key, default)
-    try:
-        value = int(str(raw).strip(), 10)
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
+    return get_int_config(key, default, minimum=1)
 
 
 def _candidate_queryset(base_queryset):

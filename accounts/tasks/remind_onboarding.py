@@ -38,7 +38,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Min
 from django.utils import timezone
 
-from integrations.config import get_bool_config, get_config
+from integrations.config import get_bool_config, get_config, get_int_config
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +73,12 @@ def reminder_enabled():
 
 
 def reminder_delay_days():
-    """Resolve the reminder delay in days via ``get_config`` (default 7).
+    """Resolve the reminder delay in days via ``get_int_config`` (default 7).
 
     A blank, non-numeric, or non-positive override falls back to the
     default so the cron can never send at time zero or crash on a typo.
     """
-    raw = get_config(DELAY_DAYS_KEY, DEFAULT_DELAY_DAYS)
-    try:
-        value = int(str(raw).strip())
-    except (TypeError, ValueError):
-        return DEFAULT_DELAY_DAYS
-    return value if value > 0 else DEFAULT_DELAY_DAYS
+    return get_int_config(DELAY_DAYS_KEY, DEFAULT_DELAY_DAYS, minimum=1)
 
 
 def _cohort_welcome_map(cutoff):

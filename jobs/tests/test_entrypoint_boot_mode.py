@@ -3,12 +3,10 @@
 Issue #1141 Phase 2A: the entrypoint dispatches on the ``BOOT_MODE`` env var
 to untangle web-vs-worker role dispatch from migrate-on-boot:
 
-* ``predeploy`` -> ``django.setup`` -> ``migrate`` -> ``check`` ->
-  ``seed_content_sources`` -> exit 0 (no schedules, no gunicorn, no
-  qcluster). A failing migrate/check/seed propagates (issue #1662).
-* ``web`` -> ``django.setup`` -> schedules -> gunicorn (SKIPS migrate + check).
-* ``worker`` -> ``django.setup`` -> schedules -> qcluster (SKIPS migrate + check).
-* absent -> exactly the legacy ``RUN_MIGRATIONS`` behavior (backward-compat).
+* ``web`` -> ``django.setup`` -> schedules -> gunicorn (SKIPS migrate).
+* ``worker`` -> ``django.setup`` -> schedules -> qcluster (SKIPS migrate).
+* absent -> legacy ``RUN_MIGRATIONS`` behavior (source Service web migrator
+  runs ``migrate`` when ``RUN_MIGRATIONS=true``).
 
 Phase 2C: gunicorn ``--workers`` is read from ``os.environ['GUNICORN_WORKERS']``
 Parsing and the gunicorn argv are covered in ``test_entrypoint_gunicorn.py``.
@@ -16,8 +14,8 @@ Parsing and the gunicorn argv are covered in ``test_entrypoint_gunicorn.py``.
 We drive ``main()`` with the blocking handoffs (``_start_gunicorn`` /
 ``_start_qcluster``), ``django.setup``, ``_register_schedules`` and
 ``persist_boot_timing`` patched so no real boot or DB write happens, and assert
-exactly which phases run in each mode. ``call_command`` (used by the migrate /
-check helpers) is patched so we can assert what was and was NOT invoked.
+exactly which phases run in each mode. ``call_command`` (used by the migrate
+helper) is patched so we can assert what was and was NOT invoked.
 """
 
 import os
@@ -47,8 +45,6 @@ class BootModeDispatchTestBase(SimpleTestCase):
             mock.patch.object(entry, "_start_qcluster"),
             mock.patch.object(entry, "_register_schedules"),
             mock.patch.object(entry, "_suppress_r1_incompatible_schedules"),
-            mock.patch.object(entry, "_wait_for_serving_schema_ready"),
-            mock.patch.object(entry, "_publish_serving_schema_ready"),
             mock.patch.object(entry, "persist_boot_timing"),
             mock.patch.object(entry, "_initialize_runtime_observability"),
             mock.patch("django.core.management.call_command"),
@@ -61,11 +57,9 @@ class BootModeDispatchTestBase(SimpleTestCase):
         self.start_qcluster = entry._start_qcluster
         self.register_schedules = entry._register_schedules
         self.suppress_schedules = entry._suppress_r1_incompatible_schedules
-        self.wait_for_schema = entry._wait_for_serving_schema_ready
-        self.publish_schema = entry._publish_serving_schema_ready
         self.persist = entry.persist_boot_timing
         self.initialize_observability = entry._initialize_runtime_observability
-        # The migrate/check helpers import call_command lazily from this path.
+        # The migrate helper imports call_command lazily from this path.
         import django.core.management as mgmt
 
         self.call_command = mgmt.call_command
@@ -73,101 +67,6 @@ class BootModeDispatchTestBase(SimpleTestCase):
     def _run_main_with_env(self, env):
         with mock.patch.dict(os.environ, env, clear=True):
             entry.main()
-
-
-class PredeployModeTest(BootModeDispatchTestBase):
-    def test_predeploy_runs_migrate_and_check_then_exits(self):
-        self._run_main_with_env({"BOOT_MODE": "predeploy"})
-
-        names = _command_names(self.call_command)
-        self.assertIn("migrate", names)
-        self.assertIn("check", names)
-
-        # The #529 gate runs with --fail-level ERROR.
-        check_call = next(
-            c for c in self.call_command.call_args_list
-            if c.args and c.args[0] == "check"
-        )
-        self.assertEqual(check_call.args, ("check", "--fail-level", "ERROR"))
-
-        # No serving handoffs, no schedules.
-        self.start_gunicorn.assert_not_called()
-        self.start_qcluster.assert_not_called()
-        self.register_schedules.assert_not_called()
-        self.initialize_observability.assert_not_called()
-
-    def test_predeploy_seeds_content_sources_after_check(self):
-        # Issue #1662: the seed bootstraps newly declared content sources on
-        # the sole-migrator boot. It is pure-database, so it must run only
-        # after migrate and the #529 check have both passed -- ordering is
-        # the behavior under test, not merely presence.
-        self._run_main_with_env({"BOOT_MODE": "predeploy"})
-
-        names = _command_names(self.call_command)
-        self.assertLess(names.index("migrate"), names.index("check"))
-        self.assertLess(
-            names.index("check"), names.index("seed_content_sources")
-        )
-
-    def test_predeploy_seed_failure_propagates_and_skips_serve(self):
-        # Same fail-closed contract as migrate/check: a seed failure must
-        # fail the one-off task (aborting the deploy) and must never reach a
-        # serving handoff.
-        self.call_command.side_effect = Exception("seed boom")
-        with self.assertRaisesRegex(Exception, "seed boom"):
-            self._run_main_with_env({"BOOT_MODE": "predeploy"})
-        self.start_gunicorn.assert_not_called()
-        self.start_qcluster.assert_not_called()
-
-    def test_predeploy_does_not_persist_boot_timing(self):
-        # A predeploy task is not a serving container; it must not overwrite
-        # the web/worker boot-timing diagnostics payload.
-        self._run_main_with_env({"BOOT_MODE": "predeploy"})
-        self.persist.assert_not_called()
-
-    def test_predeploy_migrate_failure_propagates_and_skips_check_and_serve(self):
-        def boom(*args, **kwargs):
-            if args and args[0] == "migrate":
-                raise RuntimeError("migration failed")
-
-        self.call_command.side_effect = boom
-
-        with self.assertRaises(RuntimeError):
-            self._run_main_with_env({"BOOT_MODE": "predeploy"})
-
-        names = _command_names(self.call_command)
-        self.assertIn("migrate", names)
-        # check must NOT run after migrate blew up.
-        self.assertNotIn("check", names)
-        self.start_gunicorn.assert_not_called()
-        self.start_qcluster.assert_not_called()
-
-    def test_predeploy_check_failure_propagates(self):
-        def boom(*args, **kwargs):
-            if args and args[0] == "check":
-                raise RuntimeError("email_app.E001")
-
-        self.call_command.side_effect = boom
-
-        with self.assertRaises(RuntimeError):
-            self._run_main_with_env({"BOOT_MODE": "predeploy"})
-
-        # Propagating the failure is what fails the pre-deploy ECS task, which
-        # aborts the deploy without rolling the service.
-        self.start_gunicorn.assert_not_called()
-        self.start_qcluster.assert_not_called()
-
-    def test_smoke_check_failure_stops_before_django_setup(self):
-        with self.assertRaises(RuntimeError):
-            self._run_main_with_env({
-                "BOOT_MODE": "predeploy",
-                "DEBUG": "false",
-            })
-
-        entry.django.setup.assert_not_called()
-        self.call_command.assert_not_called()
-        self.start_gunicorn.assert_not_called()
-        self.start_qcluster.assert_not_called()
 
 
 class WebModeTest(BootModeDispatchTestBase):
@@ -207,6 +106,18 @@ class WebModeTest(BootModeDispatchTestBase):
         self.assertLess(order.index("django_setup"), order.index("observability"))
         self.assertLess(order.index("observability"), order.index("gunicorn"))
 
+    def test_smoke_check_failure_stops_before_django_setup(self):
+        with self.assertRaises(RuntimeError):
+            self._run_main_with_env({
+                "BOOT_MODE": "web",
+                "DEBUG": "false",
+            })
+
+        entry.django.setup.assert_not_called()
+        self.call_command.assert_not_called()
+        self.start_gunicorn.assert_not_called()
+        self.start_qcluster.assert_not_called()
+
 
 class WorkerModeTest(BootModeDispatchTestBase):
     def test_worker_registers_schedules_and_starts_qcluster_only(self):
@@ -236,10 +147,10 @@ class RuntimeObservabilityHookTest(SimpleTestCase):
 
 
 class NoInfraServingBootTest(BootModeDispatchTestBase):
-    """BOOT_MODE absent keeps migrations but skips expensive checks by default."""
+    """BOOT_MODE absent keeps migrations on the source web migrator."""
 
     def test_web_migrates_schedules_and_serves_without_check_by_default(self):
-        # RUN_MIGRATIONS=true, BOOT_MODE absent -> no-infra web path.
+        # RUN_MIGRATIONS=true, BOOT_MODE absent -> source Service web path.
         self._run_main_with_env({"RUN_MIGRATIONS": "true"})
 
         names = _command_names(self.call_command)
@@ -251,8 +162,21 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         self.start_qcluster.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "web")
 
+    def test_web_migrate_failure_propagates_and_skips_serve(self):
+        def boom(*args, **kwargs):
+            if args and args[0] == "migrate":
+                raise RuntimeError("migration failed")
+
+        self.call_command.side_effect = boom
+
+        with self.assertRaises(RuntimeError):
+            self._run_main_with_env({"RUN_MIGRATIONS": "true"})
+
+        self.start_gunicorn.assert_not_called()
+        self.start_qcluster.assert_not_called()
+
     def test_worker_schedules_and_starts_qcluster_without_migrate_or_check(self):
-        # RUN_MIGRATIONS absent, BOOT_MODE absent -> no-infra worker path.
+        # RUN_MIGRATIONS absent, BOOT_MODE absent -> legacy worker path.
         self._run_main_with_env({})
 
         names = _command_names(self.call_command)
@@ -264,29 +188,7 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
         self.start_gunicorn.assert_not_called()
         self.assertEqual(self.persist.call_args.args[0], "worker")
 
-    def test_combined_worker_waits_for_web_schema_before_qcluster(self):
-        self._run_main_with_env({
-            "R1_SCHEMA_BARRIER_ROLE": "worker",
-            "VERSION": "r1-test-tag",
-        })
-
-        self.wait_for_schema.assert_called_once()
-        self.start_qcluster.assert_called_once()
-
-    def test_schema_barrier_timeout_prevents_worker_start(self):
-        self.wait_for_schema.side_effect = RuntimeError("schema barrier timeout")
-
-        with self.assertRaisesMessage(RuntimeError, "schema barrier timeout"):
-            self._run_main_with_env({
-                "R1_SCHEMA_BARRIER_ROLE": "worker",
-                "VERSION": "r1-test-tag",
-            })
-
-        self.start_qcluster.assert_not_called()
-        self.register_schedules.assert_not_called()
-        self.suppress_schedules.assert_not_called()
-
-    def test_combined_web_publishes_only_after_migrate_reconcile_and_suppression(self):
+    def test_web_orders_migrate_reconcile_and_suppression_before_gunicorn(self):
         order = []
 
         def command(*args, **kwargs):
@@ -295,79 +197,16 @@ class NoInfraServingBootTest(BootModeDispatchTestBase):
 
         self.call_command.side_effect = command
         self.suppress_schedules.side_effect = lambda: order.append("suppress")
-        self.publish_schema.side_effect = lambda: order.append("publish")
         self.start_gunicorn.side_effect = lambda *_: order.append("gunicorn")
 
         self._run_main_with_env({
             "RUN_MIGRATIONS": "true",
-            "R1_SCHEMA_BARRIER_ROLE": "web",
             "VERSION": "r1-test-tag",
         })
 
         self.assertLess(order.index("migrate"), order.index("reconcile_r1_expand"))
         self.assertLess(order.index("reconcile_r1_expand"), order.index("suppress"))
-        self.assertLess(order.index("suppress"), order.index("publish"))
-        self.assertLess(order.index("publish"), order.index("gunicorn"))
-
-    def test_serving_boot_check_can_be_enabled_and_runs_after_migrate(self):
-        self._run_main_with_env({
-            "RUN_MIGRATIONS": "true",
-            "SERVING_BOOT_CHECK_ENABLED": "true",
-        })
-        names = _command_names(self.call_command)
-        self.assertIn("check", names)
-        self.assertLess(names.index("migrate"), names.index("check"))
-
-
-class CombinedTaskSchemaBarrierTest(SimpleTestCase):
-    def test_old_schema_cache_error_is_retried_until_web_publishes_marker(self):
-        cache = mock.Mock()
-        cache.get.side_effect = [
-            RuntimeError("django_q_cache does not exist"),
-            "r1-test-tag",
-        ]
-
-        with (
-            mock.patch.dict(
-                os.environ,
-                {
-                    "VERSION": "r1-test-tag",
-                    "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS": "5",
-                },
-                clear=True,
-            ),
-            mock.patch("django.core.cache.caches", {"django_q": cache}),
-            mock.patch.object(entry.time, "monotonic", side_effect=[0, 0, 1]),
-            mock.patch.object(entry.time, "sleep") as sleep,
-        ):
-            entry._wait_for_serving_schema_ready()
-
-        self.assertEqual(cache.get.call_count, 2)
-        cache.get.assert_called_with("r1_serving_schema_ready:r1-test-tag")
-        sleep.assert_called_once_with(1)
-
-    def test_old_schema_cache_error_times_out_fail_closed(self):
-        cache = mock.Mock()
-        cache.get.side_effect = RuntimeError("django_q_cache does not exist")
-
-        with (
-            mock.patch.dict(
-                os.environ,
-                {
-                    "VERSION": "r1-test-tag",
-                    "R1_SCHEMA_BARRIER_TIMEOUT_SECONDS": "1",
-                },
-                clear=True,
-            ),
-            mock.patch("django.core.cache.caches", {"django_q": cache}),
-            mock.patch.object(entry.time, "monotonic", side_effect=[0, 0, 2]),
-            mock.patch.object(entry.time, "sleep"),
-            self.assertRaisesMessage(
-                RuntimeError,
-                "qcluster was not started",
-            ),
-        ):
-            entry._wait_for_serving_schema_ready()
+        self.assertLess(order.index("suppress"), order.index("gunicorn"))
 
 
 class ServingBootSmokeCheckTest(SimpleTestCase):

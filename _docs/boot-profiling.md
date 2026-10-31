@@ -78,10 +78,9 @@ calls in `scripts/entrypoint_init.py` (unmodified):
 - `setup_schedules` — django-q schedule registration.
 - `total` — process start -> just before the gunicorn handoff.
 
-Note on `check`: `manage.py check --fail-level ERROR` runs only in the legacy
-no-`BOOT_MODE` serving path, and even there it is gated behind
-`SERVING_BOOT_CHECK_ENABLED=true` (`:510-519`) and skipped by default, so the
-harness does NOT measure a `check` phase by default.
+Note on `check`: `manage.py check --fail-level ERROR` runs in CI before the
+image is built rather than during container boot, so the harness does NOT
+measure a `check` phase.
 
 ### Migration phases
 

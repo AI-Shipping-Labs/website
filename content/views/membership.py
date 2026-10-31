@@ -65,9 +65,7 @@ def _membership_features(tier, configured_tier):
         features.append({'title': f'Everything in {inherited_tier}'})
 
     if configured_tier is not None:
-        configured_benefits = configured_tier.get('benefits')
-        if configured_benefits is None:
-            configured_benefits = configured_tier.get('activities', [])
+        configured_benefits = configured_tier.get('benefits') or []
         features.extend(
             {'title': str(benefit.get('title', '')).strip()}
             for benefit in configured_benefits

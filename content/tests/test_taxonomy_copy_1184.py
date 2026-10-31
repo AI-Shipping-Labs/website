@@ -80,7 +80,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
                 {
                     'name': 'Basic',
                     'stripe_key': 'basic',
-                    'activities': [
+                    'benefits': [
                         {
                             'icon': 'book-open',
                             'title': 'Self-serve learning',
@@ -92,7 +92,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
                 {
                     'name': 'Main',
                     'stripe_key': 'main',
-                    'activities': [
+                    'benefits': [
                         {
                             'icon': 'users',
                             'title': 'Community accountability',
@@ -104,7 +104,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
                 {
                     'name': 'Premium',
                     'stripe_key': 'premium',
-                    'activities': [
+                    'benefits': [
                         {
                             'icon': 'star',
                             'title': 'Career feedback',

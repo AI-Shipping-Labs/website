@@ -19,12 +19,11 @@ SAMPLE_TIERS_DATA = [
         'description': 'Access content.',
         'positioning': 'Best for self-paced.',
         'highlighted': False,
-        'activities': [
+        'benefits': [
             {
                 'title': 'Activity A',
                 'icon': 'book-open',
                 'description': 'Description A.',
-                'features': ['Feature A1', 'Feature A2'],
             },
         ],
     },
@@ -38,12 +37,11 @@ SAMPLE_TIERS_DATA = [
         'description': 'Everything in Basic plus community.',
         'positioning': 'Best for teams.',
         'highlighted': True,
-        'activities': [
+        'benefits': [
             {
                 'title': 'Activity B',
                 'icon': 'users',
                 'description': 'Description B.',
-                'features': ['Feature B1'],
             },
         ],
     },
@@ -57,12 +55,11 @@ SAMPLE_TIERS_DATA = [
         'description': 'Everything in Main plus courses.',
         'positioning': 'Best for structured learners.',
         'highlighted': False,
-        'activities': [
+        'benefits': [
             {
                 'title': 'Activity C',
                 'icon': 'star',
                 'description': 'Description C.',
-                'features': ['Feature C1', 'Feature C2'],
             },
         ],
     },
@@ -119,12 +116,11 @@ class GetTiersWithFeaturesTest(TestCase):
         premium = tiers[2]
         self.assertEqual(premium['features'][0]['text'], 'Everything in Main')
 
-    def test_features_collected_from_activities(self):
+    def test_features_collected_from_benefits(self):
         tiers = get_tiers_with_features()
         basic = tiers[0]
         feature_texts = [f['text'] for f in basic['features']]
-        self.assertIn('Feature A1', feature_texts)
-        self.assertIn('Feature A2', feature_texts)
+        self.assertIn('Activity A', feature_texts)
 
     def test_all_features_have_included_true(self):
         tiers = get_tiers_with_features()
@@ -135,12 +131,12 @@ class GetTiersWithFeaturesTest(TestCase):
     def test_feature_counts_per_tier(self):
         """Basic gets its own features, Main gets inheritance + own, Premium gets inheritance + own."""
         tiers = get_tiers_with_features()
-        # Basic: 2 features (from Activity A)
-        self.assertEqual(len(tiers[0]['features']), 2)
-        # Main: 1 inheritance line + 1 feature (from Activity B) = 2
+        # Basic: 1 benefit (Activity A)
+        self.assertEqual(len(tiers[0]['features']), 1)
+        # Main: 1 inheritance line + 1 benefit (Activity B) = 2
         self.assertEqual(len(tiers[1]['features']), 2)
-        # Premium: 1 inheritance line + 2 features (from Activity C) = 3
-        self.assertEqual(len(tiers[2]['features']), 3)
+        # Premium: 1 inheritance line + 1 benefit (Activity C) = 2
+        self.assertEqual(len(tiers[2]['features']), 2)
 
 
 class GetActivitiesTest(TestCase):
@@ -200,7 +196,7 @@ class GetActivitiesTest(TestCase):
                     'description': 'D',
                     'positioning': 'P',
                     'highlighted': False,
-                    'activities': [
+                    'benefits': [
                         {
                             'title': 'Padded',
                             'icon': 'x',
@@ -229,7 +225,7 @@ class GetActivitiesTest(TestCase):
                     'description': 'D',
                     'positioning': 'P',
                     'highlighted': False,
-                    'activities': [
+                    'benefits': [
                         {'title': 'Shared', 'icon': 'a', 'description': 'First.', 'features': []},
                     ],
                 },
@@ -243,7 +239,7 @@ class GetActivitiesTest(TestCase):
                     'description': 'D',
                     'positioning': 'P',
                     'highlighted': True,
-                    'activities': [
+                    'benefits': [
                         {'title': 'Shared', 'icon': 'b', 'description': 'Duplicate.', 'features': []},
                     ],
                 },
@@ -274,7 +270,7 @@ class GetActivitiesTest(TestCase):
                     'description': 'D',
                     'positioning': 'P',
                     'highlighted': False,
-                    'activities': [
+                    'benefits': [
                         {'title': 'Shared', 'icon': 'a', 'description': 'First.', 'features': []},
                     ],
                 },
@@ -288,7 +284,7 @@ class GetActivitiesTest(TestCase):
                     'description': 'D',
                     'positioning': 'P',
                     'highlighted': True,
-                    'activities': [
+                    'benefits': [
                         # Duplicate of a Basic-tier title comes FIRST in this tier...
                         {'title': 'Shared', 'icon': 'b', 'description': 'Duplicate.', 'features': []},
                         # ...followed by a unique title that must still be included.

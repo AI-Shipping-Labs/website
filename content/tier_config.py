@@ -32,17 +32,10 @@ def get_tiers_with_features():
         features = []
         if prev_tier_name:
             features.append({'text': f'Everything in {prev_tier_name}', 'included': True})
-        if 'benefits' in tier:
-            for benefit in _tier_benefits(tier):
-                title = str(benefit.get('title', '')).strip()
-                if title:
-                    features.append({'text': title, 'included': True})
-        else:
-            # Older synced revisions used activities with nested feature
-            # bullets. Keep rendering them during a rolling content deploy.
-            for activity in tier.get('activities', []):
-                for feature in activity.get('features', []):
-                    features.append({'text': feature, 'included': True})
+        for benefit in _tier_benefits(tier):
+            title = str(benefit.get('title', '')).strip()
+            if title:
+                features.append({'text': title, 'included': True})
 
         tier_copy['features'] = features
         result.append(tier_copy)
@@ -125,10 +118,8 @@ def _activity_action(title):
 
 
 def _tier_benefits(tier):
-    """Return canonical benefits, with legacy ``activities`` compatibility."""
-    if 'benefits' in tier:
-        return tier.get('benefits') or []
-    return tier.get('activities') or []
+    """Return canonical benefits from a synced tier dict."""
+    return tier.get('benefits') or []
 
 
 def get_membership_benefits():
@@ -136,8 +127,6 @@ def get_membership_benefits():
 
     The tier-level list and the expanded explanation use the same source
     record. A blank description intentionally means "show in the plan only".
-    ``activities`` remains a read-only fallback while older content revisions
-    are still in circulation during deployment.
     """
     tiers = get_tiers()
     tier_names = [t['stripe_key'] for t in tiers]

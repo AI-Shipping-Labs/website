@@ -35,7 +35,7 @@ from django.utils import timezone
 
 from crm.services.member_profile import build_member_profile_context
 from crm.services.slack_updates import threads_for_member, threads_for_plan
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 from integrations.services import llm
 from integrations.services.llm import LLMError
 from plans.models import NextSprintPlanDraft
@@ -65,13 +65,10 @@ def _profile_injection_enabled():
     Defaults ON when unset (mirrors ``ai_onboarding_available`` and the
     ``ONBOARDING_AI_ENABLED`` flag): the key exists to turn profile
     injection OFF without a redeploy, so only an explicit falsey value
-    disables it. Read via ``get_config`` from the IntegrationSetting
+    disables it. Read via ``get_bool_config`` from the IntegrationSetting
     framework — never raw ``os.environ`` / ``settings.X``.
     """
-    raw = get_config(PROFILE_INJECTION_KEY, 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config(PROFILE_INJECTION_KEY, default=True)
 
 
 def _split_done(items):

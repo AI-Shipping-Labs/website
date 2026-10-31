@@ -12,7 +12,7 @@ import re
 
 from django.conf import settings
 
-from integrations.config import get_config
+from integrations.config import get_bool_config
 
 logger = logging.getLogger(__name__)
 
@@ -49,34 +49,20 @@ _CONFIRMATION_SIGNING_FIELDS = (
     'Type',
 )
 
-_UNSET = object()
-
-
-def _settings_override_value(key):
-    """Return an explicit override_settings value, if one is active."""
+def _has_settings_override(key):
+    """Return True when ``override_settings`` explicitly set ``key``."""
     wrapped = getattr(settings, '_wrapped', None)
-    if wrapped is not None and wrapped.__class__.__name__ == 'UserSettingsHolder':
-        return wrapped.__dict__.get(key, _UNSET)
-    return _UNSET
-
-
-def _is_truthy_flag(value):
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in ('true', '1', 'yes')
+    if wrapped is None or wrapped.__class__.__name__ != 'UserSettingsHolder':
+        return False
+    return key in wrapped.__dict__
 
 
 def _ses_validation_enabled():
-    value = get_config(
+    return get_bool_config(
         'SES_WEBHOOK_VALIDATION_ENABLED',
-        _UNSET,
-        use_settings=False,
+        default=not settings.DEBUG,
+        use_settings=_has_settings_override('SES_WEBHOOK_VALIDATION_ENABLED'),
     )
-    if value is _UNSET:
-        value = _settings_override_value('SES_WEBHOOK_VALIDATION_ENABLED')
-    if value is _UNSET:
-        return not settings.DEBUG
-    return _is_truthy_flag(value)
 
 
 def validate_sns_notification(payload):

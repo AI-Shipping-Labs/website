@@ -23,7 +23,7 @@ from accounts.utils.display import display_name
 from comments.models import Comment
 from community.slack_config import slack_api_enabled
 from content.models import Unit, WorkshopPage
-from integrations.config import get_config, site_base_url
+from integrations.config import get_bool_config, site_base_url
 from jobs.tasks import async_task
 from jobs.tasks.names import build_task_name
 from notifications.services.notification_service import (
@@ -81,12 +81,9 @@ def staff_comment_alerts_enabled():
     """Default-on read of ``STAFF_COMMENT_NOTIFY_ENABLED``.
 
     ``is_enabled`` hardcodes a ``'false'`` fallback, so the default-on
-    contract reads the raw value with a ``'true'`` default instead.
+    contract reads through :func:`get_bool_config` with ``default=True``.
     """
-    raw = get_config('STAFF_COMMENT_NOTIFY_ENABLED', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('STAFF_COMMENT_NOTIFY_ENABLED', default=True)
 
 
 def staff_comment_channel_id():

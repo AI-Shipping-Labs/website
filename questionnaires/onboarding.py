@@ -17,7 +17,7 @@ Design notes:
 """
 
 from content.access import LEVEL_BASIC, get_user_level
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 from integrations.services import llm
 from questionnaires.models import (
     Answer,
@@ -146,10 +146,7 @@ def ai_onboarding_available():
     # Default ON when unset: the flag exists to turn the AI path OFF
     # without disabling the whole LLM service. Only an explicit falsey
     # value disables it.
-    raw = get_config(ONBOARDING_AI_FLAG, 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config(ONBOARDING_AI_FLAG, default=True)
 
 
 def ai_onboarding_streaming_enabled():
@@ -162,10 +159,7 @@ def ai_onboarding_streaming_enabled():
     """
     if not ai_onboarding_available():
         return False
-    raw = get_config(ONBOARDING_AI_STREAMING_FLAG, 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config(ONBOARDING_AI_STREAMING_FLAG, default=True)
 
 
 def can_access_onboarding(user):

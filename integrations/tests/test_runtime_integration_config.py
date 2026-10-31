@@ -1,5 +1,6 @@
 """Runtime services honor Studio-backed IntegrationSetting values."""
 
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +8,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from integrations.config import clear_config_cache, get_config, reset_local_config_cache
+from integrations.config import (
+    clear_config_cache,
+    get_bool_config,
+    get_config,
+    is_enabled,
+    reset_local_config_cache,
+)
 from integrations.models import IntegrationSetting
 from integrations.services import ses as ses_service
 from payments.services import _get_stripe_client, verify_webhook_signature
@@ -219,3 +226,30 @@ class ResetLocalConfigCacheTest(RuntimeConfigTestCase):
         caches["django_q"].delete("integration_settings_stamp")
         clear_config_cache()
         self.assertIsNotNone(caches["django_q"].get("integration_settings_stamp"))
+
+
+class GetBoolConfigConsolidationTest(RuntimeConfigTestCase):
+    """D15: ``get_bool_config`` is the single boolean config parser."""
+
+    def test_get_bool_config_pins_truthy_and_falsy_tokens_and_defaults(self):
+        self.assertFalse(get_bool_config("D15_UNSET_KEY"))
+        self.assertTrue(get_bool_config("D15_UNSET_KEY", default=True))
+        self.assertFalse(is_enabled("D15_UNSET_KEY"))
+
+        for raw in ("true", "TRUE", " 1 ", "Yes", True):
+            with override_settings(D15_BOOL_TEST=raw):
+                self.assertTrue(get_bool_config("D15_BOOL_TEST", default=False))
+        for raw in ("false", "0", "no", "", "random", False):
+            with override_settings(D15_BOOL_TEST=raw):
+                self.assertFalse(get_bool_config("D15_BOOL_TEST", default=True))
+
+    def test_ses_validation_override_settings_beats_env_var(self):
+        """Edge case: ``_ses_validation_enabled`` now follows DB -> settings -> env."""
+        with patch.dict(os.environ, {"SES_WEBHOOK_VALIDATION_ENABLED": "true"}):
+            with override_settings(DEBUG=False, SES_WEBHOOK_VALIDATION_ENABLED=False):
+                self.assertFalse(ses_service._ses_validation_enabled())
+
+        with patch.dict(os.environ, {"SES_WEBHOOK_VALIDATION_ENABLED": "false"}):
+            with override_settings(DEBUG=False, SES_WEBHOOK_VALIDATION_ENABLED=True):
+                self.assertTrue(ses_service._ses_validation_enabled())
+

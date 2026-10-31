@@ -38,7 +38,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Min
 from django.utils import timezone
 
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,7 @@ def reminder_enabled():
     Defaults ON: the flag exists to turn the sweep OFF without a redeploy,
     so only an explicit falsey value disables it.
     """
-    raw = get_config(ENABLED_KEY, "true")
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ("true", "1", "yes")
+    return get_bool_config(ENABLED_KEY, default=True)
 
 
 def reminder_delay_days():

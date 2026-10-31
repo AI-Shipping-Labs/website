@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 
 logger = logging.getLogger(__name__)
 
@@ -202,15 +202,11 @@ def _config_bool(key, default):
     """Resolve a boolean config key, honouring a per-key default.
 
     ``is_enabled`` reads ``get_config(key, 'false')`` and so cannot express a
-    default of ``true`` for an unset key. We resolve the raw string here with
-    the registry default and coerce it ourselves so ``ZOOM_WAITING_ROOM``
-    defaults to ``true`` and ``ZOOM_JOIN_BEFORE_HOST`` defaults to ``false``
-    when nothing is set in the DB / env.
+    default of ``true`` for an unset key. Delegates to :func:`get_bool_config`
+    so ``ZOOM_WAITING_ROOM`` and ``ZOOM_JOIN_BEFORE_HOST`` honour their
+    explicit defaults when nothing is set in the DB / env.
     """
-    val = get_config(key, 'true' if default else 'false')
-    if isinstance(val, bool):
-        return val
-    return str(val).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config(key, default=default)
 
 
 def _meeting_settings():

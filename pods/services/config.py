@@ -5,7 +5,7 @@ in Studio settings, then environment, then the default below), so operators
 change them without a redeploy.
 """
 
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 
 MEETING_MINUTE_OPTIONS = (30, 45, 60, 90)
 
@@ -57,13 +57,10 @@ def _default_on(key):
     """Default-on boolean read of ``key``.
 
     ``is_enabled`` hardcodes a ``'false'`` fallback, so the default-on
-    contract reads the raw value with a ``'true'`` default instead (same
+    contract reads through :func:`get_bool_config` with ``default=True`` (same
     pattern as ``staff_comment_alerts_enabled``).
     """
-    raw = get_config(key, 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config(key, default=True)
 
 
 def stuck_proposal_hours():

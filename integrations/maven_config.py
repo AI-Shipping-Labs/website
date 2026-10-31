@@ -9,7 +9,7 @@ here so Studio settings overrides take effect with no redeploy.
 import json
 import logging
 
-from integrations.config import get_config, is_enabled
+from integrations.config import get_bool_config, get_config, is_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -153,10 +153,7 @@ def maven_course_tag_prefix(course_key):
 
 
 def _default_on(key):
-    raw = get_config(key, "true")
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ("true", "1", "yes")
+    return get_bool_config(key, default=True)
 
 
 def maven_removal_revokes_override():

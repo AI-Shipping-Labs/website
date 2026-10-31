@@ -7,16 +7,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from integrations.config import get_config
+from integrations.config import get_bool_config, get_config
 from payments.models import CheckoutAccountBinding, Tier
 from payments.stripe_links import get_stripe_payment_links
 
 
 def _binding_checkout_enabled():
-    value = get_config("AUTHENTICATED_CHECKOUT_BINDING_ENABLED", "true")
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"true", "1", "yes"}
+    return get_bool_config("AUTHENTICATED_CHECKOUT_BINDING_ENABLED", default=True)
 
 
 def _checkout_recovery_redirect(error_code):

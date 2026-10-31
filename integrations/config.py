@@ -421,10 +421,8 @@ def s3_content_upload_enabled():
     helper defaults the flag on so only an explicit falsey value (DB override,
     Django setting, or env var) disables uploads.
     """
-    raw = get_config("S3_ENABLED", "true")
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ("true", "1", "yes")
+    raw = get_bool_config("S3_ENABLED", default=True)
+    return raw
 
 
 def recording_auto_publish_on_s3_upload_enabled():
@@ -442,10 +440,7 @@ def recording_auto_publish_on_s3_upload_enabled():
     set from Studio, a Django setting, or an env var) restores the review-first
     flow.
     """
-    raw = get_config("RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD", "true")
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ("true", "1", "yes")
+    return get_bool_config("RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD", default=True)
 
 
 def recording_transcript_ingest_enabled():
@@ -462,10 +457,7 @@ def recording_transcript_ingest_enabled():
     unset everywhere, mirroring
     :func:`recording_auto_publish_on_s3_upload_enabled`.
     """
-    raw = get_config('RECORDING_TRANSCRIPT_INGEST_ENABLED', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('RECORDING_TRANSCRIPT_INGEST_ENABLED', default=True)
 
 
 def recording_recap_auto_draft_enabled():
@@ -480,10 +472,7 @@ def recording_recap_auto_draft_enabled():
     the same default-on pattern as
     :func:`recording_auto_publish_on_s3_upload_enabled`.
     """
-    raw = get_config('RECORDING_RECAP_AUTO_DRAFT_ENABLED', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('RECORDING_RECAP_AUTO_DRAFT_ENABLED', default=True)
 
 
 def crm_call_capture_enabled():
@@ -496,10 +485,7 @@ def crm_call_capture_enabled():
     fallback). One send per call -- failures keep the draft for the
     explicit Studio actions.
     """
-    raw = get_config('CRM_CALL_CAPTURE_ENABLED', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('CRM_CALL_CAPTURE_ENABLED', default=True)
 
 
 def crm_call_summary_email_from():
@@ -536,10 +522,7 @@ def crm_call_summary_autosend_enabled():
     ``Send to attendee`` button (which always sends, regardless of
     this flag).
     """
-    raw = get_config('CRM_CALL_SUMMARY_AUTOSEND_ENABLED', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('CRM_CALL_SUMMARY_AUTOSEND_ENABLED', default=True)
 
 
 def event_reminders_include_cohort_enabled():
@@ -550,10 +533,7 @@ def event_reminders_include_cohort_enabled():
     linked to their course session unit. Reads via
     ``get_config('EVENT_REMINDERS_INCLUDE_COHORT', 'true')``.
     """
-    raw = get_config('EVENT_REMINDERS_INCLUDE_COHORT', 'true')
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return get_bool_config('EVENT_REMINDERS_INCLUDE_COHORT', default=True)
 
 
 def recap_auto_notify_enabled():
@@ -564,10 +544,24 @@ def recap_auto_notify_enabled():
     ready, instead of waiting for the manual command, API call or Studio
     button. Reads via ``get_config('RECAP_AUTO_NOTIFY', 'true')``.
     """
-    raw = get_config('RECAP_AUTO_NOTIFY', 'true')
+    return get_bool_config('RECAP_AUTO_NOTIFY', default=True)
+
+
+_TRUTHY_CONFIG_VALUES = ("true", "1", "yes")
+
+
+def get_bool_config(key, default=False, *, use_settings=True):
+    """Resolve a boolean config flag across DB, settings, env, and default.
+
+    Accepts booleans and case-insensitive truthy strings ('true', '1', 'yes').
+    """
+    fallback = "false"
+    if default:
+        fallback = "true"
+    raw = get_config(key, fallback, use_settings=use_settings)
     if isinstance(raw, bool):
         return raw
-    return str(raw).strip().lower() in ('true', '1', 'yes')
+    return str(raw).strip().lower() in _TRUTHY_CONFIG_VALUES
 
 
 def is_enabled(key):
@@ -579,10 +573,7 @@ def is_enabled(key):
     Returns:
         bool: True if the value is truthy ('true', True, '1').
     """
-    val = get_config(key, "false")
-    if isinstance(val, bool):
-        return val
-    return str(val).strip().lower() in ("true", "1", "yes")
+    return get_bool_config(key, default=False)
 
 
 def _read_shared_stamp(key, label):

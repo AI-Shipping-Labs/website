@@ -16,6 +16,7 @@ safe to use on public views:
 """
 
 from functools import wraps
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.cache import cache
@@ -26,11 +27,28 @@ ANON_PAGE_CACHE_TIMEOUT = 300
 _ANON_PAGE_KEY_PREFIX = "anon-page:v1"
 
 
-def _anonymous_cache_key(request):
+def _anonymous_cache_key(request, cache_group=None):
     """Return the cache key for an anonymous public request."""
     query = request.META.get("QUERY_STRING", "")
     consent = analytics_consent_state(request) or "undecided"
-    return f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{request.path}?{query}"
+    group_version = ""
+    if cache_group:
+        version_key = _cache_group_version_key(cache_group)
+        group_version = cache.get(version_key, "initial")
+    return (
+        f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{cache_group}:{group_version}:"
+        f"{request.path}?{query}"
+    )
+
+
+def _cache_group_version_key(cache_group):
+    """Return the shared cache key that versions a group of public pages."""
+    return f"{_ANON_PAGE_KEY_PREFIX}:group-version:{cache_group}"
+
+
+def invalidate_anonymous_page_cache(cache_group):
+    """Invalidate cached anonymous pages in ``cache_group``."""
+    cache.set(_cache_group_version_key(cache_group), uuid4().hex, timeout=None)
 
 
 def _cache_enabled():
@@ -61,7 +79,7 @@ def _is_cacheable_request(request):
     return True
 
 
-def cache_anonymous_page(timeout=ANON_PAGE_CACHE_TIMEOUT):
+def cache_anonymous_page(timeout=ANON_PAGE_CACHE_TIMEOUT, cache_group=None):
     """Cache anonymous GET responses in the default cache backend.
 
     Bypassed for authenticated/session requests and for responses that
@@ -74,7 +92,7 @@ def cache_anonymous_page(timeout=ANON_PAGE_CACHE_TIMEOUT):
         def wrapper(request, *args, **kwargs):
             if not _is_cacheable_request(request):
                 return view(request, *args, **kwargs)
-            key = _anonymous_cache_key(request)
+            key = _anonymous_cache_key(request, cache_group)
             cached = cache.get(key)
             if cached is not None:
                 return cached

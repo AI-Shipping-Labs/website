@@ -2,7 +2,8 @@ from community_base.knowledge_base.models import KnowledgeBasePage
 from django.db.models.signals import post_delete, post_migrate, post_save
 from django.dispatch import receiver
 
-from content.models import Download, MarketingPage
+from content.caching import invalidate_anonymous_page_cache
+from content.models import Download, MarketingPage, Project
 from content.models.cohort import Cohort
 from content.nav_availability import (
     refresh_knowledge_base_nav_cache,
@@ -15,6 +16,20 @@ from content.services.coursework_bridge import (
     remove_unused_curriculum_cohort,
 )
 from topics.models import TopicPage
+
+
+@receiver(
+    post_save,
+    sender=Project,
+    dispatch_uid='content.invalidate_projects_list_cache_on_save',
+)
+@receiver(
+    post_delete,
+    sender=Project,
+    dispatch_uid='content.invalidate_projects_list_cache_on_delete',
+)
+def invalidate_projects_list_cache(**kwargs):
+    invalidate_anonymous_page_cache('projects-list')
 
 
 @receiver(

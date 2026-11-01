@@ -419,6 +419,7 @@ def blog_preview(request, preview_token):
     return response
 
 
+@cache_anonymous_page(cache_group='projects-list')
 def projects_list(request):
     """Projects listing page with optional difficulty and tag filtering."""
     projects = Project.objects.filter(published=True)

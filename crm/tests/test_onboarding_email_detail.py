@@ -6,7 +6,10 @@ from analytics.models import UserAttribution
 from crm.services.onboarding_notify import build_onboarding_email
 from payments.models import Membership, Tier
 from questionnaires.models import (
-    Answer, Response, ResponseQuestion, ResponseQuestionOption,
+    Answer,
+    Response,
+    ResponseQuestion,
+    ResponseQuestionOption,
 )
 from tests.fixtures import create_user_with_membership
 

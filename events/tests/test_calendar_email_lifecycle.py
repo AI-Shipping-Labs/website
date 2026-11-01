@@ -39,7 +39,7 @@ def _attendee_text(vevent):
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
     RELAY_TRANSACTIONAL_FROM_EMAIL=(
-        'AI Shipping Labs <content@aishippinglabs.com>'
+        'AI Shipping Labs <noreply@aishippinglabs.com>'
     ),
 )
 class SingleEventCalendarEmailLifecycleTest(TestCase):
@@ -71,7 +71,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
     def _assert_bare_organizer(self, cal):
         self.assertEqual(
             str(_vevent(cal).get('organizer')),
-            'mailto:content@aishippinglabs.com',
+            'mailto:alexey@aishippinglabs.com',
         )
 
     @patch('events.services.registration_email._send_calendar_email')

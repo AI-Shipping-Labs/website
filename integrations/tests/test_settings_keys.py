@@ -88,6 +88,16 @@ def _project_relay_group(group):
         "optional": True,
         "is_email": True,
     })
+    group["keys"].insert(4, {
+        "key": "RELAY_CALENDAR_FROM_EMAIL",
+        "is_secret": False,
+        "description": (
+            "Sender and iCalendar ORGANIZER for event calendar invites. "
+            "Must match a registered Relay sender."
+        ),
+        "docs_url": "_docs/integrations/relay.md#relay_calendar_from_email",
+        "optional": True,
+    })
 
 
 def _project_email_descriptions(group):
@@ -140,7 +150,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 21)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 176)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 177)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

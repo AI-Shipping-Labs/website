@@ -24,7 +24,7 @@ audience-specific URL rules:
 """
 
 from datetime import timedelta
-from email.utils import getaddresses
+from email.utils import getaddresses, parseaddr
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -273,7 +273,9 @@ def build_vevent(event, audience=AUDIENCE_ATTENDEE, attendee_email=None,
     from_email = get_calendar_sender()
     organizer_email = normalize_calendar_organizer_email(from_email)
     organizer = vCalAddress(f'mailto:{organizer_email}')
-    organizer.params['cn'] = vText('AI Shipping Labs')
+    organizer.params['cn'] = vText(
+        parseaddr(from_email)[0] or 'AI Shipping Labs',
+    )
     vevent.add('organizer', organizer)
 
     if attendee_email:

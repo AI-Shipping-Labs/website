@@ -169,6 +169,7 @@ _KEY_ORDER = {
     "relay": (
         "RELAY_TRANSACTIONAL_FROM_EMAIL", "RELAY_PROMOTIONAL_FROM_EMAIL",
         "RELAY_WELCOME_FROM_EMAIL", "RELAY_WELCOME_REPLY_TO_EMAIL",
+        "RELAY_CALENDAR_FROM_EMAIL",
         "RELAY_UNSUBSCRIBE_EMAIL",
         "EMAIL_BATCH_SIZE", "CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
         "CAMPAIGN_BATCH_INTERVAL_SECONDS", "CAMPAIGN_TEST_RECIPIENTS",
@@ -314,6 +315,7 @@ _KEYS_WITHOUT_DONOR_DEFAULT = frozenset(
         "PLAN_SPRINTS_THREAD_REFRESH_DAYS",
         "RECORDING_AVAILABLE_BODY_TEMPLATE",
         "RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
+        "RELAY_CALENDAR_FROM_EMAIL",
         "RELAY_PROMOTIONAL_FROM_EMAIL",
         "RELAY_TRANSACTIONAL_FROM_EMAIL",
         "RELAY_UNSUBSCRIBE_EMAIL",
@@ -621,6 +623,17 @@ RELAY_PROMOTIONAL_FROM_EMAIL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/relay.md#relay_promotional_from_email",
+    optional=True,
+)
+RELAY_CALENDAR_FROM_EMAIL = declare(
+    key="RELAY_CALENDAR_FROM_EMAIL",
+    group="relay",
+    label="Relay calendar invite sender",
+    description="Sender and iCalendar ORGANIZER for event calendar invites. Must match a registered Relay sender.",
+    value_type="str",
+    default="",
+    secret=False,
+    docs_url="_docs/integrations/relay.md#relay_calendar_from_email",
     optional=True,
 )
 RELAY_WELCOME_FROM_EMAIL = declare(

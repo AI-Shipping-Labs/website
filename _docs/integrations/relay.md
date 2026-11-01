@@ -27,6 +27,14 @@ registered in Relay. The default is `noreply@aishippinglabs.com`.
 Sender for campaigns, newsletters, and marketing email. It must match a sender
 registered in Relay. The default is `content@aishippinglabs.com`.
 
+## RELAY_CALENDAR_FROM_EMAIL
+
+Sender and iCalendar `ORGANIZER` for event calendar invites (registration,
+series, reschedule, cancellation, calendar feed). Defaults to
+`Alexey Grigorev <alexey@aishippinglabs.com>`. The local part must be a sender
+id registered for the Relay client (`alexey`). Avoid `noreply@`: Gmail only
+auto-adds invites from senders the invitee has interacted with.
+
 ## RELAY_WELCOME_FROM_EMAIL
 
 Sender for welcome email types. Welcome messages remain transactional. The

@@ -26,9 +26,10 @@ falls back to the Studio user-detail page (``/studio/users/<pk>/``).
 
 import logging
 
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError
 from django.urls import reverse
+from django.utils.html import escape
 
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
 from crm.models import CRMRecord
@@ -195,29 +196,149 @@ def _post_onboarding_to_slack(*, member, target_url, updated=False):
         return False
 
 
+def _onboarding_answers(member):
+    """Return ``[(prompt, display)]`` for the member's answered questions."""
+    from questionnaires.onboarding import (
+        flatten_response_answers,
+        get_onboarding_response,
+    )
+
+    try:
+        response = get_onboarding_response(member)
+        if response is None:
+            return []
+        rows = flatten_response_answers(response)
+    except Exception:
+        logger.exception('Failed to load onboarding answers for email')
+        return []
+    return [(r['prompt'], r['display']) for r in rows if r['answered']]
+
+
+def _attribution_lines(member):
+    """Best-effort ``[(label, value)]`` for stored signup attribution."""
+    try:
+        attribution = member.attribution
+    except Exception:
+        return []
+    source = attribution.first_touch_referrer_source or ''
+    if source == 'direct':
+        source = ''
+    pairs = [
+        ('Heard about us via', source),
+        ('Referrer host', attribution.first_touch_referrer_host),
+        ('UTM source', attribution.first_touch_utm_source),
+        ('UTM medium', attribution.first_touch_utm_medium),
+        ('UTM campaign', attribution.first_touch_utm_campaign),
+        ('UTM content', attribution.first_touch_utm_content),
+        ('UTM term', attribution.first_touch_utm_term),
+    ]
+    return [(label, value) for label, value in pairs if value]
+
+
+def _member_detail_rows(member, target_url, *, updated=False):
+    """Ordered ``[(label, value)]`` member facts; empty values are dropped."""
+    from payments.models import Membership
+
+    tier_name = _member_tier_name(member)
+    billing = ''
+    try:
+        membership = Membership.for_user(member)
+    except Exception:
+        membership = None
+    if membership is not None:
+        if membership.subscription_id:
+            billing = 'Stripe subscription'
+            if membership.billing_period_end:
+                billing += (
+                    f' (renews/ends {membership.billing_period_end:%Y-%m-%d})'
+                )
+        elif membership.stripe_customer_id:
+            billing = 'Stripe customer, no active subscription'
+    date_joined = getattr(member, 'date_joined', None)
+    rows = [
+        ('Name', _member_display_name(member)),
+        ('Email', member.email),
+        ('Plan', tier_name),
+        ('Billing', billing),
+        ('Signed up', f'{date_joined:%Y-%m-%d %H:%M} UTC' if date_joined else ''),
+        ('Email verified', 'yes' if member.email_verified else 'no'),
+        ('Timezone', getattr(member, 'preferred_timezone', '') or ''),
+    ]
+    rows += _attribution_lines(member)
+    rows.append(('Open onboarding in CRM', target_url))
+    studio_url = _member_studio_user_url(member)
+    if studio_url != target_url:
+        rows.append(('Studio user page', studio_url))
+    return [(label, value) for label, value in rows if value]
+
+
+def build_onboarding_email(member, target_url, *, updated=False):
+    """Return ``(subject, text_body, html_body)`` for the staff email."""
+    verb = 'Onboarding answers updated' if updated else 'Onboarding completed'
+    tier_name = _member_tier_name(member)
+    subject = f'{verb}: {_member_display_name(member)} <{member.email}>'
+    if tier_name:
+        subject += f' [{tier_name}]'
+    details = _member_detail_rows(member, target_url, updated=updated)
+    answers = _onboarding_answers(member)
+    intro = (
+        f'{_member_display_name(member)} ({member.email}) '
+        f'{_event_phrase(updated)}.'
+    )
+
+    text = [intro, '', 'Member', '------']
+    text += [f'{label}: {value}' for label, value in details]
+    if answers:
+        text += ['', 'Onboarding answers', '------------------']
+        for prompt, display in answers:
+            text += [f'{prompt}', f'  {display}', '']
+    text_body = '\n'.join(text).rstrip() + '\n'
+
+    def _cell(label, value):
+        if value.startswith('http'):
+            value_html = f'<a href="{escape(value)}">{escape(value)}</a>'
+        else:
+            value_html = escape(value)
+        return (
+            f'<tr><td style="padding:2px 12px 2px 0;color:#555">'
+            f'{escape(label)}</td><td>{value_html}</td></tr>'
+        )
+
+    html = [
+        f'<p>{escape(intro)}</p>',
+        '<h3>Member</h3>',
+        '<table>' + ''.join(_cell(a, b) for a, b in details) + '</table>',
+    ]
+    if answers:
+        html.append('<h3>Onboarding answers</h3>')
+        for prompt, display in answers:
+            html.append(
+                f'<p style="margin:0 0 10px"><strong>{escape(prompt)}</strong>'
+                f'<br>{escape(display).replace(chr(10), "<br>")}</p>'
+            )
+    html.append(
+        f'<p><a href="{escape(target_url)}">Open onboarding in CRM</a></p>'
+    )
+    return subject, text_body, '\n'.join(html)
+
+
 def _email_staff_about_onboarding(*, member, target_url, updated=False):
     """Email every active staff user that a member completed onboarding."""
     recipients = list(_staff_users().values_list('email', flat=True))
     if not recipients:
         return 0
-    member_name = _member_display_name(member)
-    subject = (
-        f'Onboarding answers updated: {member.email}'
-        if updated
-        else f'Onboarding completed: {member.email}'
-    )
-    body = (
-        f'{member_name} ({member.email}) {_event_phrase(updated)}.\n\n'
-        f'Open onboarding in CRM: {target_url}\n'
+    subject, body, html_body = build_onboarding_email(
+        member, target_url, updated=updated,
     )
     from_email = get_config('RELAY_TRANSACTIONAL_FROM_EMAIL', 'community@aishippinglabs.com')
-    send_mail(
+    message = EmailMultiAlternatives(
         subject=subject,
-        message=body,
+        body=body,
         from_email=from_email,
-        recipient_list=recipients,
-        fail_silently=False,
+        to=recipients,
     )
+    message.attach_alternative(html_body, 'text/html')
+    message.send(fail_silently=False)
     return len(recipients)
 
 

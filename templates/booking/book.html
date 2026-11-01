@@ -362,6 +362,12 @@
   let availableSlots = [];
   let availableDays = new Set();
   let selectedSlot = null;
+  // On month end the current month can hold no bookable slots (its windows
+  // are all in the past), so land on the next month that has availability.
+  // Manual navigation wins: browsing an empty month on purpose must not snap
+  // the view away. The cap bounds a host with no availability at all (a
+  // 60-day horizon can span at most three forward month changes).
+  let autoAdvancesLeft = 3;
 
   const monthLabel = document.getElementById("month-label");
   const prevMonthBtn = document.getElementById("prev-month-btn");
@@ -382,16 +388,20 @@
     fetchSlots();
   });
 
-  prevMonthBtn.addEventListener("click", function() {
+  function shiftMonth(delta) {
     viewDate.setDate(1);
-    viewDate.setMonth(viewDate.getMonth() - 1);
+    viewDate.setMonth(viewDate.getMonth() + delta);
     fetchSlots();
+  }
+
+  prevMonthBtn.addEventListener("click", function() {
+    autoAdvancesLeft = 0;
+    shiftMonth(-1);
   });
 
   nextMonthBtn.addEventListener("click", function() {
-    viewDate.setDate(1);
-    viewDate.setMonth(viewDate.getMonth() + 1);
-    fetchSlots();
+    autoAdvancesLeft = 0;
+    shiftMonth(1);
   });
 
   function formatMonthHeader(date) {
@@ -424,6 +434,10 @@
         availableSlots = data.slots || [];
         availableDays = new Set(data.days || []);
         renderCalendar();
+        if (availableDays.size === 0 && autoAdvancesLeft > 0) {
+          autoAdvancesLeft -= 1;
+          shiftMonth(1);
+        }
       })
       .catch(err => {
         calendarGrid.innerHTML = '<div class="col-span-7 py-6 text-center text-destructive text-xs">Could not load schedule</div>';

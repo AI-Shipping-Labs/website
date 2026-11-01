@@ -114,7 +114,6 @@ def edge_breaker_open(campaign_id, *, now=None):
 
 def _release_claim_to_pending(delivery_id, claim_token, *, error):
     """Return a claim to PENDING: the edge refused it, nothing was accepted."""
-    now = timezone.now()
     with transaction.atomic():
         delivery = CampaignDelivery.objects.select_for_update().get(pk=delivery_id)
         if (

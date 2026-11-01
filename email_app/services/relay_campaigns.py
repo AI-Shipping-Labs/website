@@ -49,6 +49,18 @@ class RelayCampaignDeliveryAmbiguous(RelayCampaignError):
         super().__init__(message)
 
 
+class RelayCampaignEdgeBlocked(RelayCampaignError):
+    """The edge (CDN/WAF) refused the call with a non-Relay 403 page.
+
+    Relay answers its own rejections with JSON. An HTML 403 means the request
+    never reached Relay, so nothing was accepted and the send is retryable.
+    """
+
+    def __init__(self, message: str, *, status_code: int = 403):
+        self.status_code = status_code
+        super().__init__(message)
+
+
 class RelayCampaignConfigError(RelayCampaignError):
     """Missing or invalid Relay configuration."""
 
@@ -212,8 +224,25 @@ def send_campaign_delivery_to_relay(
             status_code=response.status_code,
         )
 
+    if response.status_code == 403 and _is_edge_html_page(response):
+        raise RelayCampaignEdgeBlocked(
+            "Relay edge returned an HTML 403; request never reached Relay",
+        )
+
     # 408, 425, 429, 500, 502, 503, 504 or any other unexpected code
     raise RelayCampaignDeliveryAmbiguous(
         f"Relay returned HTTP {response.status_code}: {getattr(response, 'text', '')[:200]}",
         status_code=response.status_code,
     )
+
+
+def _is_edge_html_page(response) -> bool:
+    """True when a response is an edge error page instead of a Relay JSON body."""
+    content_type = str((getattr(response, "headers", None) or {}).get("Content-Type", ""))
+    if "json" in content_type.lower():
+        return False
+    try:
+        response.json()
+    except Exception:
+        return True
+    return False

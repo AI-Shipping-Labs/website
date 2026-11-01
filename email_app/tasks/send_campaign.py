@@ -22,13 +22,18 @@ from email_app.services.campaign_repermission import (
 from email_app.services.relay_campaigns import (
     RelayCampaignDeliveryAmbiguous,
     RelayCampaignDeliveryRejected,
+    RelayCampaignEdgeBlocked,
     send_campaign_delivery_to_relay,
 )
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SEND_DELAY = 0.05
+# 1.5s per send keeps one worker near 40 sends/min, under the edge's
+# per-IP rate rule (300 requests / 5 min).
+DEFAULT_SEND_DELAY = 1.5
+EDGE_BLOCK_MARKER = 'edge_blocked:'
+DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS = 900
 DEFAULT_BATCH_SIZE = 200
 DEFAULT_BATCH_INTERVAL_SECONDS = 60
 DEFAULT_MAX_DELIVERY_ATTEMPTS = 3
@@ -79,6 +84,58 @@ def get_max_delivery_attempts():
         )
         return DEFAULT_MAX_DELIVERY_ATTEMPTS
     return value
+
+
+def _edge_block_cooldown_seconds():
+    raw = get_config(
+        'CAMPAIGN_EDGE_BLOCK_COOLDOWN_SECONDS',
+        DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS,
+    )
+    try:
+        return max(int(raw), 0)
+    except (TypeError, ValueError):
+        return DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS
+
+
+def edge_breaker_open(campaign_id, *, now=None):
+    """Durable circuit breaker: a recent edge block on this campaign pauses it.
+
+    State lives on the released rows (``last_error`` marker plus ``updated_at``),
+    so it is shared across workers and expires on its own.
+    """
+    now = now or timezone.now()
+    return CampaignDelivery.objects.filter(
+        campaign_id=campaign_id,
+        state=CampaignDelivery.State.PENDING,
+        last_error__contains=EDGE_BLOCK_MARKER,
+        updated_at__gte=now - timedelta(seconds=_edge_block_cooldown_seconds()),
+    ).exists()
+
+
+def _release_claim_to_pending(delivery_id, claim_token, *, error):
+    """Return a claim to PENDING: the edge refused it, nothing was accepted."""
+    now = timezone.now()
+    with transaction.atomic():
+        delivery = CampaignDelivery.objects.select_for_update().get(pk=delivery_id)
+        if (
+            delivery.state != CampaignDelivery.State.DISPATCHING
+            or delivery.claim_token != claim_token
+        ):
+            return False
+        delivery.state = CampaignDelivery.State.PENDING
+        delivery.claim_token = None
+        delivery.claimed_at = None
+        delivery.claim_expires_at = None
+        delivery.attempt_count = max(delivery.attempt_count - 1, 0)
+        delivery.last_error = _append_diagnostic(
+            delivery.last_error, f'{EDGE_BLOCK_MARKER} {error}',
+        )
+        delivery.completed_at = None
+        delivery.save(update_fields=[
+            'state', 'claim_token', 'claimed_at', 'claim_expires_at',
+            'attempt_count', 'last_error', 'completed_at', 'updated_at',
+        ])
+        return True
 
 
 def _chunk(items, size):
@@ -597,6 +654,12 @@ def send_campaign_batch(
 
     User = get_user_model()
     for delivery_id in delivery_ids:
+        if edge_breaker_open(campaign_id):
+            logger.error(
+                'Campaign %s paused: Relay edge block cooldown is active',
+                campaign_id,
+            )
+            break
         if _expire_stale_claim(delivery_id):
             ambiguous_count += 1
             continue
@@ -723,6 +786,14 @@ def send_campaign_batch(
                 delivery_id=delivery_id,
                 user_pk=delivery.recipient_user_pk,
             )
+        except RelayCampaignEdgeBlocked as exc:
+            logger.error(
+                'Relay edge blocked campaign %s dispatch (%s); pausing batch',
+                campaign_id,
+                exc,
+            )
+            _release_claim_to_pending(delivery_id, claim_token, error=str(exc))
+            break
         except (RelayCampaignDeliveryRejected, RelayCampaignDeliveryAmbiguous) as exc:
             state, diagnostic = _relay_transport_failure_state(exc)
             logger.error(

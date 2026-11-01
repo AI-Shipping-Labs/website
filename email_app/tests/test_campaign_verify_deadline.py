@@ -51,8 +51,11 @@ class VerifyDeadlineMessageTest(TierSetupMixin, TestCase):
         )
 
         self.assertEqual(email_type, VERIFY_DEADLINE_EMAIL_TYPE)
-        self.assertIn("within 7 days", body)
-        self.assertIn("will be deleted", body)
+        below_divider = body.split("\n---\n")[-1].strip()
+        self.assertRegex(
+            below_divider,
+            rf"^\[{VERIFY_DEADLINE_CTA}\]\(https://[^)\s]+/api/verify-email\?token=[^)\s]+\)$",
+        )
         self.assertIn(f"[{VERIFY_DEADLINE_CTA}](", body)
         self.assertIn("/api/verify-email?token=", body)
         self.assertNotIn("verify-and-subscribe", body)
@@ -121,7 +124,9 @@ class VerifyDeadlineTestSendTest(TierSetupMixin, TestCase):
             self.make_campaign(), operator, operator.email, "[TEST] s",
         )
 
-        self.assertIn("within 7 days", message.body_markdown)
+        self.assertEqual(
+            message.body_markdown.split("\n---\n")[-1].strip().count("\n"), 0,
+        )
         self.assertIn("/api/verify-email?token=", message.body_markdown)
         self.assertIn("/api/unsubscribe", message.unsubscribe_url)
 

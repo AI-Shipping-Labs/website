@@ -36,20 +36,12 @@ def repermission_body(body_markdown, *, user=None, preview=False):
 
 
 # Verify-or-delete campaigns (``EmailCampaign.verify_deadline_days``): the
-# message promises deletion, so it carries a plain ``verify_email`` link (a
+# message promises deletion in its authored body, so under the divider it
+# carries only a plain ``verify_email`` link (a
 # verification, not a marketing opt-in) whose token outlives the deadline.
 VERIFY_DEADLINE_EMAIL_TYPE = "campaign_verify_deadline"
 VERIFY_DEADLINE_TOKEN_GRACE_DAYS = 7
 VERIFY_DEADLINE_CTA = "Confirm my email"
-
-
-def verify_deadline_copy(days):
-    return (
-        f"Please confirm your email within {days} days. If you don't, your "
-        f"AI Shipping Labs account will be deleted {days} days after this "
-        "message was sent. One click is all it takes, and nothing changes "
-        "for you after that."
-    )
 
 
 def verify_deadline_url_for_user(user, days):
@@ -70,7 +62,7 @@ def verify_deadline_body(body_markdown, days, *, user=None, preview=False):
         else verify_deadline_url_for_user(user, days)
     )
     authored = (body_markdown or "").rstrip()
-    block = f"{verify_deadline_copy(days)}\n\n[{VERIFY_DEADLINE_CTA}]({url})"
+    block = f"[{VERIFY_DEADLINE_CTA}]({url})"
     return f"{authored}\n\n---\n\n{block}" if authored else block
 
 

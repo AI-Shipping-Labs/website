@@ -1932,6 +1932,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestBookingOneCall1953::test_10_staff_reviews_and_approves_call_request_in_studio",
     })
 
+    booking_month_end_owners = frozenset({
+        "playwright_tests/test_booking_month_end_auto_advance.py::"
+        "TestBookingCalendarSkipsEmptyMonths::"
+        "test_booking_page_lands_on_next_month_with_availability",
+        "playwright_tests/test_booking_month_end_auto_advance.py::"
+        "TestBookingCalendarSkipsEmptyMonths::"
+        "test_reschedule_page_lands_on_next_month_with_availability",
+    })
+
     issue_1959_owners = frozenset({
         "playwright_tests/test_perf_pollers.py::"
         "test_notification_poll_stops_after_auth_failure",
@@ -2270,8 +2279,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2958)
-        self.assertEqual(len(inventory.owners), 2753)
+        self.assertEqual(inventory.item_count, 2960)
+        self.assertEqual(len(inventory.owners), 2755)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2301,6 +2310,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1940_owners
             | self.issue_1948_owners
             | self.issue_1953_owners
+            | self.booking_month_end_owners
             | self.issue_1959_owners
             | self.issue_1962_owners
             | self.issue_1949_owners

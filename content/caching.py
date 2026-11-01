@@ -22,6 +22,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from analytics.consent import analytics_consent_state
+from integrations.shared_cache import get_shared_cache, set_shared_cache
 
 ANON_PAGE_CACHE_TIMEOUT = 300
 _ANON_PAGE_KEY_PREFIX = "anon-page:v1"
@@ -34,7 +35,7 @@ def _anonymous_cache_key(request, cache_group=None):
     group_version = ""
     if cache_group:
         version_key = _cache_group_version_key(cache_group)
-        group_version = cache.get(version_key, "initial")
+        group_version = get_shared_cache(version_key, "initial")
     return (
         f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{cache_group}:{group_version}:"
         f"{request.path}?{query}"
@@ -48,7 +49,9 @@ def _cache_group_version_key(cache_group):
 
 def invalidate_anonymous_page_cache(cache_group):
     """Invalidate cached anonymous pages in ``cache_group``."""
-    cache.set(_cache_group_version_key(cache_group), uuid4().hex, timeout=None)
+    set_shared_cache(
+        _cache_group_version_key(cache_group), uuid4().hex, timeout=None,
+    )
 
 
 def _cache_enabled():

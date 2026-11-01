@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils import timezone
 
+from content.caching import invalidate_anonymous_page_cache
 from content.models import Project
 from studio.admin_links import studio_link
 
@@ -12,6 +13,7 @@ def approve_projects(modeladmin, request, queryset):
         published=True,
         published_at=timezone.now(),
     )
+    invalidate_anonymous_page_cache('projects-list')
 
 
 approve_projects.short_description = 'Approve selected projects (publish)'
@@ -23,6 +25,7 @@ def reject_projects(modeladmin, request, queryset):
         status='pending_review',
         published=False,
     )
+    invalidate_anonymous_page_cache('projects-list')
 
 
 reject_projects.short_description = 'Reject selected projects (unpublish)'

@@ -188,6 +188,7 @@ def _sync_project(source, rel_path, metadata, body, commit_sha, stats,
 
 def _cleanup_projects(source, stats, seen_slugs, failed_slugs):
     """Soft-delete stale projects, excluding failed slugs (moved tail)."""
+    from content.caching import invalidate_anonymous_page_cache
     from content.models import Project
 
     stale = Project.objects.filter(
@@ -203,6 +204,8 @@ def _cleanup_projects(source, stats, seen_slugs, failed_slugs):
         })
     deleted_count = stale.count()
     stale.update(published=False, status='pending_review')
+    if deleted_count:
+        invalidate_anonymous_page_cache('projects-list')
     stats['deleted'] += deleted_count
     return deleted_count
 

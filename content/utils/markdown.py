@@ -65,38 +65,38 @@ _SANITIZE_ATTRIBUTES = {
 _INLINE_BULLET_RE = re.compile(r'^(?P<lead>.*?:) - (?P<rest>.+)$')
 
 
-def normalize_inline_bullets(text):
-    """Rewrite inline dash-run lists into real markdown list items.
+# A markdown list item on its own line: a bullet (``-``, ``*``, ``+``) or an
+# ordered marker (``1.`` / ``1)``) followed by whitespace and content. The
+# mandatory whitespace means hyphenated words, ``3 - 1`` scores, ``1.5``
+# versions, and ``---``/``***`` rules never match.
+_LIST_BULLET_RE = re.compile(r'^\s*[-*+]\s+\S')
+_LIST_ORDERED_RE = re.compile(r'^\s*\d{1,9}[.)]\s+\S')
 
-    Event / email descriptions are frequently authored with the whole list on
-    one line — ``We will focus on: - a - b - c`` — which Python-Markdown renders
-    as a single run-on paragraph with literal ``-`` characters, because a list
-    only forms when each ``-`` item sits on its own line after a blank line
-    (issue #1126). This pre-parse pass converts such a line into::
+# Fenced code blocks: list-looking lines inside them are literal code, never
+# lists, so the blank-line pass tracks fence state and leaves them alone.
+_FENCE_RE = re.compile(r'^\s*(`{3,}|~{3,})')
 
-        We will focus on:
 
-        - a
-        - b
-        - c
+def _is_list_item(line):
+    """Check whether a single line opens (or continues) a markdown list."""
+    if _LIST_BULLET_RE.match(line):
+        return True
+    return bool(_LIST_ORDERED_RE.match(line))
 
-    so the parser emits a clean ``<ul>``. It is deliberately conservative:
 
-    - The separator is ` - ` (space, hyphen, space), so hyphenated words
-      (``domain-specific``, ``state-of-the-art``) and em/en dashes are left
-      intact.
-    - The line must have a colon directly followed by ` - `, and the dash-run
-      must contain two or more items — a single isolated ` - ` (e.g.
-      ``Score was 3 - 1``) is never converted.
-    - Already-correct multiline lists contain no matching lines, so the pass is
-      a no-op on them and is idempotent (running it on its own output is
-      unchanged).
+def _expand_inline_dash_runs(text):
+    """Expand single-line ``lead: - a - b`` dash-runs into real list items.
 
-    The stored source text is never mutated; this runs only at render time.
+    Issue #1126: event / email descriptions are frequently authored with the
+    whole list on one line, which Python-Markdown renders as a single run-on
+    paragraph with literal ``-`` characters. This pass converts such a line
+    into a lead paragraph, a blank line, and one ``-`` item per line, so the
+    parser emits a clean ``<ul>``. It is deliberately conservative: the
+    separator is ` - `, the line needs a colon directly followed by ` - `,
+    and the run must hold two or more non-empty items. Already-correct
+    multiline lists contain no matching lines, so the pass is a no-op on
+    them and is idempotent.
     """
-    if not text or ' - ' not in text:
-        return text
-
     out = []
     for line in text.split('\n'):
         match = _INLINE_BULLET_RE.match(line)
@@ -112,6 +112,64 @@ def normalize_inline_bullets(text):
                 continue
         out.append(line)
     return '\n'.join(out)
+
+
+def _ensure_blank_line_before_lists(text):
+    """Insert a missing blank line before a list glued to a paragraph line.
+
+    Authors frequently write the list directly under the intro line::
+
+        What we will cover:
+        - What MCP is
+        - Build a server
+
+    Python-Markdown only forms a list when a blank line precedes it, so this
+    renders as one paragraph with literal ``-`` characters (the MCP server
+    workshop report). This pass inserts that blank line before any bullet
+    (``- ``) or ordered (``1.``) item whose previous line is non-blank prose,
+    so the parser emits a real ``<ul>``/``<ol>``. It is a no-op on
+    already-correct lists, on nested items (the previous line is itself a
+    list item), and inside fenced code blocks, and it is idempotent.
+    """
+    if not text:
+        return text
+    out = []
+    in_fence = False
+    for line in text.split('\n'):
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence or not _is_list_item(line):
+            out.append(line)
+            continue
+        if out and out[-1].strip() and not _is_list_item(out[-1]):
+            out.append('')
+        out.append(line)
+    return '\n'.join(out)
+
+
+def normalize_inline_bullets(text):
+    """Normalize authoring shortcuts into real markdown lists at render time.
+
+    Two passes, both idempotent, neither mutates the stored source text:
+
+    - ``_expand_inline_dash_runs``: a single-line ``lead: - a - b`` run
+      becomes one ``-`` item per line (issue #1126).
+    - ``_ensure_blank_line_before_lists``: a ``-`` / ``1.`` list written
+      directly under a paragraph line gets the blank line Python-Markdown
+      requires, so it renders as a real ``<ul>``/``<ol>`` instead of a
+      paragraph with literal dashes.
+
+    Already-correct lists pass through both passes unchanged.
+
+    The stored source text is never mutated; this runs only at render time.
+    """
+    if not text:
+        return text
+    if ' - ' in text:
+        text = _expand_inline_dash_runs(text)
+    return _ensure_blank_line_before_lists(text)
 
 
 def sanitize_html(html):

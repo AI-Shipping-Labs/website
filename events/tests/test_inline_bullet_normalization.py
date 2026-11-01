@@ -23,6 +23,17 @@ BRING_DESCRIPTION = (
     'Bring: - your current CV - one or two job descriptions or companies '
     'you want to target'
 )
+GLUED_BULLET_DESCRIPTION = (
+    'What we will cover:\n'
+    '- What MCP is and when it is worth using\n'
+    '- Build an MCP server that exposes tools to an agent\n'
+    '- Connect it to our own agent and to coding assistants'
+)
+GLUED_ORDERED_DESCRIPTION = (
+    'Setup steps:\n'
+    '1. Install the SDK\n'
+    '2. Run the server'
+)
 
 
 class InlineBulletNormalizerTest(TestCase):
@@ -146,6 +157,103 @@ class EventSaveInlineBulletTest(TestCase):
         self.assertIn('<ul>', series.description_html)
         self.assertEqual(series.description_html.count('<li>'), 2)
         self.assertNotIn(' - ', series.description_html)
+
+
+class MissingBlankLineListTest(TestCase):
+    """A list glued directly under a paragraph line renders as a real list.
+
+    The MCP server workshop report: ``What we will cover:`` followed
+    immediately by ``-`` lines rendered as one paragraph with literal dashes,
+    because Python-Markdown only forms a list after a blank line.
+    ``normalize_inline_bullets`` now inserts that blank line at render time.
+    """
+
+    def test_glued_bullet_list_renders_ul(self):
+        html = render_description_html(GLUED_BULLET_DESCRIPTION)
+        self.assertIn('<ul>', html)
+        self.assertEqual(html.count('<li>'), 3)
+        self.assertIn('<li>What MCP is and when it is worth using</li>', html)
+        self.assertNotIn('- What MCP is', html)
+
+    def test_glued_ordered_list_renders_ol(self):
+        html = render_description_html(GLUED_ORDERED_DESCRIPTION)
+        self.assertIn('<ol>', html)
+        self.assertEqual(html.count('<li>'), 2)
+        self.assertIn('<li>Install the SDK</li>', html)
+        self.assertNotIn('1. Install the SDK', html)
+
+    def test_glued_list_after_plain_paragraph_without_colon(self):
+        html = render_description_html('Join us\n- first\n- second')
+        self.assertIn('<ul>', html)
+        self.assertEqual(html.count('<li>'), 2)
+
+    def test_single_glued_bullet_item_renders_list(self):
+        html = render_description_html('Note:\n- one thing')
+        self.assertIn('<ul>', html)
+        self.assertEqual(html.count('<li>'), 1)
+
+    def test_star_bullet_after_paragraph_renders_list(self):
+        html = render_description_html('Bring:\n* passport\n* laptop')
+        self.assertIn('<ul>', html)
+        self.assertEqual(html.count('<li>'), 2)
+
+    def test_nested_items_gain_no_extra_blank_line(self):
+        source = 'Plan:\n- day one\n  - morning\n- day two'
+        once = normalize_inline_bullets(source)
+        self.assertEqual(normalize_inline_bullets(once), once)
+        html = render_description_html(source)
+        self.assertIn('<ul>', html)
+        self.assertIn('morning', html)
+
+    def test_fenced_code_list_lookalike_is_untouched(self):
+        source = 'Example:\n```\n- not a list\n```'
+        html = render_description_html(source)
+        self.assertNotIn('<ul>', html)
+        self.assertIn('- not a list', html)
+
+    def test_separator_scores_and_versions_are_not_lists(self):
+        for source in ('Score was\n3 - 1 at the break', 'Release\n1.5 is out'):
+            html = render_description_html(source)
+            self.assertNotIn('<ul>', html, source)
+            self.assertNotIn('<ol>', html, source)
+
+    def test_email_renderer_matches_page_for_glued_lists(self):
+        page_html = render_description_html(GLUED_BULLET_DESCRIPTION)
+        email_html = render_email_markdown(GLUED_BULLET_DESCRIPTION)
+        self.assertIn('<ul>', email_html)
+        self.assertEqual(page_html.count('<li>'), email_html.count('<li>'))
+        self.assertEqual(email_html.count('<li>'), 3)
+
+    def test_ordered_glued_list_matches_in_email(self):
+        email_html = render_email_markdown(GLUED_ORDERED_DESCRIPTION)
+        self.assertIn('<ol>', email_html)
+        self.assertEqual(email_html.count('<li>'), 2)
+
+    def test_already_separated_glued_shape_is_idempotent(self):
+        source = 'What we will cover:\n\n- What MCP is\n- Build a server'
+        self.assertEqual(normalize_inline_bullets(source), source)
+
+
+class GluedListSaveTest(TestCase):
+    """Event.save() stores real lists for paragraph-glued descriptions."""
+
+    def test_event_save_stores_ul_for_glued_bullet_description(self):
+        event = Event.objects.create(
+            title='MCP', slug='mcp-glued',
+            description=GLUED_BULLET_DESCRIPTION,
+            start_datetime=timezone.now(),
+        )
+        self.assertIn('<ul>', event.description_html)
+        self.assertEqual(event.description_html.count('<li>'), 3)
+
+    def test_series_save_stores_ol_for_glued_ordered_description(self):
+        series = EventSeries.objects.create(
+            name='Setup', slug='setup-glued',
+            start_time=timezone.now().time(), timezone='Europe/Berlin',
+            description=GLUED_ORDERED_DESCRIPTION,
+        )
+        self.assertIn('<ol>', series.description_html)
+        self.assertEqual(series.description_html.count('<li>'), 2)
 
 
 class InlineBulletBackfillTest(TestCase):

@@ -32,7 +32,7 @@ class CourseHomeSearchIndexTest(TestCase):
     def _course_home_query_count(self):
         with CaptureQueriesContext(connection) as queries:
             response = self.client.get('/courses/course-home-index/home')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-cb-syllabus-search-item')
         return len(queries)
 
     def test_home_uses_compact_syllabus_search_index(self):

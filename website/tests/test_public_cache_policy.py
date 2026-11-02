@@ -224,7 +224,10 @@ class ConsentCsrfTokenForInteractiveClientsTest(TestCase):
                 content_type='application/json',
                 HTTP_X_CSRFTOKEN=token,
             )
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['consent'], 'denied')
+            self.assertEqual(
+                response.cookies[ANALYTICS_CONSENT_COOKIE].value, 'denied',
+            )
 
     def test_crawler_ua_with_session_still_gets_consent_token(self):
         # A session request is never edge-cacheable, so withholding the

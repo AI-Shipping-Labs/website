@@ -2,7 +2,6 @@
 
 import logging
 import re
-import uuid
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -36,7 +35,17 @@ from email_app.services.campaign_recipients import (
 from email_app.services.campaign_repermission import (
     monitored_message_parts,
 )
-from email_app.services.campaign_test_send import TEST_EMAIL_FOOTER_NOTE as TEST_EMAIL_FOOTER_NOTE
+from email_app.services.campaign_scheduling import (
+    CampaignScheduleConflict,
+    localized_schedule_display,
+    unschedule_campaign,
+)
+from email_app.services.campaign_test_send import (
+    TEST_EMAIL_FOOTER_NOTE as TEST_EMAIL_FOOTER_NOTE,
+)
+from email_app.services.campaign_test_send import (
+    send_test_campaign_delivery,
+)
 from email_app.services.campaign_waves import (
     campaign_wave_summary,
     release_next_wave,
@@ -45,7 +54,6 @@ from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
     build_recording_available_prefill,
 )
-from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
 from email_app.services.relay_templates import (
     RelayTemplateError,
     configured_template_client,
@@ -192,6 +200,7 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         campaign.refresh_from_db()
     return {
         "campaign": campaign,
+        "scheduled_display": localized_schedule_display(campaign),
         "recipient_count": (
             campaign.get_recipient_count()
             if campaign.status == "draft"
@@ -740,22 +749,7 @@ def _send_studio_test_campaign(
     message: CampaignMessage,
     campaign_id: int,
 ) -> str:
-    idempotency_key = f"campaign-test-{campaign_id}-{message.recipient}-{uuid.uuid4().hex}"
-    metadata = {
-        "campaign_id": campaign_id,
-        "is_test_send": True,
-        "recipient": message.recipient,
-    }
-    return send_campaign_delivery_to_relay(
-        recipient_email=message.recipient,
-        subject=message.subject,
-        body_markdown=message.body_markdown,
-        idempotency_key=idempotency_key,
-        unsubscribe_url=message.unsubscribe_url,
-        verify_email_url=message.verify_email_url,
-        footer_note=message.footer_note,
-        metadata=metadata,
-    )
+    return send_test_campaign_delivery(message, campaign_id)
 
 
 @campaign_test_access
@@ -833,6 +827,23 @@ def campaign_send(request, campaign_id):
         f'Campaign "{campaign.subject}" queued for sending — watching it here.',
     )
     return redirect("studio_worker")
+
+
+@staff_required
+@require_POST
+def campaign_unschedule(request, campaign_id):
+    """Cancel a scheduled send so the dispatcher never claims the draft."""
+    campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
+    try:
+        campaign = unschedule_campaign(campaign.pk)
+    except CampaignScheduleConflict as exc:
+        messages.error(request, f"Could not unschedule: {exc}")
+        return redirect("studio_campaign_detail", campaign_id=campaign.pk)
+    messages.success(
+        request,
+        f'Scheduled send cancelled for "{campaign.subject}".',
+    )
+    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
 
 @staff_required

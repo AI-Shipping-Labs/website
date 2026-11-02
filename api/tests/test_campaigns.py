@@ -1,8 +1,11 @@
 """Tests for the email campaign draft API (issue #676).
 
-These endpoints are intentionally a flat draft-only surface: API callers can
-create, read, list, and patch ``EmailCampaign`` rows but never send, test-
-send, duplicate, or delete them. The send path stays operator-only via Studio.
+The collection/detail endpoints are a draft-only surface: API callers can
+create, read, list, and patch ``EmailCampaign`` rows here but never send,
+test-send, duplicate, or delete them from this module. Dispatch actions
+(schedule / unschedule / send / test-send) live in
+``api/views/campaign_scheduling.py`` and are covered by
+``test_campaign_scheduling.py``.
 """
 
 import inspect
@@ -151,6 +154,8 @@ class CampaignsListTest(CampaignsApiTestBase):
                 "is_archived",
                 "sent_at",
                 "sent_count",
+                "scheduled_at",
+                "scheduled_timezone",
                 "audience_snapshotted_at",
                 "delivery_counts",
                 "created_at",
@@ -476,12 +481,13 @@ class CampaignsPatchTest(CampaignsApiTestBase):
 
 
 class CampaignsSendPathSentinelTest(TestCase):
-    """The API module MUST NOT reference ``send_campaign``.
+    """The draft module MUST NOT reference ``send_campaign``.
 
-    Sending stays operator-only via Studio (``studio/views/campaigns.py``)
-    which enqueues ``email_app.tasks.send_campaign.send_campaign``. The API
-    surface here is for draft authoring only — it must not import or invoke
-    that task in any form, even by string reference.
+    ``api/views/campaigns.py`` is draft authoring only. The sanctioned API
+    send surface is ``api/views/campaign_scheduling.py`` (schedule /
+    unschedule / send / test-send), which claims campaigns through
+    ``email_app.services.campaign_dispatch`` — this module must not import
+    or invoke the send task in any form, even by string reference.
     """
 
     def test_module_source_does_not_mention_send_campaign(self):
@@ -493,9 +499,33 @@ class CampaignsSendPathSentinelTest(TestCase):
             re.search(r"\bsend_campaign\b", source),
             msg=(
                 "api/views/campaigns.py must not reference 'send_campaign'. "
-                "The send path is Studio-only by design."
+                "Dispatch actions belong in api/views/campaign_scheduling.py."
             ),
         )
+
+    def test_dispatch_module_exists_and_is_registered(self):
+        """The sanctioned send surface exists and owns the action routes."""
+        from api.views import campaign_scheduling
+
+        for name in (
+            "campaign_schedule",
+            "campaign_unschedule",
+            "campaign_send",
+            "campaign_test_send",
+        ):
+            self.assertTrue(
+                callable(getattr(campaign_scheduling, name, None)),
+                msg=f"api/views/campaign_scheduling.py must expose {name}.",
+            )
+        from django.urls import reverse
+
+        for url_name in (
+            "api_campaign_schedule",
+            "api_campaign_unschedule",
+            "api_campaign_send",
+            "api_campaign_test_send",
+        ):
+            reverse(url_name, kwargs={"campaign_id": 1})
 
 
 class CampaignsApiTargetEventTest(CampaignsApiTestBase):

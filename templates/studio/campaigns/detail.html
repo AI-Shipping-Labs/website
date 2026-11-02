@@ -7,7 +7,7 @@
 {% url 'studio_campaign_list' as campaign_list_url %}
 {% studio_header_actions title=campaign.subject back_url=campaign_list_url back_label='Back to campaigns' %}
   {% if campaign.status == 'draft' %}
-  <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}" onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.');">{% csrf_token %}<button type="submit" data-testid="send-campaign-btn" class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}</button></form>
+  <form method="post" action="{% url 'studio_campaign_send' campaign_id=campaign.pk %}" onsubmit="return confirm('Send to {{ recipient_count }} recipients? This cannot be undone.{% if scheduled_display %} This also cancels the scheduled send.{% endif %}');">{% csrf_token %}<button type="submit" data-testid="send-campaign-btn" class="border border-red-500/40 bg-red-500/10 text-red-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Send to {{ recipient_count }} recipient{{ recipient_count|pluralize }}</button></form>
   <a href="{% url 'studio_campaign_edit' campaign_id=campaign.pk %}" data-testid="edit-campaign-link" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit</a>
   {% endif %}
   {% studio_overflow_menu %}
@@ -92,6 +92,18 @@
           <a href="{{ ses_campaign_url }}" class="text-accent hover:underline" data-testid="campaign-ses-events-link">SES events</a>
         </p>
       </div>
+      {% if scheduled_display %}
+      <div data-testid="campaign-schedule">
+        <p class="text-sm text-muted-foreground">Scheduled</p>
+        <p class="text-sm text-foreground mt-1" data-testid="campaign-schedule-time">{{ scheduled_display }}</p>
+        {% if campaign.status == 'draft' %}
+        <form method="post" action="{% url 'studio_campaign_unschedule' campaign_id=campaign.pk %}" class="mt-2" onsubmit="return confirm('Cancel the scheduled send?');">
+          {% csrf_token %}
+          <button type="submit" data-testid="unschedule-campaign-btn" class="bg-secondary border border-border text-foreground px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Cancel scheduled send</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if campaign.sent_at %}
       <div>
         <p class="text-sm text-muted-foreground">Sent At</p>

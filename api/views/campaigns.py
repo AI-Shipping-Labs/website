@@ -1,14 +1,16 @@
 """Email campaign draft and recipient-reconciliation API endpoints.
 
 This operator API exposes draft authoring plus staff-token retry / assume-sent
-actions that match Studio reconciliation. Callers cannot send, test-send,
-duplicate, or delete campaigns. Sending remains a deliberate human action via
-Studio. This module must NEVER import or invoke the campaign-send task; a
-sentinel test in ``api/tests/test_campaigns.py`` greps this source to enforce
-that constraint.
+actions that match Studio reconciliation. Draft authoring never crosses the
+send boundary: this module must NEVER import or invoke the campaign-send task
+(a sentinel test in ``api/tests/test_campaigns.py`` greps this source to
+enforce that). Dispatch actions — schedule, unschedule, send, and test-send —
+live in ``api/views/campaign_scheduling.py``, the one sanctioned send surface.
 
 Archive (hide) by ``PATCH {"is_archived": true}``; there is no DELETE route
 registered for either endpoint, so DELETE returns 405 from ``require_methods``.
+Schedule fields are read-only here and change only through the
+``/schedule`` and ``/unschedule`` routes.
 """
 
 from django.db import transaction
@@ -49,6 +51,14 @@ READ_ONLY_FIELDS = {
     "sent_at",
     "sent_count",
     "created_at",
+    "scheduled_at",
+    "scheduled_timezone",
+}
+
+# Points callers at the route that owns a read-only field.
+READ_ONLY_FIELD_HINTS = {
+    "scheduled_at": "use POST /api/campaigns/<id>/schedule",
+    "scheduled_timezone": "use POST /api/campaigns/<id>/schedule",
 }
 
 WRITABLE_FIELDS = {
@@ -91,6 +101,8 @@ _CAMPAIGN_EXAMPLE = {
     "is_archived": False,
     "sent_at": None,
     "sent_count": 0,
+    "scheduled_at": None,
+    "scheduled_timezone": None,
     "audience_snapshotted_at": None,
     "delivery_counts": {
         "pending": 0,
@@ -207,10 +219,16 @@ def _serialize_campaign(campaign):
         "is_archived": campaign.is_archived,
         "sent_at": isoformat_or_none(campaign.sent_at),
         "sent_count": campaign.sent_count,
+        "scheduled_at": isoformat_or_none(campaign.scheduled_at),
+        "scheduled_timezone": campaign.scheduled_timezone,
         "audience_snapshotted_at": isoformat_or_none(campaign.audience_snapshotted_at),
         "delivery_counts": campaign_delivery_counts(campaign),
         "created_at": isoformat_or_none(campaign.created_at),
     }
+
+
+def _read_only_field_response(field):
+    return read_only_field_response(field, hint=READ_ONLY_FIELD_HINTS.get(field))
 
 
 def _collect_campaign_values(data, *, existing=None):
@@ -382,10 +400,11 @@ def _apply_campaign_values(campaign, values):
             "summary": "Create a campaign draft",
             "description": (
                 "Creates an ``EmailCampaign`` row in ``draft`` status. "
-                "Sending stays a deliberate Studio action -- this API "
-                "intentionally has no ``/send`` route. Read-only fields "
-                "(``id``, ``status``, ``sent_at``, ``sent_count``, "
-                "``created_at``) in the body are rejected with 422 "
+                "This collection never sends: dispatch actions (schedule, "
+                "send, test-send) live on the per-campaign action routes. "
+                "Read-only fields (``id``, ``status``, ``sent_at``, "
+                "``sent_count``, ``created_at``, ``scheduled_at``, "
+                "``scheduled_timezone``) in the body are rejected with 422 "
                 "``read_only_field``; ``status`` in the body is silently "
                 "overwritten to ``draft`` so detail round-trips keep "
                 "working."

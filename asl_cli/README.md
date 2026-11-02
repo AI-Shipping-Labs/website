@@ -417,6 +417,27 @@ Choice questions take the 1-based option index (`2`, or `1,3` for checkboxes)
 or the exact option text. When the slug exists in several cohorts, the
 member's own cohort is used, otherwise pass `--cohort`.
 
+### Newsletter campaigns: schedule, send, test-send
+
+Drafts are managed with `asl campaigns list|get|create|update`. Sending and
+scheduling are deliberate staff actions (same as Studio > Campaigns):
+
+```bash
+uv run asl campaigns schedule 42 --at "2026-11-05T10:00:00" --tz Europe/Berlin
+uv run asl campaigns get 42                     # scheduled_at (UTC) + scheduled_timezone
+uv run asl campaigns unschedule 42              # cancel a scheduled send (draft only)
+uv run asl campaigns send 42 --yes              # immediate send; --yes skips the prompt
+uv run asl campaigns test-send 42 --recipient you@example.com
+```
+
+`--at` is an ISO 8601 datetime in the future; a naive value (no UTC offset)
+is interpreted in `--tz` (`--tz` is required then). The server dispatches
+scheduled drafts every minute, so a campaign scheduled at 10:00 goes out
+within a minute of that time. The schedule is visible in Studio on the
+campaign detail page with a cancel button. Scheduling or sending a
+non-draft returns 409. Verify every campaign with `test-send` to your own
+address before any real `send`.
+
 ### Escape hatch
 
 ```bash

@@ -1,6 +1,8 @@
-"""``asl campaigns`` -- email campaign CRUD."""
+"""``asl campaigns`` -- email campaign CRUD and dispatch actions."""
 
 from __future__ import annotations
+
+from datetime import datetime
 
 import click
 
@@ -89,6 +91,76 @@ def campaigns_update(campaign_id, fmt, **kwargs):
         if key in body and isinstance(body[key], str):
             body[key] = [t.strip() for t in body[key].split(",") if t.strip()]
     emit(get_client().patch(f"{API}/campaigns/{campaign_id}", json_body=body), fmt)
+
+
+@campaigns.command("schedule")
+@click.argument("campaign_id", type=int)
+@click.option(
+    "--at",
+    "at_raw",
+    required=True,
+    help=(
+        "ISO 8601 datetime to send at, e.g. 2026-11-05T10:00:00. "
+        "Naive times are interpreted in --tz; the time must be in the future."
+    ),
+)
+@click.option(
+    "--tz",
+    "tz_name",
+    default=None,
+    help=(
+        "IANA timezone for a naive --at and for display, "
+        "e.g. Europe/Berlin. Required when --at has no UTC offset."
+    ),
+)
+@format_option
+def campaigns_schedule(campaign_id, at_raw, tz_name, fmt):
+    """Schedule a draft campaign for sending at a given time."""
+    try:
+        parsed = datetime.fromisoformat(at_raw.strip())
+    except ValueError:
+        raise click.UsageError(
+            f"--at is not a valid ISO 8601 datetime: {at_raw!r}",
+        )
+    if parsed.tzinfo is None and not tz_name:
+        raise click.UsageError(
+            "--tz is required when --at has no UTC offset "
+            '(e.g. --tz "Europe/Berlin").',
+        )
+    body = {"scheduled_at": at_raw}
+    if tz_name:
+        body["scheduled_timezone"] = tz_name
+    emit(
+        get_client().post(f"{API}/campaigns/{campaign_id}/schedule", json_body=body),
+        fmt,
+    )
+
+
+@campaigns.command("unschedule")
+@click.argument("campaign_id", type=int)
+@format_option
+def campaigns_unschedule(campaign_id, fmt):
+    """Cancel a scheduled send (draft campaigns only)."""
+    emit(get_client().post(f"{API}/campaigns/{campaign_id}/unschedule"), fmt)
+
+
+@campaigns.command("send")
+@click.argument("campaign_id", type=int)
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    help="Confirm the send without an interactive prompt.",
+)
+@format_option
+def campaigns_send(campaign_id, yes, fmt):
+    """Send a draft campaign now (requires --yes in scripts)."""
+    if not yes:
+        click.confirm(
+            f"Send campaign {campaign_id} to all eligible recipients now?",
+            abort=True,
+        )
+    emit(get_client().post(f"{API}/campaigns/{campaign_id}/send"), fmt)
 
 
 @campaigns.command("test-send")

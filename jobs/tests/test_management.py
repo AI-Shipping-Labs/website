@@ -321,6 +321,7 @@ class SetupSchedulesCommandTest(TestCase):
         expected = {
             'health-check',
             'campaign-delivery-recovery',
+            'campaign-scheduled-dispatch',
             'clear-expired-sessions',
             'cleanup-webhook-logs',
             'cleanup-calendly-webhook-logs',

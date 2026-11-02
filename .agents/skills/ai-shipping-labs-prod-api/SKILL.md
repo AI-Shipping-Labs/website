@@ -76,6 +76,17 @@ Run `uv run asl <group> --help` for exact flags. Key commands:
 
 A task that catches its own error returns `success=True` with `result=None` — it will NOT appear in failed-tasks. Inspect `result`.
 
+### Newsletter campaigns (`asl campaigns --help`)
+
+Drafts: `asl campaigns list|get|create|update` (draft authoring, recipients via `asl campaigns get` + `/recipients`). Sending/scheduling is a deliberate staff action:
+
+- `asl campaigns schedule <id> --at "2026-11-05T10:00:00" --tz Europe/Berlin` — set/replace the send time. `--at` is ISO 8601; a naive time is interpreted in `--tz` (required then). The server sends the campaign at that time (every-minute dispatcher); `asl campaigns get` shows `scheduled_at` (UTC) and `scheduled_timezone`.
+- `asl campaigns unschedule <id>` — cancel a scheduled send (draft only).
+- `asl campaigns send <id> --yes` — send immediately. `--yes` is required for non-interactive use; without it the CLI asks for confirmation.
+- `asl campaigns test-send <id> --recipient you@example.com` — one probe email; never changes the draft or audience. (API equivalent: `POST /api/campaigns/<id>/test-send` with `{"email": ...}`.)
+
+Schedule state is visible in Studio (campaign detail, "Scheduled" row with a cancel button) and via `asl campaigns get`. Scheduling/sending a non-draft returns HTTP 409 `campaign_not_draft`. Never `send` to the real audience from automation — verify with `test-send` to your own address first.
+
 ## Notes
 
 - The API runs against PRODUCTION. Treat writes as prod changes.

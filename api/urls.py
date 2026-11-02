@@ -42,6 +42,12 @@ from api.views.call_profiles import (
     call_profile_detail,
     call_profiles_collection,
 )
+from api.views.campaign_scheduling import (
+    campaign_schedule,
+    campaign_send,
+    campaign_test_send,
+    campaign_unschedule,
+)
 from api.views.campaign_verify import (
     campaign_deleted_users,
     campaign_unverified_deletion,
@@ -458,7 +464,9 @@ urlpatterns = [
     # ---- Email campaigns (issue #676) ---------------------------------
     # Draft authoring plus staff-token recipient reconciliation. No
     # DELETE route is registered (archive via PATCH is_archived=true).
-    # No POST /send, /test-send, or /duplicate — sending stays in Studio.
+    # Dispatch actions (schedule/unschedule/send/test-send) are registered
+    # below from api/views/campaign_scheduling.py, the one sanctioned send
+    # surface; this block stays draft-only by design.
     path(
         "campaigns",
         campaigns_collection,
@@ -519,6 +527,27 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/waves",
         campaign_waves,
         name="api_campaign_waves",
+    ),
+    # ---- Campaign dispatch actions (schedule/unschedule/send/test-send) --
+    path(
+        "campaigns/<int:campaign_id>/schedule",
+        campaign_schedule,
+        name="api_campaign_schedule",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/unschedule",
+        campaign_unschedule,
+        name="api_campaign_unschedule",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/send",
+        campaign_send,
+        name="api_campaign_send",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/test-send",
+        campaign_test_send,
+        name="api_campaign_test_send",
     ),
     path(
         "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/retry",

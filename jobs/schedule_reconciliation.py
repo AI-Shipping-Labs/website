@@ -44,6 +44,12 @@ SCHEDULE_DEFINITIONS = (
         description="every 5 min",
     ),
     ScheduleDefinition(
+        "campaign-scheduled-dispatch",
+        "email_app.tasks.campaign_schedule.dispatch_due_scheduled_campaigns",
+        "* * * * *",
+        description="every minute",
+    ),
+    ScheduleDefinition(
         "clear-expired-sessions",
         "jobs.tasks.cleanup.clear_expired_sessions",
         "50 2 * * *",

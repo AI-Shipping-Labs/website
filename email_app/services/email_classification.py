@@ -218,6 +218,11 @@ def get_calendar_sender():
     return get_config(CALENDAR_FROM_KEY, DEFAULT_CALENDAR_FROM_EMAIL)
 
 
+def get_calendar_fallback_sender():
+    """Configured Relay sender used when the calendar sender is not set up in Relay."""
+    return DEFAULT_PROMOTIONAL_FROM_EMAIL
+
+
 def get_sender_for_email_type(email_type):
     """Resolve the configured From address for a specific email type.
 

@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 import requests
 from django.conf import settings
 
+from email_app.relay_transactional import get_sender_fallback_flag
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,14 @@ def get_relay_health_status() -> dict[str, Any]:
     dry_run_prod = is_production() and dry_run
 
     is_healthy = is_valid and not dry_run_prod
+    sender_fallback = get_sender_fallback_flag()
     return {
+        "sender_fallback": sender_fallback or None,
+        "warning": (
+            f"relay_sender_not_configured: {sender_fallback['sender_id']} "
+            f"(using {sender_fallback['fallback_sender_id']})"
+            if sender_fallback else ""
+        ),
         "status": "ok" if is_healthy else "FAIL",
         "degraded": not is_healthy,
         "relay_status": "ok" if is_healthy else "FAIL",

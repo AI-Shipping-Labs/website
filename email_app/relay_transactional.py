@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import requests
 from community_base.kernel.context import is_safe_external_context_id
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
@@ -69,8 +70,14 @@ def send_relay_transactional(
     cc=None,
     calendar=None,
     sender_id=None,
+    fallback_sender_id=None,
 ):
-    """Send one named template through Relay with a stable logical key."""
+    """Send one named template through Relay with a stable logical key.
+
+    ``fallback_sender_id`` is retried once, on the same idempotency key, when
+    Relay rejects ``sender_id`` with ``from_email: not_configured`` (Relay
+    creates no message on that 400, so the retry cannot duplicate a send).
+    """
     existing = _claim_delivery(template_key, idempotency_key, safe_correlation)
     if existing is not None:
         return existing
@@ -84,7 +91,55 @@ def send_relay_transactional(
         sender_id=sender_id,
     )
     response = _post_relay(payload, template_key, idempotency_key, safe_correlation)
+    if (
+        fallback_sender_id
+        and sender_id
+        and fallback_sender_id != sender_id
+        and _is_sender_not_configured(response)
+    ):
+        logger.warning(
+            "Relay sender not configured; falling back template=%s key=%s correlation=%s sender=%s fallback=%s",
+            template_key, idempotency_key, safe_correlation, sender_id, fallback_sender_id,
+        )
+        _mark_sender_fallback(sender_id, fallback_sender_id)
+        payload = {**payload, "from_email": fallback_sender_id}
+        response = _post_relay(payload, template_key, idempotency_key, safe_correlation)
     return _handle_response(response, template_key, idempotency_key, safe_correlation)
+
+
+SENDER_FALLBACK_CACHE_KEY = "relay:sender_fallback"
+SENDER_FALLBACK_TTL_SECONDS = 24 * 3600
+
+
+def _is_sender_not_configured(response):
+    if getattr(response, "status_code", None) != 400:
+        return False
+    try:
+        document = response.json()
+    except (TypeError, ValueError):
+        return False
+    error = document.get("error") if isinstance(document, dict) else None
+    fields = error.get("fields") if isinstance(error, dict) else None
+    return isinstance(fields, dict) and fields.get("from_email") == "not_configured"
+
+
+def _mark_sender_fallback(sender_id, fallback_sender_id):
+    try:
+        cache.set(
+            SENDER_FALLBACK_CACHE_KEY,
+            {"sender_id": sender_id, "fallback_sender_id": fallback_sender_id,
+             "at": timezone.now().isoformat()},
+            SENDER_FALLBACK_TTL_SECONDS,
+        )
+    except Exception:  # health flag must never break a send
+        logger.exception("Could not record Relay sender fallback flag")
+
+
+def get_sender_fallback_flag():
+    try:
+        return cache.get(SENDER_FALLBACK_CACHE_KEY)
+    except Exception:
+        return None
 
 
 def _post_relay(payload, template_key, idempotency_key, safe_correlation):

@@ -13,6 +13,7 @@ from email_app.relay_transactional import (
     send_relay_transactional,
 )
 from email_app.services.email_classification import (
+    get_calendar_fallback_sender,
     get_calendar_sender,
     relay_sender_id,
 )
@@ -153,5 +154,6 @@ def _send_calendar_email(
         safe_correlation=safe_correlation,
         calendar=calendar,
         sender_id=relay_sender_id(get_calendar_sender()),
+        fallback_sender_id=relay_sender_id(get_calendar_fallback_sender()),
     )
     return result.message_id

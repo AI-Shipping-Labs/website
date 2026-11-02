@@ -31,8 +31,9 @@ registered in Relay. The default is `content@aishippinglabs.com`.
 
 Sender and iCalendar `ORGANIZER` for event calendar invites (registration,
 series, reschedule, cancellation, calendar feed). Defaults to
-`Alexey Grigorev <alexey@aishippinglabs.com>`. The local part must be a sender
-id registered for the Relay client (`alexey`). If Relay returns the specific
+`AI Shipping Labs <content@aishippinglabs.com>`. The local part must be a sender
+id registered for the Relay client (`content`). Do not use `alexey@`: it is not
+a Relay sender and invites must come from content@ (decision 2026-11-02). If Relay returns the specific
 `from_email=not_configured` validation error, event-registration sends retry
 once with the configured promotional sender and the same idempotency key. Other
 Relay errors are not retried. Avoid `noreply@`: Gmail only auto-adds invites

@@ -13,7 +13,7 @@ CALENDAR_FROM_KEY = "RELAY_CALENDAR_FROM_EMAIL"
 DEFAULT_TRANSACTIONAL_FROM_EMAIL = "noreply@aishippinglabs.com"
 DEFAULT_PROMOTIONAL_FROM_EMAIL = "content@aishippinglabs.com"
 DEFAULT_WELCOME_FROM_EMAIL = "welcome@aishippinglabs.com"
-DEFAULT_CALENDAR_FROM_EMAIL = "Alexey Grigorev <alexey@aishippinglabs.com>"
+DEFAULT_CALENDAR_FROM_EMAIL = "AI Shipping Labs <content@aishippinglabs.com>"
 
 # community_invite is transactional: it grants access to the paid/member
 # community. lead_magnet_delivery is transactional: it delivers a resource the
@@ -212,8 +212,9 @@ def get_sender_for_kind(email_kind):
 def get_calendar_sender():
     """Sender and iCalendar ORGANIZER for event calendar invites.
 
-    Invites come from Alexey personally, not noreply@: Gmail only auto-adds an
-    invite when the organizer is a sender the invitee has interacted with.
+    Invites come from content@ (decision 2026-11-02: invites must come from
+    content, not from Alexey), not noreply@: Gmail only auto-adds an invite
+    when the organizer is a sender the invitee has interacted with.
     """
     return get_config(CALENDAR_FROM_KEY, DEFAULT_CALENDAR_FROM_EMAIL)
 

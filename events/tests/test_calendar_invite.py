@@ -142,8 +142,8 @@ class GenerateIcsTest(TestCase):
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
 
         organizer = vevent.get('organizer')
-        self.assertEqual(str(organizer), 'mailto:alexey@aishippinglabs.com')
-        self.assertEqual(str(organizer.params['CN']), 'Alexey Grigorev')
+        self.assertEqual(str(organizer), 'mailto:content@aishippinglabs.com')
+        self.assertEqual(str(organizer.params['CN']), 'AI Shipping Labs')
 
     @override_settings(
         RELAY_CALENDAR_FROM_EMAIL=(

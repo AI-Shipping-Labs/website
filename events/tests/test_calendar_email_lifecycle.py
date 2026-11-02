@@ -71,7 +71,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
     def _assert_bare_organizer(self, cal):
         self.assertEqual(
             str(_vevent(cal).get('organizer')),
-            'mailto:alexey@aishippinglabs.com',
+            'mailto:content@aishippinglabs.com',
         )
 
     @patch('events.services.registration_email._send_calendar_email')

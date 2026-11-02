@@ -1,4 +1,4 @@
-"""Calendar invites are sent from alexey@, not the transactional noreply@.
+"""Calendar invites are sent from content@, not the transactional noreply@.
 
 Gmail only auto-adds an invite when the organizer is a sender the invitee has
 interacted with; noreply@ is not, so invites silently stay out of calendars.
@@ -28,21 +28,22 @@ class CalendarInviteSenderTest(TestCase):
             event=cls.event, user=cls.user,
         )
 
-    def test_ics_organizer_is_alexey_mailbox(self):
+    def test_ics_organizer_is_content_mailbox(self):
         ics = generate_ics(self.event).decode()
-        self.assertIn('Alexey Grigorev', ics)
-        self.assertIn('mailto:alexey@aishippinglabs.com', ics)
+        self.assertIn('AI Shipping Labs', ics)
+        self.assertIn('mailto:content@aishippinglabs.com', ics)
         self.assertNotIn('noreply@', ics)
-        self.assertNotIn('content@', ics)
+        self.assertNotIn('alexey@', ics)
 
     @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com')
     @patch('events.services.registration_email.send_relay_transactional')
-    def test_registration_invite_requests_alexey_sender(self, mock_send):
+    def test_registration_invite_requests_content_sender_first_try(self, mock_send):
         mock_send.return_value.message_id = 'relay-1'
 
         send_registration_confirmation(self.registration)
 
-        self.assertEqual(mock_send.call_args.kwargs['sender_id'], 'alexey')
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_send.call_args.kwargs['sender_id'], 'content')
 
     def test_relay_sender_id_from_display_address(self):
         self.assertEqual(

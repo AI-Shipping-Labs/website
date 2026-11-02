@@ -22,7 +22,7 @@ class CampaignTestTokenTest(TestCase):
         return self.client.post(self.url, {"test_recipients": recipients},
             HTTP_AUTHORIZATION=f"Token {self.token.key}", **extra)
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay", return_value="relay-json-42")
+    @patch("studio.views.campaigns.send_test_campaign_delivery", return_value="relay-json-42")
     def test_token_json_uses_existing_studio_send(self, send):
         self.client = Client(enforce_csrf_checks=True)
         result = self.client.post(self.url,
@@ -30,9 +30,9 @@ class CampaignTestTokenTest(TestCase):
             content_type="application/json", HTTP_AUTHORIZATION=f"Token {self.token.key}")
         self.assertEqual(result.json()["relay_message_id"], "relay-json-42")
         self.assertEqual(send.call_count, 1)
-        self.assertEqual(send.call_args.kwargs["recipient_email"], "controlled@example.com")
+        self.assertEqual(send.call_args.args[0].recipient, "controlled@example.com")
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_token_json_rejects_malformed_and_wrong_types_without_sending(self, send):
         bodies = ("[", "[]", "null", '"address@example.com"', "{}")
         for value in (None, True, 1, [], {}):
@@ -66,7 +66,7 @@ class CampaignTestTokenTest(TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual((self.campaign.status, self.campaign.sent_count), ("draft", 0))
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_token_rejects_missing_invalid_or_multiple_recipients(self, send):
         for recipients in ("", "bad-address", "one@example.com,two@example.com"):
             with self.subTest(recipients=recipients):
@@ -75,7 +75,7 @@ class CampaignTestTokenTest(TestCase):
                 self.assertEqual(result.json()["code"], "validation_error")
         send.assert_not_called()
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_session_requires_csrf_and_invalid_token_never_falls_back(self, send):
         self.client = Client(enforce_csrf_checks=True)
         self.client.force_login(self.staff)
@@ -86,14 +86,14 @@ class CampaignTestTokenTest(TestCase):
         self.assertEqual(result.status_code, 401)
         send.assert_not_called()
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_nonstaff_token_cannot_send(self, send):
         self.staff.is_staff = False
         self.staff.save(update_fields=["is_staff"])
         self.assertEqual(self.post_test().status_code, 401)
         send.assert_not_called()
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_anonymous_browser_keeps_login_redirect(self, send):
         self.client = Client(enforce_csrf_checks=True)
         result = self.client.post(self.url, {"test_recipients": "controlled@example.com"})
@@ -101,7 +101,7 @@ class CampaignTestTokenTest(TestCase):
         self.assertEqual(result["Location"], f"/accounts/login/?next={self.url}")
         send.assert_not_called()
 
-    @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
+    @patch("studio.views.campaigns.send_test_campaign_delivery")
     def test_transport_failure_returns_no_provider_payload(self, send):
         send.side_effect = RuntimeError("PRIVATE-TOKEN private@example.com raw provider response")
         result = self.post_test()

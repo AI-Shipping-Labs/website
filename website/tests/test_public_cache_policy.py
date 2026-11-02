@@ -151,6 +151,10 @@ class PublicCachePolicyIntegrationTest(TestCase):
         response = self.client.get('/accounts/login/')
         self.assertEqual(response['Cache-Control'], 'private, no-store')
 
+    def test_uncached_public_form_page_keeps_csrf_cookie(self):
+        response = self.client.get('/downloads')
+        self.assertIn('csrftoken', response.cookies)
+
     def test_robots_txt_is_not_marked_public(self):
         response = self.client.get('/robots.txt')
         cache_control = response.get('Cache-Control', '')

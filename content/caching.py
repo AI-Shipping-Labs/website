@@ -107,6 +107,7 @@ def cache_anonymous_page(timeout=ANON_PAGE_CACHE_TIMEOUT, cache_group=None):
                 cache.set(key, response, timeout)
             return response
 
+        wrapper._uses_anonymous_page_cache = True
         return wrapper
 
     return decorator

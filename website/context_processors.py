@@ -34,13 +34,16 @@ _ASLAB_AID_COOKIE = 'aslab_aid'
 
 
 def _skip_consent_csrf_token(request):
-    """Defer consent tokens on sessionless pages so HTML remains cacheable.
+    """Defer consent tokens on sessionless views using the public page cache.
 
-    The consent UI fetches a CSRF token only after a visitor makes a
-    choice. Requests with a session may render other user-specific forms,
-    so they keep the token in the page.
+    The consent UI obtains a private token after receiving shared HTML.
+    Uncached pages may render anonymous forms, so they keep their normal
+    CSRF token behavior.
     """
-    return not request.COOKIES.get(settings.SESSION_COOKIE_NAME)
+    if request.COOKIES.get(settings.SESSION_COOKIE_NAME):
+        return False
+    view = getattr(getattr(request, 'resolver_match', None), 'func', None)
+    return bool(getattr(view, '_uses_anonymous_page_cache', False))
 
 
 def _validated_aslab_anon_id(request):
@@ -449,10 +452,9 @@ def site_context(request):
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': google_analytics_id,
         'analytics_consent_state': consent_state,
-        # Sessionless public HTML can be shared across viewers, so never
-        # embed a per-visitor consent token in it. The consent UI fetches
-        # one from /api/analytics/consent/csrf only when the visitor acts.
-        # Session requests keep the token for user-specific forms.
+        # Cacheable sessionless HTML omits per-visitor consent tokens. The
+        # consent UI fetches a private token after load; other pages keep
+        # normal CSRF behavior for forms.
         'analytics_consent_csrf_token': (
             ''
             if _skip_consent_csrf_token(request) or consent_state

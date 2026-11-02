@@ -79,19 +79,31 @@
       });
     }
 
+    var csrfTokenRequest = null;
+
     function csrfToken() {
       var token = panel.getAttribute('data-csrf-token');
+      var cookie = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      if (!token && cookie) token = decodeURIComponent(cookie[1]);
       if (token) return Promise.resolve(token);
-      // Public pages omit per-visitor tokens so their HTML stays cacheable.
-      // Fetch one only when a visitor grants or revokes consent.
-      return fetch('/api/analytics/consent/csrf', {
-        cache: 'no-store', credentials: 'same-origin',
-      })
-        .then(function(response) {
-          if (!response.ok) throw new Error('Consent token failed');
-          return response.json();
+      if (!csrfTokenRequest) {
+        csrfTokenRequest = fetch('/api/analytics/consent/csrf', {
+          cache: 'no-store', credentials: 'same-origin',
         })
-        .then(function(data) { return data.csrf_token; });
+          .then(function(response) {
+            if (!response.ok) throw new Error('Consent token failed');
+            return response.json();
+          })
+          .then(function(data) {
+            panel.setAttribute('data-csrf-token', data.csrf_token);
+            return data.csrf_token;
+          })
+          .catch(function(error) {
+            csrfTokenRequest = null;
+            throw error;
+          });
+      }
+      return csrfTokenRequest;
     }
 
     function postChoice(choice, token) {
@@ -155,5 +167,6 @@
     syncLayout();
 
     window.analyticsConsentPreferences = {open: open};
+    csrfToken().catch(function() {});
   })();
 </script>

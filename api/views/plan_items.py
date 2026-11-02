@@ -9,10 +9,11 @@ that drives create / list / patch / delete from a small descriptor.
 from django.db import transaction
 from django.db.models import F, Max
 from django.http import JsonResponse
-from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from api.openapi import openapi_spec
+from api.permissions import plan_for_write, visible_plans_for
+from api.request_parsing import coerce_datetime
 from api.safety import error_response
 from api.serializers.plans import (
     serialize_deliverable,
@@ -20,7 +21,6 @@ from api.serializers.plans import (
     serialize_resource,
 )
 from api.utils import parse_json_body, require_methods, token_or_session_required
-from api.views._permissions import visible_plans_for
 from plans.models import (
     NEXT_STEP_KIND_CHOICES,
     NEXT_STEP_KIND_PRE_SPRINT,
@@ -78,14 +78,6 @@ def _validate_next_step_kind(value):
     return None
 
 
-def _coerce_datetime(value):
-    """ISO string -> ``datetime``, passthrough for ``None`` / datetimes."""
-    if value is None or value == "":
-        return None
-    if isinstance(value, str):
-        return parse_datetime(value)
-    return value
-
 # Descriptors per child type. ``required`` is the create-required field
 # list; ``writable`` is the PATCH-allowed scalar fields (excluding
 # ``position`` which has its own reorder logic).
@@ -117,18 +109,6 @@ ITEM_TYPES = {
 }
 
 
-def _load_plan_for_write(user, plan_id):
-    """Return ``(plan, error_response)``."""
-    plan = visible_plans_for(user).filter(pk=plan_id).first()
-    if plan is None:
-        return None, error_response(
-            "Plan not found",
-            "unknown_plan",
-            status=404,
-        )
-    return plan, None
-
-
 def _load_item_for_write(user, item_type, item_id):
     """Return ``(row, descriptor, error_response)`` for an item lookup."""
     descriptor = ITEM_TYPES[item_type]
@@ -153,7 +133,7 @@ def _load_item_for_write(user, item_type, item_id):
 
 
 def _list_items(request, plan_id, item_type):
-    plan, err = _load_plan_for_write(request.user, plan_id)
+    plan, err = plan_for_write(request.user, plan_id)
     if err is not None:
         return err
     descriptor = ITEM_TYPES[item_type]
@@ -171,7 +151,7 @@ def _list_items(request, plan_id, item_type):
 
 
 def _create_item(request, plan_id, item_type):
-    plan, err = _load_plan_for_write(request.user, plan_id)
+    plan, err = plan_for_write(request.user, plan_id)
     if err is not None:
         return err
     descriptor = ITEM_TYPES[item_type]
@@ -231,7 +211,7 @@ def _create_item(request, plan_id, item_type):
         if item_type == "next_step":
             kwargs["kind"] = next_step_kind
         if descriptor["has_done_at"] and "done_at" in data:
-            kwargs["done_at"] = _coerce_datetime(data["done_at"])
+            kwargs["done_at"] = coerce_datetime(data["done_at"])
         row = Model.objects.create(**kwargs)
 
     return JsonResponse(descriptor["serialize"](row), status=201)
@@ -269,7 +249,7 @@ def _patch_item(request, item_type, item_id):
         update_fields.append("kind")
 
     if descriptor["has_done_at"] and "done_at" in data:
-        row.done_at = _coerce_datetime(data["done_at"])
+        row.done_at = coerce_datetime(data["done_at"])
         update_fields.append("done_at")
 
     if "position" in data:

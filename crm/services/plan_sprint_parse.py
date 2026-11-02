@@ -33,7 +33,7 @@ import time
 from pydantic import BaseModel, Field
 
 from integrations.services import llm
-from integrations.services.llm import LLMError
+from integrations.services.llm import LLMError, TraceSink
 
 # Versioned via this module-level constant so future eval/diffing can track
 # prompt revisions across stored runs. Keep it concise.
@@ -153,28 +153,6 @@ class PlanSprintParseInput(BaseModel):
     # Full thread, root first: (author_display, posted_at_iso, text).
     messages: list[tuple[str, str, str]] = Field(default_factory=list)
     plan_items: list[_PlanItem] = Field(default_factory=list)
-
-
-class TraceSink:
-    """No-op trace sink; the default when ``trace`` is omitted.
-
-    Mirrors the feedback-synthesis sink so a future eval runner can capture
-    each run's prompt, messages, tool spec, raw result, latency, and parsed
-    output against a real provider. Every hook defaults to a no-op so
-    production runs stay silent.
-    """
-
-    def on_request(self, *, system, messages, tool):
-        """Called just before ``llm.complete`` with the rendered request."""
-
-    def on_result(self, *, result, latency_seconds):
-        """Called after ``llm.complete`` returns, with the raw result."""
-
-    def on_parsed(self, *, parsed):
-        """Called after the tool input validates into a result model."""
-
-    def on_error(self, *, error):
-        """Called when parsing/validation or the LLM call fails."""
 
 
 def _build_user_message(data):

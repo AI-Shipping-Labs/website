@@ -1,8 +1,8 @@
 """Provider-neutral LLM service (issue #799).
 
 Callers depend on this package's public interface — ``is_enabled()``,
-``complete(...)``, ``LLMResult``, and ``LLMError`` — never on a specific
-vendor SDK. The service selects a backend from ``LLM_PROVIDER`` and
+``complete(...)``, ``LLMResult``, ``LLMError``, and the optional
+``TraceSink`` hooks — never on a specific vendor SDK. The service selects a backend from ``LLM_PROVIDER`` and
 resolves credentials/model/base-URL from :func:`integrations.config.get_config`
 at call time, so a Studio override takes effect without a redeploy and
 worker processes read fresh values.
@@ -41,6 +41,7 @@ The API key never appears in any exception message or log line emitted
 by this service (asserted in tests, mirroring banner_generator).
 """
 
+
 from .backends import (
     STREAM_DONE,
     STREAM_TEXT_DELTA,
@@ -52,6 +53,23 @@ from .backends import (
 )
 from .service import complete, is_enabled, stream
 
+
+class TraceSink:
+    """No-op hooks for callables that expose LLM request tracing."""
+
+    def on_request(self, *, system, messages, tool):
+        """Called before the LLM request."""
+
+    def on_result(self, *, result, latency_seconds):
+        """Called after the LLM request returns."""
+
+    def on_parsed(self, *, parsed):
+        """Called after structured output validation."""
+
+    def on_error(self, *, error):
+        """Called when the call or parse fails."""
+
+
 __all__ = [
     'STREAM_DONE',
     'STREAM_TEXT_DELTA',
@@ -59,6 +77,7 @@ __all__ = [
     'LLMError',
     'LLMTimeoutError',
     'LLMResult',
+    'TraceSink',
     'StreamEvent',
     'complete',
     'is_enabled',

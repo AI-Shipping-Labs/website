@@ -11,7 +11,6 @@ Core sprint endpoints:
 - ``GET /api/sprints/<slug>/roster-activity`` -- staff roster activity
 """
 
-from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -22,6 +21,8 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.utils.display import display_name
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin, visible_plans_for
+from api.request_parsing import parse_iso_date
 from api.safety import error_response
 from api.serializers.datetime import isoformat_or_none
 from api.serializers.plans import serialize_sprint
@@ -30,7 +31,6 @@ from api.utils import (
     parse_json_body,
     require_methods,
 )
-from api.views._permissions import bearer_is_admin, visible_plans_for
 from crm.models import SlackMessage, SlackThread
 from events.services.event_series_lookup import (
     EventSeriesLookupStatus,
@@ -322,16 +322,6 @@ def _resolve_event_series(raw):
             details={"event_series": "Unknown event series"},
         )
     return result.event_series, None
-
-
-def _parse_iso_date(value):
-    """Parse a YYYY-MM-DD string into a ``date``. Returns None on failure."""
-    if not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def _sprint_visible_to(user, sprint):
@@ -880,7 +870,7 @@ def sprints_collection(request):
                 details={"field": required},
             )
 
-    start_date = _parse_iso_date(data["start_date"])
+    start_date = parse_iso_date(data["start_date"])
     if start_date is None:
         return error_response(
             "start_date must be ISO 8601 (YYYY-MM-DD)",
@@ -1170,7 +1160,7 @@ def sprint_detail(request, slug):
             setattr(sprint, field, data[field])
             update_fields.append(field)
     if "start_date" in data:
-        new_date = _parse_iso_date(data["start_date"])
+        new_date = parse_iso_date(data["start_date"])
         if new_date is None:
             return error_response(
                 "start_date must be ISO 8601 (YYYY-MM-DD)",

@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import parse_json_body, require_methods
 from payments.models import StripeWebhookDeliveryAttempt, StripeWebhookEndpointCheck
 from payments.services.refund_dispute_review import (
@@ -38,17 +39,13 @@ MAX_PAGE_SIZE = 100
 DEFAULT_PAGE_SIZE = 25
 
 
-def _dt(value):
-    return value.isoformat() if value else None
-
-
 def _serialize_check(check):
     if check is None:
         return None
     return {
         "id": str(check.id),
         "source": check.source,
-        "checked_at": _dt(check.checked_at),
+        "checked_at": isoformat_or_none(check.checked_at),
         "status": check.status,
         "key_mode": check.key_mode,
         "expected_url": check.expected_url,
@@ -79,8 +76,8 @@ def _serialize_attempt(attempt):
         "attempt_number": attempt.attempt_number,
         "outcome": attempt.outcome,
         "http_status": attempt.http_status,
-        "received_at": _dt(attempt.received_at),
-        "finished_at": _dt(attempt.finished_at),
+        "received_at": isoformat_or_none(attempt.received_at),
+        "finished_at": isoformat_or_none(attempt.finished_at),
         "error_code": attempt.error_code,
         "error_message": attempt.error_message,
     }
@@ -91,7 +88,7 @@ def _signing_secret_payload():
     return {
         "configured": evidence["configured"],
         "verified_by_delivery": evidence["verified_by_delivery"],
-        "latest_verified_at": _dt(evidence["latest_verified_at"]),
+        "latest_verified_at": isoformat_or_none(evidence["latest_verified_at"]),
     }
 
 

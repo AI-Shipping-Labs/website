@@ -17,7 +17,7 @@ from email_app.services.email_log_history import (
     recipient_user_map,
 )
 from studio.decorators import staff_required
-from studio.utils import coerce_page_number
+from studio.utils import coerce_page_number, studio_pager_querystring
 
 EMAIL_LOG_PAGE_SIZE = 50
 
@@ -29,12 +29,6 @@ def _parse_date(raw):
         return datetime.date.fromisoformat(raw)
     except (TypeError, ValueError):
         return None
-
-
-def _pager_url(request, page_number):
-    params = request.GET.copy()
-    params["page"] = str(page_number)
-    return "?" + params.urlencode()
 
 
 @staff_required
@@ -95,17 +89,21 @@ def email_log_list(request):
         "page": page,
         "paginator": paginator,
         "show_pager": paginator.num_pages > 1,
-        "pager_first_url": _pager_url(request, 1) if page.has_previous() else None,
+        "pager_first_url": (
+            studio_pager_querystring(request, 1)
+            if page.has_previous() else None
+        ),
         "pager_prev_url": (
-            _pager_url(request, page.previous_page_number())
+            studio_pager_querystring(request, page.previous_page_number())
             if page.has_previous() else None
         ),
         "pager_next_url": (
-            _pager_url(request, page.next_page_number())
+            studio_pager_querystring(request, page.next_page_number())
             if page.has_next() else None
         ),
         "pager_last_url": (
-            _pager_url(request, paginator.num_pages) if page.has_next() else None
+            studio_pager_querystring(request, paginator.num_pages)
+            if page.has_next() else None
         ),
         "page_start_index": page.start_index(),
         "page_end_index": page.end_index(),

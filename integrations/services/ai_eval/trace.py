@@ -22,6 +22,8 @@ type + safe message for errors -- none of which carry credentials.
 
 import json
 
+from integrations.services.llm import TraceSink
+
 # The #799 ``LLMResult`` per-call token counter fields. Raw provider
 # values: already measured per completion, never summed across calls, and
 # NOT inclusive of each other (Anthropic ``input_tokens`` excludes cache
@@ -35,7 +37,7 @@ _TOKEN_FIELDS = (
 )
 
 
-class FileTraceSink:
+class FileTraceSink(TraceSink):
     """Concrete ``TraceSink`` capturing one run to ``trace.json``.
 
     Compatible with either callable's ``TraceSink`` contract. Construct it

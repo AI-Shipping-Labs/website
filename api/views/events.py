@@ -24,7 +24,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.services.timezones import is_valid_timezone
 from api.openapi import openapi_spec
-from api.safety import error_response
+from api.safety import error_response, read_only_field_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
@@ -433,15 +433,6 @@ def serialize_event(event):
         "created_at": isoformat_or_none(event.created_at),
         "updated_at": isoformat_or_none(event.updated_at),
     }
-
-
-def _read_only_field_response(field):
-    return error_response(
-        f"{field} is read-only",
-        "read_only_field",
-        status=422,
-        details={"field": field},
-    )
 
 
 def _parse_iso_datetime(value):
@@ -1124,7 +1115,7 @@ def events_collection(request):
 
     for field in sorted(READ_ONLY_FIELDS):
         if field in data:
-            return _read_only_field_response(field)
+            return read_only_field_response(field)
 
     values, errors = _collect_event_values(data, existing=None)
     host_ids, host_errors = _validate_host_ids(data)
@@ -1402,7 +1393,7 @@ def event_detail(request, slug):
 
     for field in sorted(READ_ONLY_FIELDS):
         if field in data:
-            return _read_only_field_response(field)
+            return read_only_field_response(field)
 
     values, errors = _collect_event_values(data, existing=event)
     host_ids, host_errors = _validate_host_ids(data)

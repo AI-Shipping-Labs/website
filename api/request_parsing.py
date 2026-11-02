@@ -1,12 +1,48 @@
 """Shared query-parameter parsers for JSON API views."""
 
-from datetime import datetime
+from datetime import date, datetime
+
+from django.utils.dateparse import parse_datetime
 
 from accounts.lifecycle import ACCOUNT_LIFECYCLE_VALUES
 from api.safety import error_response
 
 LIMIT_DEFAULT = 50
 LIMIT_MAX = 200
+
+
+def normalize_emails(raw):
+    """Trim, lowercase, and deduplicate emails while preserving input order."""
+    seen = set()
+    normalized = []
+    for email in raw:
+        if not isinstance(email, str):
+            continue
+        cleaned = email.strip().lower()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return normalized
+
+
+def parse_iso_date(raw):
+    """Parse an ISO date string, returning ``None`` when it is invalid."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def coerce_datetime(value):
+    """Parse an ISO datetime string and pass through other datetime values."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        return parse_datetime(value)
+    return value
 
 
 def parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit", maximum=LIMIT_MAX):

@@ -349,7 +349,7 @@ class CourseEnrollmentsPermissionDisciplineTest(TestCase):
     """Ensure the view module never reads ``is_staff`` directly.
 
     Mirrors the discipline check applied to ``api/views/interview_notes.py``
-    in #433: only ``api/views/_permissions.py`` may inspect that
+    in #433: only ``api.permissions`` may inspect that
     attribute. Other view modules go through ``bearer_is_admin``.
     """
 

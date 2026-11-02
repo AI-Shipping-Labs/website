@@ -36,6 +36,7 @@ from events.services.event_merge import (
     find_duplicate_event_pairs,
     merge_duplicate_events,
 )
+from studio.actors import studio_actor_label
 from studio.decorators import staff_required
 
 # Salt + TTL for the preview->confirm signed token.
@@ -61,10 +62,6 @@ def _verify_pair(token, canonical_pk, duplicate_pk):
         payload.get("canonical_pk") == canonical_pk
         and payload.get("duplicate_pk") == duplicate_pk
     )
-
-
-def _actor_label(request):
-    return f"studio:{request.user.email}"
 
 
 def _candidate_rows():
@@ -139,7 +136,7 @@ def event_duplicates_preview(request):
         plan = merge_duplicate_events(
             canonical,
             duplicate,
-            actor_label=_actor_label(request),
+            actor_label=studio_actor_label(request),
             actor=request.user,
             dry_run=True,
         )
@@ -178,7 +175,7 @@ def event_duplicates_confirm(request):
         plan = merge_duplicate_events(
             canonical,
             duplicate,
-            actor_label=_actor_label(request),
+            actor_label=studio_actor_label(request),
             actor=request.user,
             dry_run=False,
         )

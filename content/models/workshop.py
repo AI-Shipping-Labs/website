@@ -25,6 +25,7 @@ from content.access import (
     get_user_level,
 )
 from content.models.mixins import (
+    PreviewTokenMixin,
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
@@ -131,6 +132,7 @@ class Workshop(
     SyncedContentIdentityMixin,
     SourceMetadataMixin,
     TimestampedModelMixin,
+    PreviewTokenMixin,
     models.Model,
 ):
     """A multi-page workshop with an optional linked recording.
@@ -317,10 +319,6 @@ class Workshop(
             'workshop_preview',
             kwargs={'preview_token': self.preview_token},
         )
-
-    def regenerate_preview_token(self):
-        self.preview_token = uuid.uuid4()
-        self.save(update_fields=['preview_token'])
 
     def get_studio_edit_url(self):
         return f'/studio/workshops/{self.pk}/edit'

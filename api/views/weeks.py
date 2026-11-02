@@ -16,10 +16,10 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required, token_required_any_user
 from api.openapi import openapi_spec
+from api.permissions import plan_for_write, week_for_write
 from api.safety import error_response
 from api.serializers.plans import serialize_week, serialize_week_note
 from api.utils import parse_json_body, require_methods
-from api.views._permissions import visible_plans_for
 from plans.models import Week, WeekNote
 
 _WEEK_EXAMPLE = {
@@ -41,40 +41,6 @@ _WEEK_NOTE_EXAMPLE = {
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
-
-
-def _load_plan_for_write(user, plan_id):
-    """Return the plan if the bearer can write to it, else an error response."""
-    plan = visible_plans_for(user).filter(pk=plan_id).first()
-    if plan is None:
-        return None, error_response(
-            "Plan not found",
-            "unknown_plan",
-            status=404,
-        )
-    return plan, None
-
-
-def _load_week_for_write(user, week_id):
-    """Return the week if the bearer can write to its plan, else an error."""
-    week = (
-        Week.objects.select_related("plan", "plan__member")
-        .filter(pk=week_id)
-        .first()
-    )
-    if week is None:
-        return None, error_response(
-            "Week not found",
-            "unknown_week",
-            status=404,
-        )
-    if not visible_plans_for(user).filter(pk=week.plan_id).exists():
-        return None, error_response(
-            "Week not found",
-            "unknown_week",
-            status=404,
-        )
-    return week, None
 
 
 @token_required
@@ -135,7 +101,7 @@ def _load_week_for_write(user, week_id):
 )
 def plan_weeks_collection(request, plan_id):
     """``GET / POST /api/plans/<plan_id>/weeks/``."""
-    plan, err = _load_plan_for_write(request.user, plan_id)
+    plan, err = plan_for_write(request.user, plan_id)
     if err is not None:
         return err
 
@@ -252,7 +218,7 @@ def plan_weeks_collection(request, plan_id):
 )
 def week_detail(request, week_id):
     """``PATCH / DELETE /api/weeks/<week_id>/``."""
-    week, err = _load_week_for_write(request.user, week_id)
+    week, err = week_for_write(request.user, week_id)
     if err is not None:
         return err
 
@@ -370,7 +336,7 @@ def week_detail(request, week_id):
 )
 def week_note_detail(request, week_id):
     """``GET / PUT / PATCH / DELETE /api/weeks/<week_id>/note``."""
-    week, err = _load_week_for_write(request.user, week_id)
+    week, err = week_for_write(request.user, week_id)
     if err is not None:
         return err
 

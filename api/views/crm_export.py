@@ -51,6 +51,10 @@ from accounts.lifecycle import account_lifecycle_q
 from accounts.models.email_alias import EmailAlias
 from accounts.utils.tags import normalize_tag, user_ids_with_exact_tag
 from api.openapi import openapi_spec
+from api.permissions import (
+    visible_interview_notes_for,
+    visible_plans_for,
+)
 from api.request_parsing import (
     parse_account_lifecycle,
     parse_limit,
@@ -68,10 +72,6 @@ from api.serializers.onboarding import serialize_response
 from api.serializers.plans import serialize_interview_note, serialize_plan_detail
 from api.serializers.users import serialize_user_state
 from api.utils import require_methods
-from api.views._permissions import (
-    visible_interview_notes_for,
-    visible_plans_for,
-)
 from community.models import STATUS_BOOKED, BookedCall
 from content.access import get_active_overrides_by_user
 from crm.models import CRMRecord

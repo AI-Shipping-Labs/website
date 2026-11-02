@@ -2,11 +2,11 @@
 
 The visibility gate is the security-critical part of this issue. This
 module composes every read against ``visible_interview_notes_for`` from
-``api/views/_permissions.py`` -- it does NOT inspect any user attribute
+``api.permissions`` -- it does NOT inspect any user attribute
 directly. A test in ``api/tests/test_interview_notes.py`` reads this
 file as plain text and asserts the gate-related attribute name does not
 appear here. Every staff-or-not branch goes through a helper exported
-from ``_permissions.py``.
+from ``api.permissions``.
 
 Endpoints:
 
@@ -28,17 +28,17 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
+from api.permissions import (
+    bearer_sees_internal_notes,
+    visible_interview_notes_for,
+    visible_plans_for,
+)
 from api.safety import error_response
 from api.serializers.plans import serialize_interview_note
 from api.utils import (
     delete_not_available_response,
     parse_json_body,
     require_methods,
-)
-from api.views._permissions import (
-    bearer_sees_internal_notes,
-    visible_interview_notes_for,
-    visible_plans_for,
 )
 from plans.models import (
     KIND_CHOICES,
@@ -80,10 +80,9 @@ _INTERVIEW_NOTE_EXAMPLE = {
 
 
 # All staff-or-not branches in this module go through
-# ``bearer_sees_internal_notes`` from ``_permissions.py``. There is no
-# local privilege check; ``api/views/_permissions.py`` is the single
-# place in ``api/views/`` that may inspect user attributes for staff
-# resolution.
+# ``bearer_sees_internal_notes`` from ``api.permissions``. There is no
+# local privilege check; ``api/permissions.py`` is the single place that
+# may inspect user attributes for staff resolution.
 
 
 def _validated_tags(data):

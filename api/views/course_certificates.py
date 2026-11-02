@@ -28,15 +28,15 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.course_lookup import get_published_course
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin
 from api.safety import error_response
 from api.utils import (
     delete_not_available_response,
     parse_json_body,
     require_methods,
 )
-from api.views._permissions import bearer_is_admin
-from content.models import Course
 from content.models.peer_review import CourseCertificate, ProjectSubmission
 
 _CERTIFICATE_EXAMPLE = {
@@ -68,10 +68,6 @@ def _serialize_certificate(cert):
         'submission_id': cert.submission_id,
         'issued_at': cert.issued_at.isoformat() if cert.issued_at else None,
     }
-
-
-def _get_published_course(slug):
-    return Course.objects.filter(slug=slug, status='published').first()
 
 
 def _validate_pdf_url(pdf_url):
@@ -174,7 +170,7 @@ def course_certificates_collection(request, slug):
             status=403,
         )
 
-    course = _get_published_course(slug)
+    course = get_published_course(slug)
     if course is None:
         return error_response(
             'Course not found', 'unknown_course', status=404,

@@ -32,6 +32,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.slack_config import (
@@ -78,33 +79,6 @@ def _serialize_ingest_run(run):
         ),
         "error": run.error,
     }
-
-
-def _parse_limit(raw):
-    """Parse the ``limit`` query param, returning ``(value, error_response)``.
-
-    Absent/empty -> the default. Non-integer or ``< 1`` -> a 422
-    ``validation_error``. Values above ``LIMIT_MAX`` are clamped silently.
-    """
-    if raw is None or raw == "":
-        return LIMIT_DEFAULT, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None, error_response(
-            f"Invalid integer: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": "limit", "value": raw},
-        )
-    if value < 1:
-        return None, error_response(
-            "limit must be a positive integer",
-            "validation_error",
-            status=422,
-            details={"field": "limit", "value": raw},
-        )
-    return min(value, LIMIT_MAX), None
 
 
 def _parse_since(value):
@@ -272,7 +246,11 @@ def plan_sprints_ingest(request):
 
 def _list_ingest_runs(request):
     """GET — return the most recent ingest runs newest-first with counts."""
-    limit, err = _parse_limit(request.GET.get("limit"))
+    limit, err = parse_limit(
+        request.GET.get("limit"),
+        default=LIMIT_DEFAULT,
+        maximum=LIMIT_MAX,
+    )
     if err is not None:
         return err
 

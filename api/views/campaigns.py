@@ -17,7 +17,7 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
-from api.safety import error_response
+from api.safety import error_response, read_only_field_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
@@ -210,15 +210,6 @@ def _serialize_campaign(campaign):
         "delivery_counts": campaign_delivery_counts(campaign),
         "created_at": isoformat_or_none(campaign.created_at),
     }
-
-
-def _read_only_field_response(field):
-    return error_response(
-        f"{field} is read-only",
-        "read_only_field",
-        status=422,
-        details={"field": field},
-    )
 
 
 def _collect_campaign_values(data, *, existing=None):
@@ -497,7 +488,7 @@ def campaigns_collection(request):
             # Silently overwritten below; see contract above.
             continue
         if field in data:
-            return _read_only_field_response(field)
+            return read_only_field_response(field)
 
     values, errors = _collect_campaign_values(data, existing=None)
     if errors:
@@ -632,7 +623,7 @@ def campaign_detail(request, campaign_id):
         if field == "status":
             continue
         if field in data:
-            return _read_only_field_response(field)
+            return read_only_field_response(field)
 
     values, errors = _collect_campaign_values(data, existing=campaign)
     if errors:

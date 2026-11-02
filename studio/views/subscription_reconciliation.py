@@ -21,6 +21,7 @@ from payments.models import (
 )
 from payments.services import subscription_reconciliation as _recon
 from payments.services.monthly_payment_grace import _effective_tier
+from payments.stripe_dashboard import stripe_dashboard_url
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
@@ -63,12 +64,6 @@ _EVIDENCE_LABELS = {
     Finding.WEBHOOK_MISSING: "Deletion webhook missing",
     Finding.WEBHOOK_NOT_APPLICABLE: "",
 }
-
-
-def _stripe_url(account_id, resource, object_id):
-    if not account_id or not object_id:
-        return ""
-    return f"https://dashboard.stripe.com/{account_id}/{resource}/{object_id}"
 
 
 @staff_required
@@ -129,10 +124,10 @@ def subscription_reconciliation_report(request):
             ),
             "action_label": _ACTION_LABELS.get(f.action, f.action),
             "evidence_label": _EVIDENCE_LABELS.get(f.webhook_evidence, ""),
-            "customer_url": _stripe_url(
+            "customer_url": stripe_dashboard_url(
                 stripe_account_id, "customers", f.stripe_customer_id,
             ),
-            "subscription_url": _stripe_url(
+            "subscription_url": stripe_dashboard_url(
                 stripe_account_id, "subscriptions", f.stripe_subscription_id,
             ),
         })
@@ -150,13 +145,13 @@ def subscription_reconciliation_report(request):
                     else "free"
                 ),
                 "effective_tier": effective.slug if effective else "free",
-                "customer_url": _stripe_url(
+                "customer_url": stripe_dashboard_url(
                     stripe_account_id, "customers", grace.stripe_customer_id,
                 ),
-                "subscription_url": _stripe_url(
+                "subscription_url": stripe_dashboard_url(
                     stripe_account_id, "subscriptions", grace.stripe_subscription_id,
                 ),
-                "invoice_url": _stripe_url(
+                "invoice_url": stripe_dashboard_url(
                     stripe_account_id, "invoices", grace.stripe_invoice_id,
                 ),
             })

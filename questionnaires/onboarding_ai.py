@@ -35,7 +35,7 @@ from community_base.questionnaires.persona_catalog import render_persona_catalog
 from pydantic import BaseModel, Field
 
 from integrations.services import llm
-from integrations.services.llm import LLMError
+from integrations.services.llm import LLMError, TraceSink
 
 # The system prompt is versioned via this module-level constant so #809
 # can diff prompt revisions across stored runs.
@@ -331,29 +331,6 @@ class OnboardingTurnResult(BaseModel):
     is_complete: bool = False
     extraction: OnboardingExtraction | None = None
     answers: list[ExtractedAnswer] | None = None
-
-
-class TraceSink:
-    """No-op trace sink; the default when ``trace`` is omitted.
-
-    The #809 eval runner subclasses this (or passes any object with the
-    same methods) to capture each run's system prompt, the messages sent,
-    the raw ``LLMResult``, the tool spec / tool input, latency, and the
-    parsed output. Every hook defaults to doing nothing so production
-    runs stay silent.
-    """
-
-    def on_request(self, *, system, messages, tool):
-        """Called just before ``llm.complete`` with the rendered request."""
-
-    def on_result(self, *, result, latency_seconds):
-        """Called after ``llm.complete`` returns, with the raw result."""
-
-    def on_parsed(self, *, parsed):
-        """Called after the tool input validates into an extraction."""
-
-    def on_error(self, *, error):
-        """Called when the LLM call or parsing/validation fails."""
 
 
 # Internal persona names that must never appear in member-facing text.

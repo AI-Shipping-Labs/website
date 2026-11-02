@@ -32,12 +32,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+from api.request_parsing import parse_iso_date
 from email_app.models import EmailCampaign
 from email_app.models.ses_event import SesEvent
 from email_app.services.email_log_history import canonical_addresses, utc_date_bounds
 from email_app.services.ses_identity import event_identity_summary
 from studio.decorators import staff_required
-from studio.utils import coerce_page_number
+from studio.utils import coerce_page_number, studio_pager_querystring
 
 # Meta filter values used by the type chips. ``TYPE_FILTER_ALL`` is the
 # no-op filter; ``TYPE_FILTER_OTHER`` maps to the bucket of event types
@@ -81,22 +82,6 @@ EVENT_TYPE_PILL_DEFAULT = 'bg-secondary text-muted-foreground'
 # Page size for the SES events list. PM ruling: 50 rows, same as
 # ``/studio/users/`` so the canonical pager partial reads consistently.
 SES_EVENT_PAGE_SIZE = 50
-
-
-def _parse_iso_date(raw):
-    """Parse an ISO ``YYYY-MM-DD`` date or return ``None`` on garbage.
-
-    Invalid input is silently ignored per the spec — operators do not want
-    a 422 on a typo when they're in the middle of triage. ``None`` is also
-    returned for blank strings so the caller can keep the no-filter branch
-    one ``if`` away.
-    """
-    if not raw:
-        return None
-    try:
-        return datetime.date.fromisoformat(raw)
-    except (TypeError, ValueError):
-        return None
 
 
 def _normalize_type_filter(raw):
@@ -144,19 +129,6 @@ def _apply_filters(queryset, *, search, type_filter, bounce_type,
         queryset = queryset.filter(identity).distinct()
 
     return queryset
-
-
-def _pager_querystring(request, page_number):
-    """Build ``?...&page=N`` preserving every other request param.
-
-    Mirrors ``studio.views.users._pager_querystring`` so the canonical
-    pager partial keeps every chip / search / date filter alive across
-    navigation. The leading ``?`` is included so the template can drop
-    the value straight into ``href``.
-    """
-    params = request.GET.copy()
-    params['page'] = str(page_number)
-    return '?' + params.urlencode()
 
 
 def _summary_window_start():
@@ -245,8 +217,8 @@ def ses_event_list(request):
     bounce_subtype = request.GET.get('bounce_subtype', '').strip()
     raw_campaign_id = request.GET.get('campaign', '').strip()
     raw_user_id = request.GET.get('user', '').strip()
-    since = _parse_iso_date(request.GET.get('since', ''))
-    until = _parse_iso_date(request.GET.get('until', ''))
+    since = parse_iso_date(request.GET.get('since', ''))
+    until = parse_iso_date(request.GET.get('until', ''))
     campaign = _campaign_context(raw_campaign_id)
     identity_user = None
     if raw_user_id:
@@ -294,14 +266,18 @@ def ses_event_list(request):
         })
 
     if page.has_previous():
-        first_url = _pager_querystring(request, 1)
-        prev_url = _pager_querystring(request, page.previous_page_number())
+        first_url = studio_pager_querystring(request, 1)
+        prev_url = studio_pager_querystring(
+            request, page.previous_page_number(),
+        )
     else:
         first_url = None
         prev_url = None
     if page.has_next():
-        next_url = _pager_querystring(request, page.next_page_number())
-        last_url = _pager_querystring(request, paginator.num_pages)
+        next_url = studio_pager_querystring(
+            request, page.next_page_number(),
+        )
+        last_url = studio_pager_querystring(request, paginator.num_pages)
     else:
         next_url = None
         last_url = None

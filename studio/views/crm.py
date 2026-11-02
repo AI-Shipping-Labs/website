@@ -601,12 +601,6 @@ def crm_calls(request):
         for call in page.object_list
     ]
 
-    def pager_url(target_page):
-        params = request.GET.copy()
-        params["page"] = target_page
-        query = params.urlencode()
-        return f"?{query}" if query else request.path
-
     return render(
         request,
         "studio/crm/calls_list.html",
@@ -615,8 +609,16 @@ def crm_calls(request):
             "search": search,
             "paginator": paginator,
             "page": page,
-            "crm_calls_pager_previous_url": (pager_url(page.previous_page_number()) if page.has_previous() else None),
-            "crm_calls_pager_next_url": (pager_url(page.next_page_number()) if page.has_next() else None),
+            "crm_calls_pager_previous_url": (
+                studio_pager_querystring(request, page.previous_page_number())
+                if page.has_previous()
+                else None
+            ),
+            "crm_calls_pager_next_url": (
+                studio_pager_querystring(request, page.next_page_number())
+                if page.has_next()
+                else None
+            ),
         },
     )
 

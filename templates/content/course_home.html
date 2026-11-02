@@ -24,7 +24,7 @@
         {% include "curriculum/includes/syllabus_search.html" with search_id="course-home-syllabus-search" results_id="course-home-syllabus-results" search_submit_url=course_syllabus_search_url search_input_class="mt-2 block w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" search_label_class="sr-only" search_status_class="sr-only" %}
         {% endwith %}
         <div hidden aria-hidden="true">
-          {% include "content/_course_syllabus.html" with section="home_search_index" %}
+          {% include "content/_course_syllabus_search_index.html" %}
         </div>
       </section>
       {% if current_module %}

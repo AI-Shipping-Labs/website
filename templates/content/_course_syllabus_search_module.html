@@ -1,0 +1,42 @@
+{% load access_tags curriculum_tags %}
+{% with children=module.children.all %}
+<div data-cb-syllabus-search-section>
+  <h3 data-cb-syllabus-search-heading>{{ module.title }}</h3>
+  {% if children %}
+    {% for child in children|required_only %}
+      {% with inline_units=child|inline_course_units:course.slug %}
+        {% if inline_units %}
+          {% for unit in inline_units|visible_course_units:self_paced_view %}
+            <a href="{{ unit.get_absolute_url }}" data-cb-syllabus-search-item data-search-title="{{ unit.title }}">{{ unit.title }}</a>
+          {% endfor %}
+        {% else %}
+          {% include "content/_course_syllabus_search_module.html" with module=child course=course projects_by_module=projects_by_module self_paced_view=self_paced_view %}
+        {% endif %}
+      {% endwith %}
+    {% endfor %}
+    {% for child in children|bonus_only %}
+      {% with inline_units=child|inline_course_units:course.slug %}
+        {% if inline_units %}
+          {% for unit in inline_units|visible_course_units:self_paced_view %}
+            <a href="{{ unit.get_absolute_url }}" data-cb-syllabus-search-item data-search-title="{{ unit.title }}">{{ unit.title }}</a>
+          {% endfor %}
+        {% else %}
+          {% include "content/_course_syllabus_search_module.html" with module=child course=course projects_by_module=projects_by_module self_paced_view=self_paced_view %}
+        {% endif %}
+      {% endwith %}
+    {% endfor %}
+  {% else %}
+    {% for unit in module.units.all|visible_course_units:self_paced_view|required_only %}
+      <a href="{{ unit.get_absolute_url }}" data-cb-syllabus-search-item data-search-title="{{ unit.title }}">{{ unit.title }}</a>
+    {% endfor %}
+    {% for unit in module.units.all|visible_course_units:self_paced_view|bonus_only %}
+      <a href="{{ unit.get_absolute_url }}" data-cb-syllabus-search-item data-search-title="{{ unit.title }}">{{ unit.title }}</a>
+    {% endfor %}
+  {% endif %}
+  {% with module_projects=projects_by_module|dict_get:module.id %}
+    {% for project in module_projects %}
+      <a href="{% url 'course_project_submit' slug=course.slug attempt_slug=project.slug %}" data-cb-syllabus-search-item data-search-title="{{ project.title }}">{{ project.title }}</a>
+    {% endfor %}
+  {% endwith %}
+</div>
+{% endwith %}

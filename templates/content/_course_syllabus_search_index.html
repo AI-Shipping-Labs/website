@@ -1,0 +1,5 @@
+<div data-cb-syllabus-browse>
+  {% for module in modules %}
+    {% include "content/_course_syllabus_search_module.html" with module=module course=course projects_by_module=projects_by_module self_paced_view=self_paced_view %}
+  {% endfor %}
+</div>

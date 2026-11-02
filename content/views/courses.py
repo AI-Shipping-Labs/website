@@ -136,13 +136,17 @@ def _course_projects_for_cohort(projects, cohort):
     return [project for project in projects if project.cohort_id == cohort.pk]
 
 
-def _course_home_projects_by_module(course, cohort, user, self_paced_view):
+def _course_home_projects_by_module(
+    course, cohort, user, self_paced_view, *, include_reviews=True,
+):
     projects = list(
         cohort_projects(course, cohort).select_related('cohort', 'module')
     )
-    submitted_ids = set(ProjectSubmission.objects.filter(
-        user=user, course_project__in=projects,
-    ).values_list('course_project_id', flat=True))
+    submitted_ids = set()
+    if include_reviews:
+        submitted_ids = set(ProjectSubmission.objects.filter(
+            user=user, course_project__in=projects,
+        ).values_list('course_project_id', flat=True))
     projects_by_module = {}
     for project in projects:
         project.hide_dates = self_paced_view
@@ -805,45 +809,53 @@ def course_home(request, slug, section='home'):
             )
 
     if section in ('home', 'syllabus'):
-        # Home renders the syllabus hidden as its search index; the syllabus tab
-        # renders the same module context directly.
+        # Home keeps only course-authored titles and links for its hidden
+        # client-side search index; the syllabus tab needs learner annotations.
         modules = course.get_syllabus()
-        # Issue #1916: same homework row meta as the public syllabus; a staff
-        # cohort preview shows the question count but no learner status.
-        annotate_homework_rows(
-            modules, request.user, cohort,
-            include_status=not context['is_cohort_preview'],
-        )
-        completed_unit_ids, completed_counts = completed_units_by_module(
-            request.user, course, modules, self_paced_view,
-            raw_completed_ids=raw_completed_ids,
-        )
-        projects_by_module = _course_home_projects_by_module(
-            course, cohort, request.user, self_paced_view,
-        )
-        schedule_cohort = None if self_paced_view else cohort
-        unit_deadlines, module_deadline_summaries = build_deadline_context(course, schedule_cohort)
-        context.update({
-            'modules': modules,
-            'has_access': True,
-            'completed_unit_ids': completed_unit_ids,
-            'completed_count_by_module': completed_counts,
-            'projects_by_module': projects_by_module,
-            'preview_project_ids': set(),
-            'module_week_ranges': {
-                module_id: course_unit_service.format_week_range(*week_range)
-                for module_id, week_range in course_unit_service.build_module_week_dates(
-                    modules, cohort,
-                    extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
-                ).items()
-            },
-            'unit_deadlines': unit_deadlines,
-            'module_deadline_summaries': module_deadline_summaries,
-            'schedule_cohort': schedule_cohort,
-            'schedule_is_preview': context['is_cohort_preview'],
-            'schedule_timezone': schedule_timezone_name(course, request.user),
-            'schedule_can_localize': should_use_browser_timezone(request.user),
-        })
+        context['modules'] = modules
+        if section == 'home':
+            context['projects_by_module'] = _course_home_projects_by_module(
+                course, cohort, request.user, self_paced_view,
+                include_reviews=False,
+            )
+        else:
+            # Issue #1916: the visible syllabus needs question counts and
+            # learner status; the hidden Home index does not.
+            annotate_homework_rows(
+                modules, request.user, cohort,
+                include_status=not context['is_cohort_preview'],
+            )
+            completed_unit_ids, completed_counts = completed_units_by_module(
+                request.user, course, modules, self_paced_view,
+                raw_completed_ids=raw_completed_ids,
+            )
+            projects_by_module = _course_home_projects_by_module(
+                course, cohort, request.user, self_paced_view,
+            )
+            schedule_cohort = None if self_paced_view else cohort
+            unit_deadlines, module_deadline_summaries = build_deadline_context(
+                course, schedule_cohort,
+            )
+            context.update({
+                'has_access': True,
+                'completed_unit_ids': completed_unit_ids,
+                'completed_count_by_module': completed_counts,
+                'projects_by_module': projects_by_module,
+                'preview_project_ids': set(),
+                'module_week_ranges': {
+                    module_id: course_unit_service.format_week_range(*week_range)
+                    for module_id, week_range in course_unit_service.build_module_week_dates(
+                        modules, cohort,
+                        extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
+                    ).items()
+                },
+                'unit_deadlines': unit_deadlines,
+                'module_deadline_summaries': module_deadline_summaries,
+                'schedule_cohort': schedule_cohort,
+                'schedule_is_preview': context['is_cohort_preview'],
+                'schedule_timezone': schedule_timezone_name(course, request.user),
+                'schedule_can_localize': should_use_browser_timezone(request.user),
+            })
     if section == 'announcements':
         page, paginator = paginate_member_announcements(
             published_queryset(course), request.GET.get('page'),

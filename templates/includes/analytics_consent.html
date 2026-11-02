@@ -82,8 +82,8 @@
     function csrfToken() {
       var token = panel.getAttribute('data-csrf-token');
       if (token) return Promise.resolve(token);
-      // Decided visitors get cacheable pages without a CSRF cookie/token.
-      // Reopening preferences must still allow granting or revoking consent.
+      // Public pages omit per-visitor tokens so their HTML stays cacheable.
+      // Fetch one only when a visitor grants or revokes consent.
       return fetch('/api/analytics/consent/csrf', {
         cache: 'no-store', credentials: 'same-origin',
       })

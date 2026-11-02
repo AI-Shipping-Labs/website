@@ -7,6 +7,9 @@ contract; the request-side (cache-key) half lives in the aws-infra
 CloudFront cache policy + viewer-request function.
 """
 
+import json
+
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 
@@ -135,13 +138,14 @@ class PublicCachePolicyIntegrationTest(TestCase):
         )
         self.assertEqual(len(response.cookies), 0)
 
-    def test_human_first_visit_home_sets_csrf_cookie_and_is_no_store(self):
-        # Interactive first visits still get the consent csrftoken; the
-        # middleware must then mark the response uncacheable.
+    def test_human_first_visit_home_is_publicly_cacheable_without_csrf_cookie(self):
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'home.html')
-        self.assertIn('csrftoken', response.cookies)
-        self.assertEqual(response['Cache-Control'], 'private, no-store')
+        self.assertNotIn('csrftoken', response.cookies)
+        self.assertEqual(
+            response['Cache-Control'], 'public, max-age=0, s-maxage=300',
+        )
+        self.assertEqual(response.context['analytics_consent_csrf_token'], '')
 
     def test_login_page_is_no_store(self):
         response = self.client.get('/accounts/login/')
@@ -170,8 +174,13 @@ class ConsentCsrfTokenForInteractiveClientsTest(TestCase):
     def test_anonymous_headless_chrome_can_post_consent(self):
         client = Client(enforce_csrf_checks=True)
         page = client.get('/', HTTP_USER_AGENT=self.HEADLESS_CHROME_UA)
-        token = page.context['analytics_consent_csrf_token']
-        self.assertIn('csrftoken', page.cookies)
+        self.assertEqual(page.context['analytics_consent_csrf_token'], '')
+        self.assertNotIn('csrftoken', page.cookies)
+
+        token_response = client.get('/api/analytics/consent/csrf')
+        token = token_response.json()['csrf_token']
+        self.assertIn('csrftoken', token_response.cookies)
+        self.assertIn('no-store', token_response['Cache-Control'])
 
         response = client.post(
             '/api/analytics/consent',
@@ -184,6 +193,34 @@ class ConsentCsrfTokenForInteractiveClientsTest(TestCase):
         self.assertEqual(
             response.cookies[ANALYTICS_CONSENT_COOKIE].value, 'denied',
         )
+
+    @override_settings(PUBLIC_PAGE_CACHE_ENABLED=True)
+    def test_cached_consent_page_uses_on_demand_token_for_each_visitor(self):
+        cache.clear()
+        visitors = [
+            Client(enforce_csrf_checks=True),
+            Client(enforce_csrf_checks=True),
+        ]
+        csrf_tokens = []
+        for client in visitors:
+            page = client.get('/')
+            self.assertEqual(
+                page['Cache-Control'], 'public, max-age=0, s-maxage=300',
+            )
+            self.assertNotIn('csrftoken', page.cookies)
+            self.assertContains(page, 'data-csrf-token=""')
+            token_response = client.get('/api/analytics/consent/csrf')
+            csrf_tokens.append(token_response.json()['csrf_token'])
+            self.assertIn('csrftoken', token_response.cookies)
+        self.assertNotEqual(csrf_tokens[0], csrf_tokens[1])
+        for client, token in zip(visitors, csrf_tokens):
+            response = client.post(
+                '/api/analytics/consent',
+                data=json.dumps({'consent': 'denied'}),
+                content_type='application/json',
+                HTTP_X_CSRFTOKEN=token,
+            )
+            self.assertEqual(response.status_code, 200)
 
     def test_crawler_ua_with_session_still_gets_consent_token(self):
         # A session request is never edge-cacheable, so withholding the

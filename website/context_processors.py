@@ -19,7 +19,6 @@ from content.nav_availability import (
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
 from payments.models import Membership
-from website.middleware import is_web_crawler_user_agent
 from website.search_indexing import (
     dev_serving_disabled,
     request_indexing_disabled,
@@ -35,15 +34,13 @@ _ASLAB_AID_COOKIE = 'aslab_aid'
 
 
 def _skip_consent_csrf_token(request):
-    """True when the consent csrftoken would only cost CDN cacheability.
+    """Defer consent tokens on sessionless pages so HTML remains cacheable.
 
-    That is a fetch-only crawler with no session: its response could be
-    edge-cached, and it never POSTs the consent banner. Everyone else
-    (humans, headless browser automation, any session request) gets it.
+    The consent UI fetches a CSRF token only after a visitor makes a
+    choice. Requests with a session may render other user-specific forms,
+    so they keep the token in the page.
     """
-    if request.COOKIES.get(settings.SESSION_COOKIE_NAME):
-        return False
-    return is_web_crawler_user_agent(request.headers.get('User-Agent', ''))
+    return not request.COOKIES.get(settings.SESSION_COOKIE_NAME)
 
 
 def _validated_aslab_anon_id(request):
@@ -452,15 +449,10 @@ def site_context(request):
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': google_analytics_id,
         'analytics_consent_state': consent_state,
-        # get_token() forces the csrftoken Set-Cookie onto the response.
-        # Consent POSTs read it from the cookie / banner attribute, so it
-        # is only needed when the banner can actually show (consent
-        # undecided). Decided visitors fetch a token on demand when saving
-        # reopened preferences, keeping these pages CDN-cacheable.
-        # See PublicCachePolicyMiddleware. Only fetch-only crawlers
-        # without a session skip it for the same reason; a session
-        # request is never CDN-cacheable anyway, and headless browser
-        # automation submits forms just like a human visitor.
+        # Sessionless public HTML can be shared across viewers, so never
+        # embed a per-visitor consent token in it. The consent UI fetches
+        # one from /api/analytics/consent/csrf only when the visitor acts.
+        # Session requests keep the token for user-specific forms.
         'analytics_consent_csrf_token': (
             ''
             if _skip_consent_csrf_token(request) or consent_state

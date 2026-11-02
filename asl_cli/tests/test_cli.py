@@ -743,3 +743,68 @@ def test_sync_webhook_secret_fails_closed_on_blank_secret(monkeypatch):
     result = CliRunner().invoke(cli, ["sync", "webhook-secret", "wiki"])
     assert result.exit_code == 1
     assert "No webhook secret configured" in result.output + (result.stderr or "")
+
+
+def test_events_create_surfaces_banner_error(monkeypatch):
+    client = RecordingEventsClient()
+    client.post_results.append({
+        "id": 67,
+        "slug": "aishl-workshop-tracing",
+        "banner_error": (
+            "Banner generator is not configured; no banner was generated."
+        ),
+    })
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(cli, [
+        "events", "create",
+        "--title", "Tracing",
+        "--start-datetime", "2026-11-04T12:00:00+01:00",
+    ])
+
+    assert result.exit_code == 0, result.output
+    combined = result.output + (result.stderr or "")
+    assert "WARNING: banner generation did not run" in combined
+    assert "Banner generator is not configured" in combined
+
+
+def test_events_create_reports_enqueued_banner_task(monkeypatch):
+    client = RecordingEventsClient()
+    client.post_results.append({"id": 68, "slug": "evals", "banner_task_id": "task-9"})
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(cli, [
+        "events", "create",
+        "--title", "Evals",
+        "--start-datetime", "2026-11-11T12:00:00+01:00",
+    ])
+
+    assert result.exit_code == 0, result.output
+    combined = result.output + (result.stderr or "")
+    assert "Banner render enqueued (task task-9)." in combined
+    assert "WARNING" not in combined
+
+
+class BannerPatchingEventsClient(RecordingEventsClient):
+    def patch(self, path, *, json_body=None):
+        self.calls.append(("PATCH", path, json_body))
+        return {
+            "slug": "aishl-workshop-tracing",
+            "banner_error": (
+                "Banner generator is not configured; no banner was generated."
+            ),
+        }
+
+
+def test_events_update_surfaces_banner_error(monkeypatch):
+    client = BannerPatchingEventsClient()
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(cli, [
+        "events", "update", "aishl-workshop-tracing",
+        "--title", "Tracing",
+    ])
+
+    assert result.exit_code == 0, result.output
+    combined = result.output + (result.stderr or "")
+    assert "WARNING: banner generation did not run" in combined

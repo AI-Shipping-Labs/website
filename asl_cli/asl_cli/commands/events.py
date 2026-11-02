@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from asl_cli.commands._banner_notice import warn_banner_result
 from asl_cli.commands._shared import (
     TIER_HELP,
     TierLevel,
@@ -225,7 +226,9 @@ def events_create(fmt, **kwargs):
         body["host_ids"] = _split_csv_int(body["host_ids"])
     _validate_timestamps_option(body)
     _normalize_event_series(body)
-    emit(get_client().post(f"{API}/events", json_body=body), fmt)
+    payload = get_client().post(f"{API}/events", json_body=body)
+    warn_banner_result(payload)
+    emit(payload, fmt)
 
 
 @events.command("update")
@@ -288,7 +291,9 @@ def events_update(slug, recap_notes_file, fmt, **kwargs):
         body["host_ids"] = _split_csv_int(body["host_ids"])
     _validate_timestamps_option(body)
     _normalize_event_series(body)
-    emit(get_client().patch(f"{API}/events/{slug}", json_body=body), fmt)
+    payload = get_client().patch(f"{API}/events/{slug}", json_body=body)
+    warn_banner_result(payload)
+    emit(payload, fmt)
 
 
 @events.command("regenerate-banner")

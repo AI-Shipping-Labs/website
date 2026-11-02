@@ -31,7 +31,14 @@ def claim_and_enqueue_campaign(campaign_id, *, source, actor=None):
         campaign.status = 'sending'
         campaign.sent_count = 0
         campaign.sent_at = None
-        campaign.save(update_fields=['status', 'sent_count', 'sent_at'])
+        # Claiming the send consumes any pending schedule (manual send beats
+        # the dispatcher; the due-scan filter also only picks drafts).
+        campaign.scheduled_at = None
+        campaign.scheduled_timezone = None
+        campaign.save(update_fields=[
+            'status', 'sent_count', 'sent_at', 'scheduled_at',
+            'scheduled_timezone',
+        ])
         task_kwargs = {"campaign_id": campaign.pk}
         if actor is not None:
             task_kwargs["released_by_id"] = actor.pk

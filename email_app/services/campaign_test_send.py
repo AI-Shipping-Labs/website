@@ -1,5 +1,7 @@
 """Recipient context for explicit Studio campaign test sends."""
 
+import uuid
+
 from accounts.models import User
 from email_app.models import EmailCampaign
 from email_app.services.campaign_message import (
@@ -16,6 +18,33 @@ TEST_EMAIL_FOOTER_NOTE = (
 
 class CampaignTestRecipientError(ValueError):
     """A controlled recipient does not meet a re-permission test's policy."""
+
+
+def send_test_campaign_delivery(message, campaign_id):
+    """Deliver one prepared test message through Relay v2.
+
+    Shared transport for the Studio and API test-send surfaces. Each call
+    gets a fresh idempotency key so repeated operator probes are never
+    deduplicated away by Relay.
+    """
+    from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
+
+    idempotency_key = f"campaign-test-{campaign_id}-{message.recipient}-{uuid.uuid4().hex}"
+    metadata = {
+        "campaign_id": campaign_id,
+        "is_test_send": True,
+        "recipient": message.recipient,
+    }
+    return send_campaign_delivery_to_relay(
+        recipient_email=message.recipient,
+        subject=message.subject,
+        body_markdown=message.body_markdown,
+        idempotency_key=idempotency_key,
+        unsubscribe_url=message.unsubscribe_url,
+        verify_email_url=message.verify_email_url,
+        footer_note=message.footer_note,
+        metadata=metadata,
+    )
 
 
 def _repermission_message(campaign, user, subject):

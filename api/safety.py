@@ -25,11 +25,14 @@ def error_response(message, code, status=400, details=None):
     return JsonResponse(data, status=status)
 
 
-def read_only_field_response(field):
+def read_only_field_response(field, *, hint=None):
     """Return the standard validation error for an attempted read-only write."""
+    details = {"field": field}
+    if hint:
+        details["hint"] = hint
     return error_response(
         f"{field} is read-only",
         "read_only_field",
         status=422,
-        details={"field": field},
+        details=details,
     )

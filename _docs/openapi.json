@@ -1706,6 +1706,8 @@
                       },
                       "id": 1,
                       "is_archived": false,
+                      "scheduled_at": null,
+                      "scheduled_timezone": null,
                       "sent_at": null,
                       "sent_count": 0,
                       "slack_filter": "any",
@@ -1751,7 +1753,7 @@
         ]
       },
       "post": {
-        "description": "Creates an ``EmailCampaign`` row in ``draft`` status. Sending stays a deliberate Studio action -- this API intentionally has no ``/send`` route. Read-only fields (``id``, ``status``, ``sent_at``, ``sent_count``, ``created_at``) in the body are rejected with 422 ``read_only_field``; ``status`` in the body is silently overwritten to ``draft`` so detail round-trips keep working.",
+        "description": "Creates an ``EmailCampaign`` row in ``draft`` status. This collection never sends: dispatch actions (schedule, send, test-send) live on the per-campaign action routes. Read-only fields (``id``, ``status``, ``sent_at``, ``sent_count``, ``created_at``, ``scheduled_at``, ``scheduled_timezone``) in the body are rejected with 422 ``read_only_field``; ``status`` in the body is silently overwritten to ``draft`` so detail round-trips keep working.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1842,6 +1844,8 @@
                   },
                   "id": 1,
                   "is_archived": false,
+                  "scheduled_at": null,
+                  "scheduled_timezone": null,
                   "sent_at": null,
                   "sent_count": 0,
                   "slack_filter": "any",
@@ -2034,6 +2038,8 @@
                   },
                   "id": 1,
                   "is_archived": false,
+                  "scheduled_at": null,
+                  "scheduled_timezone": null,
                   "sent_at": null,
                   "sent_count": 0,
                   "slack_filter": "any",
@@ -2163,6 +2169,8 @@
                   },
                   "id": 1,
                   "is_archived": false,
+                  "scheduled_at": null,
+                  "scheduled_timezone": null,
                   "sent_at": null,
                   "sent_count": 0,
                   "slack_filter": "any",
@@ -2461,6 +2469,357 @@
           }
         },
         "summary": "Retry a campaign recipient",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/schedule": {
+      "post": {
+        "description": "Sets the dispatch time on a draft campaign. The server claims and sends the campaign at that time via the every-minute scheduled dispatcher; the schedule is cleared when the send is claimed (by the dispatcher or a manual Studio send). ``scheduled_at`` accepts an ISO 8601 datetime; a naive value is interpreted in ``scheduled_timezone`` (required then), an aware value may carry ``scheduled_timezone`` for display when the offset matches. Rescheduling an already-scheduled draft simply overwrites the fields.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "scheduled_at": "2026-11-05T10:00:00",
+                "scheduled_timezone": "Europe/Berlin"
+              },
+              "schema": {
+                "properties": {
+                  "scheduled_at": {
+                    "description": "ISO 8601 datetime, naive or offset-aware; must be in the future.",
+                    "example": "2026-11-05T10:00:00",
+                    "type": "string"
+                  },
+                  "scheduled_timezone": {
+                    "description": "IANA timezone name for naive datetimes and display (e.g. \"Europe/Berlin\").",
+                    "example": "Europe/Berlin",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "scheduled_at"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "scheduled_at": "2026-11-05T09:00:00+00:00",
+                  "scheduled_timezone": "Europe/Berlin",
+                  "status": "draft"
+                }
+              }
+            },
+            "description": "Campaign schedule state."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "campaign_not_draft",
+                  "error": "Campaign is sent; only draft campaigns can be scheduled."
+                }
+              }
+            },
+            "description": "Campaign is not a draft (schedule actions apply to drafts only)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "scheduled_at": "Must be in the future."
+                  },
+                  "error": "Validation error"
+                }
+              }
+            },
+            "description": "Validation error (bad datetime, unknown timezone, past time)."
+          }
+        },
+        "summary": "Schedule a draft campaign for sending",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/send": {
+      "post": {
+        "description": "Claims the draft (exactly-once, same path as Studio's send button and the scheduled dispatcher) and enqueues the fan-out. Any pending schedule is consumed. A campaign that is not a draft answers 409 ``campaign_not_draft`` with its current status; clients should require explicit operator confirmation (``asl campaigns send`` gates on ``--yes``).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 1,
+                  "claimed": true,
+                  "status": "sending",
+                  "task_id": "purple-otter-delivers"
+                }
+              }
+            },
+            "description": "Campaign claimed and queued for sending."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "campaign_not_draft",
+                  "error": "Campaign is sent; no second send was queued."
+                }
+              }
+            },
+            "description": "Campaign is not a draft; no second send was queued."
+          }
+        },
+        "summary": "Send a draft campaign now",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/test-send": {
+      "post": {
+        "description": "Delivers one explicit probe recipient without changing the campaign draft, status, or audience. Mirrors Studio's test send, including the re-permission policy for ``unverified_only`` campaigns. Unknown or invalid addresses answer 422; policy or transport failures answer 502 ``campaign_test_send_failed``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "alice@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "email": {
+                    "description": "Exactly one recipient address.",
+                    "example": "alice@example.com",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "email"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 1,
+                  "relay_message_id": "ses-message-id",
+                  "status": "accepted"
+                }
+              }
+            },
+            "description": "Test email accepted by Relay."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "email": "Must be a valid email address."
+                  },
+                  "error": "Validation error"
+                }
+              }
+            },
+            "description": "Missing or invalid recipient email."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "campaign_test_send_failed",
+                  "error": "Campaign test send failed."
+                }
+              }
+            },
+            "description": "Test delivery failed (policy or transport boundary)."
+          }
+        },
+        "summary": "Send a campaign test email",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/unschedule": {
+      "post": {
+        "description": "Clears the schedule on a draft campaign so the dispatcher never claims it. Refuses with 409 when the campaign is not scheduled or is no longer a draft (already sending/sent).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": 1,
+                  "scheduled_at": "2026-11-05T09:00:00+00:00",
+                  "scheduled_timezone": "Europe/Berlin",
+                  "status": "draft"
+                }
+              }
+            },
+            "description": "Campaign schedule state."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_campaign",
+                  "error": "Campaign not found"
+                }
+              }
+            },
+            "description": "Campaign not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "campaign_not_draft",
+                  "error": "Campaign is sent; only draft campaigns can be scheduled."
+                }
+              }
+            },
+            "description": "Campaign is not a draft (schedule actions apply to drafts only)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "scheduled_at": "Must be in the future."
+                  },
+                  "error": "Validation error"
+                }
+              }
+            },
+            "description": "Validation error (bad datetime, unknown timezone, past time)."
+          }
+        },
+        "summary": "Cancel a scheduled campaign send",
         "tags": [
           "Campaigns"
         ]

@@ -166,6 +166,29 @@ class EmailCampaign(models.Model):
             'API callers flip this via PATCH; there is no DELETE endpoint.'
         ),
     )
+    # Issue: asl campaign scheduling. ``scheduled_at`` holds the dispatch
+    # instant (normalized to UTC in the database); ``scheduled_timezone``
+    # keeps the IANA name the operator expressed the time in (e.g.
+    # "Europe/Berlin") for display. The dispatcher clears both when the
+    # campaign is claimed for sending, so a non-draft campaign never looks
+    # scheduled.
+    scheduled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'When the dispatcher should claim and send this draft campaign. '
+            'Null = not scheduled.'
+        ),
+    )
+    scheduled_timezone = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text=(
+            'IANA timezone name the schedule was expressed in, for display '
+            '(e.g. "Europe/Berlin").'
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

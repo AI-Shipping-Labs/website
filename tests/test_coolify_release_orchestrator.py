@@ -257,7 +257,7 @@ class ReleaseOrchestrationTest(SimpleTestCase):
             lambda _url: SHA,
         )
 
-        with self.assertRaisesMessage(ReleaseError, "source-runtime-not-exact"):
+        with self.assertRaisesMessage(ReleaseError, "source-status-not-ready"):
             deployer.deploy(timeout=0.001, interval=0.001)
         self.assertNotIn(
             ("PATCH", f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}"),

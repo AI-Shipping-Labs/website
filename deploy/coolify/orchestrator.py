@@ -17,13 +17,14 @@ from .contracts import (
 )
 from .errors import ReleaseError
 from .public_readiness import public_endpoints_ready
+from .source_readiness import (
+    SourceReadinessWaiter,
+)
 from .verification import (
     application_deployment_uuid,
-    boot_evidence_ready,
     diagnostics_cutoff,
     exact_deployment_finished,
     service_request_accepted,
-    source_boot_receipt,
     wait_for_consecutive,
     wait_until,
     web_application_ready,
@@ -171,21 +172,22 @@ class ReleaseDeployer:
             raise ReleaseError("concurrent-source-environment-edit")
 
     def _wait_for_source(self, plan, cutoff, cutoff_value, timeout, interval):
-        receipt = None
-
-        def source_ready():
-            nonlocal receipt
-            service = self._verify_source_persisted(plan)
-            if not service_runtime_ready(service, self.config.image, plan.runtime_names):
-                return False
-            diagnostics = self.diagnostics.call("GET", "/api/diagnostics/boot-timing")
-            if not boot_evidence_ready(diagnostics, self.config.sha, cutoff):
-                return False
-            receipt = source_boot_receipt(diagnostics, self.config.sha, cutoff_value)
-            return True
-
-        wait_until(source_ready, timeout, interval, "source-runtime-not-exact")
-        return receipt
+        waiter = SourceReadinessWaiter(
+            self._verify_source_persisted,
+            self.diagnostics,
+            self.config,
+            plan,
+            cutoff,
+            cutoff_value,
+        )
+        wait_until(
+            waiter.probe,
+            timeout,
+            interval,
+            "source-runtime-not-exact",
+            timeout_message=waiter.timeout_message,
+        )
+        return waiter.receipt
 
     def _deploy_web(self, plan, timeout, interval):
         self._guard_web_unchanged(plan)

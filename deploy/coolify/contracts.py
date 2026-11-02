@@ -267,16 +267,32 @@ def verify_persisted_compose(service, expected_raw, image, names):
             raise ReleaseError(f"persisted-image-mismatch role={name}")
 
 
-def service_runtime_ready(service, image, names):
+def _runtime_issue(condition, name, observed, expected):
+    return {
+        "condition": condition,
+        "role": name,
+        "observed": observed,
+        "expected": expected,
+    }
+
+
+def service_runtime_issues(service, image, names):
     if _aisl_application_names(service) != names:
         raise ReleaseError("runtime-application-inventory-mismatch")
-    applications = {}
-    for item in service.get("applications") or []:
-        applications[item.get("name")] = item
-    for name in names:
-        app = applications.get(name)
-        if not app or app.get("image") != image:
-            return False
+    applications = {item.get("name"): item for item in service.get("applications") or []}
+    issues = []
+    for name in sorted(names):
+        app = applications[name]
+        if app.get("image") != image:
+            issues.append(_runtime_issue("image-mismatch", name, app.get("image"), image))
         if app.get("status") != "running:healthy":
-            return False
-    return True
+            issues.append(
+                _runtime_issue(
+                    "status-not-ready", name, app.get("status"), "running:healthy"
+                )
+            )
+    return tuple(issues)
+
+
+def service_runtime_ready(service, image, names):
+    return not service_runtime_issues(service, image, names)

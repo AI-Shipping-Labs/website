@@ -32,17 +32,73 @@ def diagnostics_cutoff(payload):
     return parse_timestamp(payload.get("generated_at"), "generated_at")
 
 
-def boot_evidence_ready(payload, sha, cutoff):
+def boot_evidence_issues(payload, sha, cutoff):
     generated = diagnostics_cutoff(payload)
     if generated + timedelta(seconds=2) < cutoff:
         raise ReleaseError("diagnostics-clock-regressed")
+    issues = []
     for role in REQUIRED_ROLES:
-        evidence = payload.get(role)
-        if evidence is None:
-            return False
-        if not _role_evidence_ready(evidence, role, sha, cutoff, generated):
-            return False
-    return True
+        issue = _boot_evidence_issue(payload.get(role), role, sha, cutoff, generated)
+        if issue is not None:
+            issues.append(issue)
+            break
+    return tuple(issues)
+
+
+def _boot_evidence_issue(evidence, role, sha, cutoff, generated):
+    if evidence is None:
+        return {
+            "condition": "missing",
+            "role": role,
+            "expected_tag": sha,
+            "cutoff": cutoff.isoformat(),
+        }
+    if not isinstance(evidence, dict):
+        raise ReleaseError(f"invalid-boot-evidence role={role}")
+    observed_role = evidence.get("role")
+    observed_tag = evidence.get("tag")
+    if observed_role != role or observed_tag != sha:
+        return _not_current_evidence_issue(evidence, role, sha, cutoff)
+    recorded_at = evidence.get("recorded_at")
+    recorded = parse_timestamp(recorded_at, f"{role}.recorded_at")
+    if recorded <= cutoff:
+        return _stale_evidence_issue(
+            role, observed_role, observed_tag, recorded_at, sha, cutoff
+        )
+    if recorded > generated + timedelta(seconds=2):
+        raise ReleaseError(f"future-boot-evidence role={role}")
+    total = (evidence.get("phases") or {}).get("total")
+    if isinstance(total, bool) or not isinstance(total, (int, float)) or total <= 0:
+        raise ReleaseError(f"invalid-boot-total role={role}")
+    return None
+
+
+def _not_current_evidence_issue(evidence, role, sha, cutoff):
+    return {
+        "condition": "not-current",
+        "role": role,
+        "observed_role": evidence.get("role"),
+        "observed_tag": evidence.get("tag"),
+        "recorded_at": evidence.get("recorded_at"),
+        "expected_tag": sha,
+        "cutoff": cutoff.isoformat(),
+    }
+
+
+def _stale_evidence_issue(role, observed_role, observed_tag, recorded_at, sha, cutoff):
+    return {
+        "condition": "stale",
+        "role": role,
+        "observed_role": observed_role,
+        "observed_tag": observed_tag,
+        "recorded_at": recorded_at,
+        "expected_tag": sha,
+        "cutoff": cutoff.isoformat(),
+    }
+
+
+def boot_evidence_ready(payload, sha, cutoff):
+    return not boot_evidence_issues(payload, sha, cutoff)
 
 
 def source_boot_receipt(payload, sha, cutoff_value):
@@ -60,22 +116,6 @@ def source_boot_receipt(payload, sha, cutoff_value):
             }
         )
     return {"cutoff": cutoff_value, "roles": proofs}
-
-
-def _role_evidence_ready(evidence, role, sha, cutoff, generated):
-    if not isinstance(evidence, dict):
-        raise ReleaseError(f"invalid-boot-evidence role={role}")
-    if evidence.get("role") != role or evidence.get("tag") != sha:
-        return False
-    recorded = parse_timestamp(evidence.get("recorded_at"), f"{role}.recorded_at")
-    if recorded <= cutoff:
-        return False
-    if recorded > generated + timedelta(seconds=2):
-        raise ReleaseError(f"future-boot-evidence role={role}")
-    total = (evidence.get("phases") or {}).get("total")
-    if isinstance(total, bool) or not isinstance(total, (int, float)) or total <= 0:
-        raise ReleaseError(f"invalid-boot-total role={role}")
-    return True
 
 
 def service_request_accepted(payload, service_uuid):
@@ -131,7 +171,15 @@ def web_application_ready(app, app_uuid, image, require_healthy=True):
     return True
 
 
-def wait_until(probe, timeout, interval, reason, clock=None, sleeper=None):
+def wait_until(
+    probe,
+    timeout,
+    interval,
+    reason,
+    clock=None,
+    sleeper=None,
+    timeout_message=None,
+):
     clock = clock or time.monotonic
     sleeper = sleeper or time.sleep
     deadline = clock() + timeout
@@ -139,7 +187,10 @@ def wait_until(probe, timeout, interval, reason, clock=None, sleeper=None):
         if probe():
             return
         if clock() >= deadline:
-            raise ReleaseError(f"verification-timeout reason={reason}")
+            message = f"verification-timeout reason={reason}"
+            if timeout_message is not None:
+                message = timeout_message()
+            raise ReleaseError(message)
         sleeper(min(interval, max(0, deadline - clock())))
 
 

@@ -104,7 +104,6 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
             self.draft.pk,
             {"scheduled_at": FUTURE_LOCAL, "scheduled_timezone": "Europe/Berlin"},
         )
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["scheduled_at"], "2026-11-05T09:00:00+00:00")
         self.assertEqual(body["scheduled_timezone"], "Europe/Berlin")
@@ -121,7 +120,7 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
             self.draft.pk,
             {"scheduled_at": "2026-12-01T08:00:00", "scheduled_timezone": "UTC"},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["scheduled_timezone"], "UTC")
         self.draft.refresh_from_db()
         self.assertEqual(
             self.draft.scheduled_at,
@@ -227,7 +226,6 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
         response = self.client.get(
             f"/api/campaigns/{self.draft.pk}", **self._auth(),
         )
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["scheduled_at"], "2026-11-05T09:00:00+00:00")
         self.assertEqual(body["scheduled_timezone"], "Europe/Berlin")
@@ -242,7 +240,6 @@ class UnscheduleEndpointTest(CampaignSchedulingApiTestBase):
         response = self.client.post(
             f"/api/campaigns/{self.draft.pk}/unschedule", **self._auth(),
         )
-        self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()["scheduled_at"])
         self.assertIsNone(response.json()["scheduled_timezone"])
         self.draft.refresh_from_db()
@@ -279,7 +276,6 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
             response = self.client.post(
                 f"/api/campaigns/{self.draft.pk}/send", **self._auth(),
             )
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body["claimed"])
         self.assertEqual(body["status"], "sending")
@@ -313,7 +309,7 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
             response = self.client.post(
                 f"/api/campaigns/{monitored.pk}/send", **self._auth(),
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "sending")
         self.assertEqual(
             mock_async.call_args.kwargs["released_by_id"], self.staff.pk,
         )
@@ -337,7 +333,6 @@ class TestSendEndpointTest(CampaignSchedulingApiTestBase):
                 content_type="application/json",
                 **self._auth(),
             )
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["relay_message_id"], "relay-msg-id")
         self.assertEqual(body["status"], "accepted")

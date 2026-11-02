@@ -451,6 +451,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_campaign_recount',
         'studio_campaign_send',
         'studio_campaign_test_send',
+        'studio_campaign_unschedule',
         'studio_campaign_wave_release',
     )),
     ('communication', 'email_templates', (

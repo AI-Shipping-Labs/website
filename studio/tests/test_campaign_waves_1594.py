@@ -98,7 +98,7 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
         self.assertIn("preview-only", preview_call["context"]["body_markdown"])
 
     @patch(
-        "studio.views.campaigns.send_campaign_delivery_to_relay",
+        "studio.views.campaigns.send_test_campaign_delivery",
         return_value="relay-test",
     )
     def test_test_send_requires_existing_user_and_uses_real_consent_renderer(self, send):
@@ -123,12 +123,12 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
             response, reverse("studio_campaign_detail", args=[campaign.pk]),
         )
         self.assertEqual(send.call_count, 1)
-        payload = send.call_args.kwargs
-        self.assertEqual(payload["recipient_email"], controlled.email)
-        self.assertEqual(payload["subject"], "[TEST] Confirm your subscription")
-        self._assert_repermission_context(payload)
-        self.assertIsNotNone(payload["unsubscribe_url"])
-        self.assertEqual(payload["metadata"]["recipient"], controlled.email)
+        message = send.call_args.args[0]
+        self.assertEqual(send.call_args.args[1], campaign.pk)
+        self.assertEqual(message.recipient, controlled.email)
+        self.assertEqual(message.subject, "[TEST] Confirm your subscription")
+        self._assert_repermission_context({"body_markdown": message.body_markdown})
+        self.assertIsNotNone(message.unsubscribe_url)
 
         controlled.email_verified = True
         controlled.save(update_fields=["email_verified"])

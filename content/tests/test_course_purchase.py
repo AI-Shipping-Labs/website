@@ -282,7 +282,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
-    """Local one-time course checkout endpoint is hard-deprecated."""
+    """The retired local one-time course checkout route stays absent."""
 
     def setUp(self):
         self.client = Client()
@@ -294,28 +294,14 @@ class ApiCoursePurchaseTest(TierSetupMixin, TestCase):
             stripe_price_id='price_buy_me',
         )
 
-    def test_returns_410(self):
+    def test_purchase_route_returns_not_found(self):
         response = self.client.post('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 410)
-        self.assertIn('deprecated', response.json()['error'])
+        self.assertEqual(response.status_code, 404)
 
-    @patch('integrations.config.get_config')
-    def test_response_includes_portal_url_without_calling_stripe(self, mock_config):
-        mock_config.return_value = 'https://billing.example.test/portal'
-        self.client.login(email='buyer@test.com', password='testpass')
-
-        response = self.client.post('/api/courses/buy-me/purchase')
-
-        self.assertEqual(response.status_code, 410)
-        self.assertEqual(
-            response.json()['portal_url'],
-            'https://billing.example.test/portal',
-        )
-
-    def test_get_method_not_allowed(self):
+    def test_get_on_removed_route_returns_not_found(self):
         self.client.login(email='buyer@test.com', password='testpass')
         response = self.client.get('/api/courses/buy-me/purchase')
-        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.status_code, 404)
 
 
 # ============================================================
@@ -618,7 +604,7 @@ class StudioCourseFormIndividualPriceTest(TestCase):
 
 
 class StudioCreateStripeProductTest(TestCase):
-    """Studio Stripe product creation endpoint is hard-deprecated."""
+    """The retired Studio Stripe product creation route stays absent."""
 
     def setUp(self):
         self.client = Client()
@@ -631,45 +617,40 @@ class StudioCreateStripeProductTest(TestCase):
             individual_price_eur=Decimal('39.99'),
         )
 
-    @patch('payments.services._get_stripe_client')
-    def test_create_stripe_product_returns_410_without_calling_stripe(
-        self, mock_get_client,
-    ):
+    def test_create_product_route_returns_not_found(self):
         response = self.client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 410)
-        self.assertIn('deprecated', response.json()['error'])
-        mock_get_client.assert_not_called()
+        self.assertEqual(response.status_code, 404)
 
-    def test_already_has_stripe_product_returns_400(self):
+    def test_existing_product_does_not_restore_removed_route(self):
         self.course.stripe_product_id = 'prod_existing'
         self.course.save()
         response = self.client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.status_code, 404)
 
-    def test_no_individual_price_returns_400(self):
+    def test_missing_price_does_not_restore_removed_route(self):
         course = Course.objects.create(
             title='No Price', slug='no-price-stripe',
         )
         response = self.client.post(
             f'/studio/courses/{course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.status_code, 404)
 
     def test_nonexistent_course_returns_404(self):
         response = self.client.post('/studio/courses/99999/create-stripe-product')
         self.assertEqual(response.status_code, 404)
 
-    def test_get_returns_405(self):
+    def test_get_on_removed_route_returns_not_found(self):
         response = self.client.get(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.status_code, 404)
 
-    def test_non_staff_returns_403(self):
+    def test_non_staff_cannot_reach_removed_route(self):
         User.objects.create_user(
             email='regular@test.com', password='testpass',
         )
@@ -678,15 +659,14 @@ class StudioCreateStripeProductTest(TestCase):
         response = client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
-    def test_anonymous_redirects_to_login(self):
+    def test_anonymous_cannot_reach_removed_route(self):
         client = Client()
         response = client.post(
             f'/studio/courses/{self.course.pk}/create-stripe-product',
         )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+        self.assertEqual(response.status_code, 404)
 
 # ============================================================
 # Course Unit Access with CourseAccess

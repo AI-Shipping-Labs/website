@@ -11,6 +11,12 @@ import requests
 from django.conf import settings
 
 from email_app.relay_transactional import get_sender_fallback_flag
+from email_app.services.email_classification import (
+    get_calendar_fallback_sender,
+    get_calendar_sender,
+    get_sender_for_email_type,
+    relay_sender_id,
+)
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -63,6 +69,66 @@ def check_relay_availability(timeout: float = 3.0) -> tuple[bool, str]:
         return False, f"relay_http_{res.status_code}"
     except requests.RequestException as exc:
         return False, f"relay_unreachable: {exc}"
+
+
+def required_relay_sender_ids() -> list[str]:
+    """Return every sender ID selected by the site's email classification."""
+    sender_addresses = [
+        get_sender_for_email_type("event_registration"),
+        get_sender_for_email_type("campaign"),
+        get_sender_for_email_type("welcome"),
+        get_calendar_sender(),
+        get_calendar_fallback_sender(),
+    ]
+    sender_ids = set()
+    for address in sender_addresses:
+        sender_id = relay_sender_id(address)
+        if sender_id:
+            sender_ids.add(sender_id)
+    return sorted(sender_ids)
+
+
+def _configured_sender_ids(payload) -> set[str] | None:
+    if not isinstance(payload, dict):
+        return None
+    sender_emails = payload.get("sender_emails")
+    if not isinstance(sender_emails, list):
+        return None
+    sender_ids = set()
+    for sender in sender_emails:
+        if isinstance(sender, dict) and isinstance(sender.get("id"), str):
+            sender_ids.add(sender["id"])
+    return sender_ids
+
+
+def check_relay_sender_configuration(timeout: float = 3.0) -> tuple[bool, str]:
+    """Verify every sender used by this site exists in the authenticated Relay client."""
+    is_valid, reason = validate_relay_config()
+    if not is_valid:
+        return False, reason
+    base_url = get_config("RELAY_BASE_URL", getattr(settings, "RELAY_BASE_URL", "")).rstrip("/")
+    api_key = get_config("RELAY_API_KEY", getattr(settings, "RELAY_API_KEY", ""))
+    try:
+        response = requests.get(
+            f"{base_url}/api/client/senders",
+            headers={"Accept": "application/json", "Authorization": f"Bearer {api_key}"},
+            timeout=timeout,
+        )
+    except requests.RequestException as exc:
+        logger.warning("Relay sender preflight unavailable error_type=%s", type(exc).__name__)
+        return False, "relay_sender_check_unavailable"
+    if response.status_code != 200:
+        return False, f"relay_sender_check_http_{response.status_code}"
+    try:
+        configured_ids = _configured_sender_ids(response.json())
+    except (TypeError, ValueError):
+        configured_ids = None
+    if configured_ids is None:
+        return False, "relay_sender_check_invalid_response"
+    missing_ids = sorted(set(required_relay_sender_ids()) - configured_ids)
+    if missing_ids:
+        return False, f"relay_senders_missing:{','.join(missing_ids)}"
+    return True, ""
 
 
 def get_relay_health_status() -> dict[str, Any]:

@@ -32,8 +32,60 @@ registered in Relay. The default is `content@aishippinglabs.com`.
 Sender and iCalendar `ORGANIZER` for event calendar invites (registration,
 series, reschedule, cancellation, calendar feed). Defaults to
 `Alexey Grigorev <alexey@aishippinglabs.com>`. The local part must be a sender
-id registered for the Relay client (`alexey`). Avoid `noreply@`: Gmail only
-auto-adds invites from senders the invitee has interacted with.
+id registered for the Relay client (`alexey`). If Relay returns the specific
+`from_email=not_configured` validation error, event-registration sends retry
+once with the configured promotional sender and the same idempotency key. Other
+Relay errors are not retried. Avoid `noreply@`: Gmail only auto-adds invites
+from senders the invitee has interacted with.
+
+## Calendar sender incident, 2026-11-01
+
+Website commit `b54f14bba` changed the default calendar sender to
+`Alexey Grigorev <alexey@aishippinglabs.com>`, which Relay resolves as sender
+id `alexey`. Relay production client 4 (`aisl-website`) had only the sender IDs
+`noreply`, `content`, and `welcome`; `alexey` was absent. Relay rejected the
+request with HTTP 400:
+
+```json
+{"error":{"code":"validation_error","fields":{"from_email":"not_configured"}}}
+```
+
+The failure matched four production `POST /api/transactional/send` 400 log
+entries at 03:05 UTC and a read-only `dry_run=true` replay of all five failed
+registrations. The affected registrations were 2064–2068 for events 67, 68,
+69, and 70. No messages were accepted between 2026-10-31 16:23 UTC and the
+incident investigation. Separate Relay 404 responses for `template_not_found`
+were not the cause of these registration failures.
+
+Commit `6b5c2a92a` added the narrow fallback: when Relay returns that exact
+400 field error for a calendar sender, the website retries once using `content`
+and the same idempotency key. A warning is logged and the Relay health summary
+reports the fallback for up to 24 hours. Once Relay registers `alexey`, the
+preferred sender succeeds and the fallback is not used.
+
+Before promoting a release, run the sender contract preflight with the target
+environment's Relay credentials:
+
+```bash
+uv run python manage.py check_relay_health --check-ready --check-senders --json
+```
+
+The preflight reads the authenticated Relay client sender policy from
+`GET /api/client/senders` and fails if any sender ID selected by this website
+is missing. It does not change Relay configuration.
+
+For the five failed registrations, the prepared retry command defaults to a
+network-free dry run and reuses the event-registration idempotency keys:
+
+```bash
+uv run python manage.py retry_incident_event_registration_emails
+```
+
+Only run with `--send --approval-note "resend approved by Alexey"` after that
+exact approval note has been added to intake `ca96488a`. The command is limited
+to registrations 2064–2068, skips already accepted deliveries, and refuses any
+record whose registration, delivery state, or event-registration key differs
+from the incident record.
 
 ## RELAY_WELCOME_FROM_EMAIL
 

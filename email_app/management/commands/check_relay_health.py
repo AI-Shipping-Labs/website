@@ -4,7 +4,11 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from email_app.health import check_relay_availability, get_relay_health_status
+from email_app.health import (
+    check_relay_availability,
+    check_relay_sender_configuration,
+    get_relay_health_status,
+)
 
 
 class Command(BaseCommand):
@@ -21,12 +25,26 @@ class Command(BaseCommand):
             action="store_true",
             help="Also probe Relay /health/ready endpoint.",
         )
+        parser.add_argument(
+            "--check-senders",
+            action="store_true",
+            help="Fail if any configured website sender ID is missing from the Relay client.",
+        )
 
     def handle(self, *args, **options):
         status = get_relay_health_status()
         if options["check_ready"] and status["status"] == "ok":
             ready, reason = check_relay_availability()
             if not ready:
+                status["status"] = "FAIL"
+                status["relay_status"] = "FAIL"
+                status["degraded"] = True
+                status["error"] = reason
+
+        if options["check_senders"]:
+            senders_ok, reason = check_relay_sender_configuration()
+            status["sender_check"] = "ok" if senders_ok else "FAIL"
+            if not senders_ok:
                 status["status"] = "FAIL"
                 status["relay_status"] = "FAIL"
                 status["degraded"] = True

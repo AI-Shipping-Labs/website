@@ -200,7 +200,7 @@ class ReplayMavenEventTest(TestCase):
         self.assertFalse(
             MavenEnrollmentEvent.objects.filter(email="http-probe@test.com").exists()
         )
-        build_opener.assert_called_once()
+        self.assertEqual(build_opener.call_count, 1)
 
     def test_http_sends_envelope_payload_unnormalized(self):
         _set_secret()

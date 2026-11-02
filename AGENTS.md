@@ -113,6 +113,8 @@ make test-affected                          # run exactly what the plan emitted
 
 Inner loop while editing: `uv run python manage.py test {touched_app} --parallel 4`, plus `make test-core` for cross-cutting changes.
 
+Tests run in CI (Alexey 2026-11-02, t2558u, intake 178ec5bb): «тесты запускать на CI/CD, пушим, делаем PR, тесты проходят, мерджим». Locally run only targeted unit tests for the modules you touched (`manage.py test app.tests.test_x`). If `affected_tests.py` plans more than a few apps or any `playwright_tests`, do not run `make test-affected`; run your targeted labels and let CI cover the rest. Never run `pytest playwright_tests` locally. Flow: worktree from origin/main, push the branch, open a PR, CI runs the full suite, then `gh pr merge --auto --rebase`.
+
 Do NOT run the full Django suite locally (`make test`, `make test-all`, `make coverage`, or `manage.py test` with no labels). It is ~17,200 tests and starves everything else on the box, for no coverage gain: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours. Run it locally only if Alexey explicitly asks.
 
 See [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) ("Affected-tests selection") for the authoritative escalation table and what to do when the plan looks wrong (fix the map — never widen the run by hand), and [`_docs/testing-operations.md`](_docs/testing-operations.md) ("Affected-tests rule chain and maps") for the rule chain.

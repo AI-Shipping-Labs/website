@@ -520,16 +520,6 @@ def unit_reorder(request, module_id):
 
 
 @staff_required
-@require_POST
-def course_create_stripe_product(request, course_id):
-    """Deprecated: Studio no longer creates one-off Stripe course products."""
-    get_object_or_404(Course, pk=course_id)
-    return JsonResponse({
-        'error': 'Studio Stripe product creation is deprecated. Use membership Payment Links.',
-    }, status=410)
-
-
-@staff_required
 def course_access_list(request, course_id):
     """List all users with individual access to a course."""
     course = get_object_or_404(Course, pk=course_id)

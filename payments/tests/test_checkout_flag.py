@@ -35,13 +35,12 @@ class DeprecatedCheckoutEndpointsTest(TierSetupMixin, TestCase):
     def setUp(self):
         self.client.login(email="flagoff@test.com", password="testpass123")
 
-    def test_course_purchase_endpoint_returns_410(self):
+    def test_course_purchase_endpoint_returns_404(self):
         response = self.client.post(
             f"/api/courses/{self.course.slug}/purchase",
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 410)
-        self.assertIn("deprecated", response.json()["error"])
+        self.assertEqual(response.status_code, 404)
 
 
 class PricingPaymentLinksTest(TierSetupMixin, TestCase):

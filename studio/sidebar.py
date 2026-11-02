@@ -145,7 +145,6 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_course_edit',
         'studio_course_notify',
         'studio_course_announce_slack',
-        'studio_course_create_stripe_product',
         'studio_course_regenerate_banner',
         'studio_course_remove_banner',
         'studio_course_upload_banner',

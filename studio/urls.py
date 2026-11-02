@@ -117,7 +117,6 @@ from studio.views.courses import (
     course_access_grant,
     course_access_list,
     course_access_revoke,
-    course_create_stripe_product,
     course_edit,
     course_instructor_add,
     course_instructor_remove,
@@ -471,7 +470,6 @@ urlpatterns = [
     path('units/<int:unit_id>/edit', unit_edit, name='studio_unit_edit'),
     path('courses/<int:course_id>/notify', course_notify, name='studio_course_notify'),
     path('courses/<int:course_id>/announce-slack', course_announce_slack, name='studio_course_announce_slack'),
-    path('courses/<int:course_id>/create-stripe-product', course_create_stripe_product, name='studio_course_create_stripe_product'),
     path(
         'courses/<int:course_id>/regenerate-banner',
         studio_course_regenerate_banner,
@@ -1609,7 +1607,6 @@ urlpatterns = [
         interview_note_delete,
         name='studio_interview_note_delete',
     ),
-
     # Announcement banner
     path('announcement/', announcement_banner_edit, name='studio_announcement_banner'),
 

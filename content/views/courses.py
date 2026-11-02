@@ -1934,17 +1934,3 @@ def api_cohort_unenroll(request, slug, cohort_id):
     enrollment.delete()
     record_unenrollment(user, course, cohort=cohort, cause=UNENROLL_CAUSE_SELF)
     return JsonResponse({'enrolled': False, 'cohort_id': cohort.pk})
-
-
-# --- Individual course purchase ---
-
-
-@require_POST
-def api_course_purchase(request, slug):
-    """Deprecated: individual course checkout sessions are no longer created locally."""
-    from integrations.config import get_config
-
-    return JsonResponse({
-        'error': 'Local course checkout is deprecated. Use membership payment links.',
-        'portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
-    }, status=410)

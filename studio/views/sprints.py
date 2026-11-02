@@ -468,53 +468,6 @@ def _build_pending_plan_requests(sprint):
     return rows
 
 
-def _build_sprint_member_rows(*, sprint, enrollments, plans):
-    """Merge enrollment and plan rows for the Studio sprint detail page.
-
-    Ordering is intentionally stable for operators: enrolled members stay
-    first in enrollment order, then plan-only rows follow by plan creation
-    date. A plan-only row can happen when staff unenroll a member because
-    unenrollment keeps the plan.
-    """
-    rows_by_user_id = {}
-
-    for index, enrollment in enumerate(enrollments):
-        rows_by_user_id[enrollment.user_id] = {
-            'member': enrollment.user,
-            'enrollment': enrollment,
-            'plan': None,
-            'create_plan_url': (
-                reverse('studio_plan_create')
-                + '?'
-                + urlencode({
-                    'user': enrollment.user_id,
-                    'sprint': sprint.pk,
-                })
-            ),
-            'sort_group': 0,
-            'sort_index': index,
-        }
-
-    for index, plan in enumerate(plans):
-        row = rows_by_user_id.get(plan.member_id)
-        if row is None:
-            rows_by_user_id[plan.member_id] = {
-                'member': plan.member,
-                'enrollment': None,
-                'plan': plan,
-                'create_plan_url': '',
-                'sort_group': 1,
-                'sort_index': index,
-            }
-        else:
-            row['plan'] = plan
-
-    return sorted(
-        rows_by_user_id.values(),
-        key=lambda row: (row['sort_group'], row['sort_index'], row['member'].pk),
-    )
-
-
 def _attach_accountability_context(sprint, rows, enrollments):
     partners_by_user = accountability_partners_by_user(sprint)
     enrolled_users = [enrollment.user for enrollment in enrollments]

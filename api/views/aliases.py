@@ -16,7 +16,7 @@ Conventions mirror ``api/views/users.py`` / ``api/views/tier_overrides.py``:
 ``token_required`` (staff-only JSON 401), ``error_response`` envelope,
 ``@openapi_spec`` coverage, ``transaction.atomic`` around the write + audit
 insert, and one ``CommunityAuditLog`` row per write attributed to the token
-via ``_actor_label`` -- including idempotent no-ops (the operator's attempt
+via ``actor_label`` -- including idempotent no-ops (the operator's attempt
 is itself auditable).
 """
 
@@ -30,22 +30,13 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.models import EmailAlias
 from accounts.services.email_resolution import normalize_email
+from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
 
 User = get_user_model()
-
-
-def _actor_label(request):
-    """Short label identifying the API caller (mirrors ``api/views/users.py``)."""
-    token = getattr(request, "auth_token", None)
-    if token is None:
-        return "unknown"
-    if token.name:
-        return token.name
-    return token.key_prefix
 
 
 def _find_user(email):
@@ -189,7 +180,7 @@ def user_aliases_add(request, email):
     normalized = normalize_email(raw_alias)
     note = data.get("note")
     note = "" if note is None else str(note)
-    actor = _actor_label(request)
+    actor = actor_label(request)
 
     with transaction.atomic():
         # Collision guard 1: the alias must not be an existing primary login.
@@ -278,7 +269,7 @@ def user_aliases_remove(request, email, alias_email):
         return _user_not_found_response()
 
     normalized = normalize_email(alias_email)
-    actor = _actor_label(request)
+    actor = actor_label(request)
 
     with transaction.atomic():
         # Only remove an alias owned by THIS user. An alias routing to a

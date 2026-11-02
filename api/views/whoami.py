@@ -3,7 +3,7 @@
 ``token_required`` already enforces a staff-owned token, so a 200 response
 is itself the staff proof. The body carries only the owner email. Role flags
 are deliberately not inspected or reported here: visibility gating composes
-in ``api/views/_permissions.py``, and the interview-notes sweep test forbids
+in ``api.permissions``, and the interview-notes sweep test forbids
 that attribute name in view modules.
 """
 

@@ -9,7 +9,7 @@ import time
 from pydantic import BaseModel, Field
 
 from integrations.services import llm
-from integrations.services.llm import LLMError
+from integrations.services.llm import LLMError, TraceSink
 
 SYSTEM_PROMPT = (
     'You are a sprint-planning assistant for AI Shipping Labs staff. A member '
@@ -89,20 +89,6 @@ class FirstSprintDraftInput(BaseModel):
     recent_activity: list[RecentActivity] = Field(default_factory=list)
     crm_summary: str = ''
     crm_next_steps: str = ''
-
-
-class TraceSink:
-    def on_request(self, *, system, messages, tool):
-        """Called before the LLM request."""
-
-    def on_result(self, *, result, latency_seconds):
-        """Called after the LLM request."""
-
-    def on_parsed(self, *, parsed):
-        """Called after structured output validation."""
-
-    def on_error(self, *, error):
-        """Called when the call or parse fails."""
 
 
 def _render_answers(answers):

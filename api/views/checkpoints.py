@@ -25,14 +25,14 @@ The move endpoint is the hot path for #434's drag-drop UI. It guarantees:
 from django.db import transaction
 from django.db.models import F, Max
 from django.http import JsonResponse
-from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from api.openapi import openapi_spec
+from api.permissions import visible_plans_for, week_for_write
+from api.request_parsing import coerce_datetime
 from api.safety import error_response
 from api.serializers.plans import serialize_checkpoint
 from api.utils import parse_json_body, require_methods, token_or_session_required
-from api.views._permissions import visible_plans_for
 from plans.models import Checkpoint, Week
 
 _CHECKPOINT_EXAMPLE = {
@@ -55,18 +55,6 @@ def _blank_description_error():
     )
 
 
-def _coerce_datetime(value):
-    """Accept either an ISO string (parsed) or None. Returns the parsed
-    datetime, ``None``, or the original value if it is already a
-    ``datetime`` (callers from bulk import sometimes pre-parse).
-    """
-    if value is None or value == "":
-        return None
-    if isinstance(value, str):
-        return parse_datetime(value)
-    return value
-
-
 def _checkpoint_ids_for_week(week_id):
     """Ordered list of checkpoint ids for a week (used by move envelope)."""
     return list(
@@ -74,28 +62,6 @@ def _checkpoint_ids_for_week(week_id):
         .order_by("position", "id")
         .values_list("id", flat=True)
     )
-
-
-def _load_week_for_write(user, week_id):
-    """Return ``(week, error_response)`` for a write to a week's plan."""
-    week = (
-        Week.objects.select_related("plan")
-        .filter(pk=week_id)
-        .first()
-    )
-    if week is None:
-        return None, error_response(
-            "Week not found",
-            "unknown_week",
-            status=404,
-        )
-    if not visible_plans_for(user).filter(pk=week.plan_id).exists():
-        return None, error_response(
-            "Week not found",
-            "unknown_week",
-            status=404,
-        )
-    return week, None
 
 
 def _load_checkpoint_for_write(user, checkpoint_id):
@@ -181,7 +147,7 @@ def week_checkpoints_create(request, week_id):
     ``position`` we append. With ``position`` at a non-end value, shift
     existing siblings down by 1 inside a transaction.
     """
-    week, err = _load_week_for_write(request.user, week_id)
+    week, err = week_for_write(request.user, week_id)
     if err is not None:
         return err
 
@@ -230,7 +196,7 @@ def week_checkpoints_create(request, week_id):
             week=week,
             description=description,
             position=position,
-            done_at=_coerce_datetime(data.get("done_at")),
+            done_at=coerce_datetime(data.get("done_at")),
         )
 
     return JsonResponse(serialize_checkpoint(cp), status=201)
@@ -327,7 +293,7 @@ def checkpoint_detail(request, checkpoint_id):
         cp.description = data["description"] or ""
         update_fields.append("description")
     if "done_at" in data:
-        cp.done_at = _coerce_datetime(data["done_at"])
+        cp.done_at = coerce_datetime(data["done_at"])
         update_fields.append("done_at")
 
     if "position" in data:

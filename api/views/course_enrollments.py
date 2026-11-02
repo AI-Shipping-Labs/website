@@ -27,13 +27,14 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from accounts.services.email_resolution import resolve_users_by_emails
+from api.course_lookup import get_published_course
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin
+from api.request_parsing import normalize_emails
 from api.safety import error_response
 from api.serializers.enrollments import serialize_course_enrollment
 from api.utils import parse_json_body, require_methods
-from api.views._permissions import bearer_is_admin
 from content.access import can_access
-from content.models import Course
 from content.models.enrollment import SOURCE_ADMIN, Enrollment
 from content.services.course_cohorts import (
     assign_cohort_enrollment,
@@ -53,26 +54,6 @@ _ENROLLMENT_EXAMPLE = {
 }
 
 User = get_user_model()
-
-
-def _normalize_emails(raw):
-    """Trim, lowercase, deduplicate while preserving input order."""
-    seen = set()
-    out = []
-    for email in raw:
-        if not isinstance(email, str):
-            continue
-        cleaned = email.strip().lower()
-        if not cleaned or cleaned in seen:
-            continue
-        seen.add(cleaned)
-        out.append(cleaned)
-    return out
-
-
-def _get_published_course(slug):
-    """Return the published Course or None."""
-    return Course.objects.filter(slug=slug, status='published').first()
 
 
 @token_required
@@ -197,7 +178,7 @@ def _get_published_course(slug):
 )
 def course_enrollments_collection(request, slug):
     """``GET / POST /api/courses/<slug>/enrollments``."""
-    course = _get_published_course(slug)
+    course = get_published_course(slug)
     if course is None:
         return error_response(
             'Course not found', 'unknown_course', status=404,
@@ -269,7 +250,7 @@ def course_enrollments_collection(request, slug):
                 details={'field': 'cohort'},
             )
 
-    emails = _normalize_emails(combined)
+    emails = normalize_emails(combined)
     enrolled = []
     already = []
     under_tier = []
@@ -356,7 +337,7 @@ def course_enrollment_detail(request, slug, email):
             status=403,
         )
 
-    course = _get_published_course(slug)
+    course = get_published_course(slug)
     if course is None:
         return error_response(
             'Course not found', 'unknown_course', status=404,

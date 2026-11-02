@@ -538,7 +538,7 @@ def _resolve_staff_notification_context(delivery, context):
             f"{base_url}/studio/maven-events/{occurrence_id}/"
         )
 
-    from community.services.staff_notifications import _dashboard_url  # noqa: PLC0415
+    from payments.stripe_dashboard import stripe_dashboard_url  # noqa: PLC0415
 
     account_id = (get_config("STRIPE_DASHBOARD_ACCOUNT_ID", "") or "").strip()
     for scalar_key, resource, url_key in (
@@ -548,7 +548,7 @@ def _resolve_staff_notification_context(delivery, context):
     ):
         object_id = str(context.get(scalar_key) or "").strip()
         if object_id.startswith(_STRIPE_ID_PREFIXES):
-            context[url_key] = _dashboard_url(account_id, resource, object_id)
+            context[url_key] = stripe_dashboard_url(account_id, resource, object_id)
 
 
 def _resolve_bookclub_summary_context(delivery, context):

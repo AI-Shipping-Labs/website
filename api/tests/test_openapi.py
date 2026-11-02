@@ -421,11 +421,10 @@ class AllApiViewsHaveOpenApiSpecTest(TestCase):
     """
 
     # Modules under ``api.views`` that intentionally do NOT carry the
-    # decorator. ``_permissions`` is a pure helper module (no views);
-    # ``docs`` hosts the staff-only Swagger UI page and the openapi.json
-    # endpoint, both of which the builder explicitly excludes from the
+    # decorator. ``docs`` hosts the staff-only Swagger UI page and the
+    # openapi.json endpoint, both of which the builder excludes from the
     # generated spec.
-    SKIP_MODULES = {"_permissions", "docs"}
+    SKIP_MODULES = {"docs"}
 
     def _iter_view_modules(self):
         # Discovered fresh per test so the parallel-test pickling layer

@@ -18,6 +18,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
@@ -43,14 +44,6 @@ _PROJECT_FIELDS = (
     'project_url', 'description', 'commit_id', 'learning_in_public_links',
     'time_spent',
 )
-
-
-def _actor_label(request):
-    """The calling token's name, or its masked prefix when unnamed."""
-    token = getattr(request, 'auth_token', None)
-    if token is None:
-        return 'unknown'
-    return token.name or token.key_prefix
 
 
 def _flag(data, name):
@@ -235,7 +228,7 @@ def submission_on_behalf(request):
             )
         member = resolve_member(data.get('user'))
         common = {
-            'actor': Actor(user=request.user, token_label=_actor_label(request)),
+            'actor': Actor(user=request.user, token_label=actor_label(request)),
             'member': member,
             'submitted_at': data.get('submitted_at'),
             'note': data.get('note'),

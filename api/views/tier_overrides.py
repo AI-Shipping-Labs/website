@@ -48,6 +48,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from accounts.services.email_resolution import resolve_user_by_email
+from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.request_parsing import parse_limit
 from api.safety import error_response
@@ -71,22 +72,6 @@ BATCH_CAP = 1000
 # Default override tier slug when the caller omits ``tier``. The motivating use
 # is the ``main`` cohort grant.
 DEFAULT_TIER_SLUG = "main"
-
-
-def _actor_label(request):
-    """Return a short label identifying the API caller.
-
-    Mirrors ``api/views/users.py::_actor_label``: prefers the operator-assigned
-    token ``name``; falls back to ``key_prefix`` (the masked 8-char form Studio
-    shows) when the token has no name. The label lands inside the ``details``
-    text of the audit-log row so operators can trace who granted the override.
-    """
-    token = getattr(request, "auth_token", None)
-    if token is None:
-        return "unknown"
-    if token.name:
-        return token.name
-    return token.key_prefix
 
 
 def _is_valid_email(value):
@@ -415,13 +400,13 @@ def _grant_overrides(request):
             "batch_too_large",
         )
 
-    actor_label = _actor_label(request)
+    caller_label = actor_label(request)
 
     # Whole batch in one atomic block (matches the import). Idempotency pre-filter
     # + the importer call + audit rows all commit or roll back together.
     with transaction.atomic():
         results = _grant_batch(
-            emails, tier, request.user, actor_label,
+            emails, tier, request.user, caller_label,
             expires_at=override_expires_at,
         )
 
@@ -667,7 +652,7 @@ def tier_overrides_revoke(request):
     dry_run = data.get("dry_run") is True
     ineffective_only = data.get("ineffective_only") is True
 
-    actor = f"actor_token={_actor_label(request)}"
+    actor = f"actor_token={actor_label(request)}"
     results = []
     with transaction.atomic():
         for raw in _dedupe_emails(emails):

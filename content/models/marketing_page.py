@@ -7,6 +7,7 @@ from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 
 from content.models.mixins import (
+    PreviewTokenMixin,
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
@@ -117,6 +118,7 @@ class MarketingPage(
     SyncedContentIdentityMixin,
     SourceMetadataMixin,
     TimestampedModelMixin,
+    PreviewTokenMixin,
     models.Model,
 ):
     """Standalone public marketing/orientation page."""
@@ -190,10 +192,6 @@ class MarketingPage(
 
     def get_studio_edit_url(self):
         return f'/studio/marketing-pages/{self.pk}/edit'
-
-    def regenerate_preview_token(self):
-        self.preview_token = uuid.uuid4()
-        self.save(update_fields=['preview_token'])
 
     def clean(self):
         super().clean()

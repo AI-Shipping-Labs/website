@@ -63,7 +63,9 @@ from accounts.utils.tags import (
     remove_tag,
     user_ids_matching_tag_search,
 )
+from api.actors import actor_label
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin
 from api.request_parsing import (
     parse_account_lifecycle,
     parse_limit,
@@ -82,7 +84,6 @@ from api.serializers.users import (
 )
 from api.user_lookup import find_user_by_primary_email, user_not_found_response
 from api.utils import parse_json_body, require_methods
-from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
 from community.tasks.slack_membership import check_user_slack_membership
 from content.access import get_active_overrides_by_user
@@ -207,23 +208,6 @@ def _crm_record_for_user(user):
     return CRMRecord.objects.select_related('persona_ref').filter(
         user=user,
     ).first()
-
-
-def _actor_label(request):
-    """Return a short label identifying the API caller.
-
-    Prefers the operator-assigned token ``name``; falls back to
-    ``key_prefix`` (the masked 8-char form Studio shows) when the token
-    has no name. The label lands inside the ``details`` text of the
-    audit-log row so operators can trace "who unsubscribed X" without
-    needing a separate actor column.
-    """
-    token = getattr(request, "auth_token", None)
-    if token is None:
-        return "unknown"
-    if token.name:
-        return token.name
-    return token.key_prefix
 
 
 def _audit(user, action, details):
@@ -606,7 +590,7 @@ def user_detail(request, email):
                 details={"field": "slack_user_id"},
             )
 
-    actor = _actor_label(request)
+    actor = actor_label(request)
 
     with transaction.atomic():
         # Re-fetch with row-level lock so the audit row reflects the
@@ -766,7 +750,7 @@ def user_slack_membership_check(request, email):
     result = check_user_slack_membership(
         user,
         audit_source="api",
-        actor_token=_actor_label(request),
+        actor_token=actor_label(request),
     )
     if result.outcome == "unknown":
         return error_response(
@@ -897,7 +881,7 @@ def user_crm_record(request, email):
             action="api_crm_record",
             details=(
                 f"{'created' if created else 'reused'} CRM record "
-                f"{record.pk}; actor_token={_actor_label(request)}; "
+                f"{record.pk}; actor_token={actor_label(request)}; "
                 f"source=submitted_onboarding"
             ),
         )
@@ -1723,7 +1707,7 @@ def user_tags_add(request, email):
             status=422,
         )
 
-    actor = _actor_label(request)
+    actor = actor_label(request)
     with transaction.atomic():
         locked = User.objects.select_for_update().get(pk=user.pk)
         had_tag = normalized in list(locked.tags or [])
@@ -1901,7 +1885,7 @@ def user_mark_bounced(request, email):
     if reason is not None:
         reason = str(reason)
 
-    actor = _actor_label(request)
+    actor = actor_label(request)
     body_bounce_type = bounce_type  # preserved for audit / raw_payload
 
     target_state = (
@@ -2067,7 +2051,7 @@ def user_clear_bounce(request, email):
     reason = data.get("reason")
     if reason is not None:
         reason = str(reason)
-    actor = _actor_label(request)
+    actor = actor_label(request)
 
     with transaction.atomic():
         locked = User.objects.select_for_update().get(pk=user.pk)
@@ -2152,7 +2136,7 @@ def user_tags_remove(request, email, tag):
             status=422,
         )
 
-    actor = _actor_label(request)
+    actor = actor_label(request)
     with transaction.atomic():
         locked = User.objects.select_for_update().get(pk=user.pk)
         had_tag = normalized in list(locked.tags or [])

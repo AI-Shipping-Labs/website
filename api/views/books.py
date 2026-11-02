@@ -15,7 +15,6 @@ mirroring the sprint precedent.
 """
 
 import logging
-from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -24,6 +23,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin
+from api.request_parsing import parse_iso_date
 from api.safety import error_response
 from api.serializers.books import serialize_book, serialize_chapter
 from api.utils import (
@@ -31,7 +32,6 @@ from api.utils import (
     parse_json_body,
     require_methods,
 )
-from api.views._permissions import bearer_is_admin
 from bookclub.models import BOOK_STATUS_CHOICES, Book, Chapter
 from bookclub.summaries import (
     append_notes_digest,
@@ -141,15 +141,6 @@ _SUMMARY_PUBLISHED_PROPERTY = {
         "``false`` clears it. Publishing an empty ``summary`` returns 422."
     ),
 }
-
-
-def _parse_iso_date(value):
-    if not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 def _apply_summary_published(obj, data):
@@ -390,7 +381,7 @@ def _read_book_fields(data, *, partial):
         if data["start_date"] in (None, ""):
             fields["start_date"] = None
         else:
-            parsed = _parse_iso_date(data["start_date"])
+            parsed = parse_iso_date(data["start_date"])
             if parsed is None:
                 return None, error_response(
                     "start_date must be ISO 8601 (YYYY-MM-DD)",
@@ -650,7 +641,7 @@ def _read_chapter_fields(data, *, partial):
         if data["deadline"] in (None, ""):
             fields["deadline"] = None
         else:
-            parsed = _parse_iso_date(data["deadline"])
+            parsed = parse_iso_date(data["deadline"])
             if parsed is None:
                 return None, error_response(
                     "deadline must be ISO 8601 (YYYY-MM-DD)",

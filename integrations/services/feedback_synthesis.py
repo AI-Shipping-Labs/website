@@ -35,7 +35,7 @@ import time
 from pydantic import BaseModel, Field
 
 from integrations.services import llm
-from integrations.services.llm import LLMError
+from integrations.services.llm import LLMError, TraceSink
 
 # The system prompt is versioned via this module-level constant so #809
 # can diff prompt revisions across stored runs. Keep it concise.
@@ -165,28 +165,6 @@ class SprintFeedbackInput(BaseModel):
     duration_weeks: int | None = None
     response_count: int = 0
     responses: list[_SingleResponse] = Field(default_factory=list)
-
-
-class TraceSink:
-    """No-op trace sink; the default when ``trace`` is omitted.
-
-    The #809 eval runner subclasses this (or passes any object with the
-    same methods) to capture each run's prompt, messages, tool spec, raw
-    result, latency, and parsed output against a real provider. Every
-    hook defaults to doing nothing so production runs stay silent.
-    """
-
-    def on_request(self, *, system, messages, tool):
-        """Called just before ``llm.complete`` with the rendered request."""
-
-    def on_result(self, *, result, latency_seconds):
-        """Called after ``llm.complete`` returns, with the raw result."""
-
-    def on_parsed(self, *, parsed):
-        """Called after the tool input validates into a result model."""
-
-    def on_error(self, *, error):
-        """Called when parsing/validation or the LLM call fails."""
 
 
 def _build_user_message(feedback):

@@ -1,4 +1,17 @@
+import uuid
+
 from django.db import models
+
+
+class PreviewTokenMixin(models.Model):
+    """Rotate the private preview token shared by previewable content."""
+
+    class Meta:
+        abstract = True
+
+    def regenerate_preview_token(self):
+        self.preview_token = uuid.uuid4()
+        self.save(update_fields=['preview_token'])
 
 
 class SourceMetadataMixin(models.Model):

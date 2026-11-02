@@ -18,22 +18,22 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required, token_required_any_user
 from accounts.utils.tags import normalize_tags
 from api.openapi import openapi_spec
+from api.permissions import (
+    bearer_is_admin,
+    visible_plans_for,
+)
+from api.request_parsing import coerce_datetime
 from api.safety import error_response
 from api.serializers.plans import (
     serialize_plan_detail,
     serialize_plan_flat,
 )
 from api.utils import parse_json_body, require_methods, token_or_session_required
-from api.views._permissions import (
-    bearer_is_admin,
-    visible_plans_for,
-)
 from notifications.services.notification_service import NotificationService
 from plans.models import (
     KIND_CHOICES,
@@ -63,16 +63,6 @@ from plans.services import (
     send_plan_ready_email_for_plan,
     send_plan_ready_emails,
 )
-
-
-def _coerce_datetime(value):
-    """ISO string -> ``datetime``, passthrough for ``None`` / datetimes."""
-    if value is None or value == "":
-        return None
-    if isinstance(value, str):
-        return parse_datetime(value)
-    return value
-
 
 logger = logging.getLogger(__name__)
 
@@ -556,7 +546,7 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
                 week=week,
                 description=cp_data.get("description", "") or "",
                 position=cp_data.get("position", cp_index),
-                done_at=_coerce_datetime(cp_data.get("done_at")),
+                done_at=coerce_datetime(cp_data.get("done_at")),
             )
 
     for collection_name, model, fields in (
@@ -599,7 +589,7 @@ def _create_plan_from_payload(plan_data, sprint, *, index=None):
             kwargs["plan"] = plan
             kwargs["position"] = row.get("position", row_index)
             if "done_at" in row:
-                kwargs["done_at"] = _coerce_datetime(row["done_at"])
+                kwargs["done_at"] = coerce_datetime(row["done_at"])
             model.objects.create(**kwargs)
 
     notes = plan_data.get("interview_notes") or []
@@ -699,7 +689,7 @@ def _reconcile_flat_collection(
                 existing.position = row["position"]
                 update_fields.append("position")
             if has_done_at and "done_at" in row:
-                existing.done_at = _coerce_datetime(row["done_at"])
+                existing.done_at = coerce_datetime(row["done_at"])
                 update_fields.append("done_at")
             if model is NextStep and next_step_kind is not None:
                 existing.kind = next_step_kind
@@ -717,7 +707,7 @@ def _reconcile_flat_collection(
             kwargs["plan"] = plan
             kwargs["position"] = row.get("position", row_index)
             if has_done_at and "done_at" in row:
-                kwargs["done_at"] = _coerce_datetime(row["done_at"])
+                kwargs["done_at"] = coerce_datetime(row["done_at"])
             if model is NextStep:
                 kwargs["kind"] = next_step_kind
             model.objects.create(**kwargs)
@@ -788,7 +778,7 @@ def _reconcile_checkpoints(week, payload_rows, allowed_ids_per_week):
                 existing.position = cp["position"]
                 update_fields.append("position")
             if "done_at" in cp:
-                existing.done_at = _coerce_datetime(cp["done_at"])
+                existing.done_at = coerce_datetime(cp["done_at"])
                 update_fields.append("done_at")
             if update_fields:
                 existing.save(
@@ -800,7 +790,7 @@ def _reconcile_checkpoints(week, payload_rows, allowed_ids_per_week):
                 week=week,
                 description=cp.get("description", "") or "",
                 position=cp.get("position", cp_index),
-                done_at=_coerce_datetime(cp.get("done_at")),
+                done_at=coerce_datetime(cp.get("done_at")),
             )
 
     for existing_id, existing_row in existing_by_id.items():

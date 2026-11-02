@@ -3,11 +3,17 @@
 import ast
 import importlib.util
 import json
+from datetime import date, datetime
+from types import SimpleNamespace
 
 from django.test import SimpleTestCase, TestCase
 
+from api.actors import actor_label
 from api.request_parsing import (
+    coerce_datetime,
+    normalize_emails,
     parse_account_lifecycle,
+    parse_iso_date,
     parse_limit,
     parse_offset,
     parse_since,
@@ -36,6 +42,9 @@ class SharedHelperImportGraphTest(SimpleTestCase):
         'api.views.ses_events_list',
     )
     public_owner_modules = (
+        'api.actors',
+        'api.course_lookup',
+        'api.permissions',
         'api.request_parsing',
         'api.user_lookup',
         'api.serializers.crm',
@@ -81,8 +90,15 @@ class SharedHelperImportGraphTest(SimpleTestCase):
 
     def test_old_view_implementations_are_deleted(self):
         forbidden_definitions = {
-            'api.views.enrollments': {'_serialize_enrollment'},
-            'api.views.course_enrollments': {'_serialize_enrollment'},
+            'api.views.enrollments': {
+                '_serialize_enrollment',
+                '_normalize_emails',
+            },
+            'api.views.course_enrollments': {
+                '_serialize_enrollment',
+                '_normalize_emails',
+                '_get_published_course',
+            },
             'api.views.crm_export': {'serialize_crm_record_full'},
             'api.views.onboarding': {
                 '_parse_offset',
@@ -98,7 +114,36 @@ class SharedHelperImportGraphTest(SimpleTestCase):
                 'resolve_crm_persona',
                 'serialize_crm_record_for_operator',
                 'serialize_crm_record_summary',
+                '_actor_label',
             },
+            'api.views.aliases': {'_actor_label'},
+            'api.views.submissions_on_behalf': {'_actor_label'},
+            'api.views.payment_mismatches': {'_actor_label'},
+            'api.views.user_merge': {'_actor_label'},
+            'api.views.tier_overrides': {'_actor_label'},
+            'api.views.campaigns': {'_read_only_field_response'},
+            'api.views.events': {'_read_only_field_response'},
+            'api.views.marketing_pages': {'_read_only_field_response'},
+            'api.views.course_certificates': {'_get_published_course'},
+            'api.views.weeks': {
+                '_load_plan_for_write',
+                '_load_week_for_write',
+            },
+            'api.views.checkpoints': {
+                '_coerce_datetime',
+                '_load_week_for_write',
+            },
+            'api.views.plan_items': {
+                '_coerce_datetime',
+                '_load_plan_for_write',
+            },
+            'api.views.plans': {'_coerce_datetime'},
+            'api.views.books': {'_parse_iso_date'},
+            'api.views.sprints': {'_parse_iso_date'},
+            'studio.views.ses_events': {'_parse_iso_date'},
+            'api.views.plan_sprints_ingest': {'_parse_limit'},
+            'api.views.worker': {'_parse_limit', '_parse_since'},
+            'api.views.stripe_webhooks': {'_dt'},
             'crm.services.member_profile': {'_persona_label'},
         }
         violations = []
@@ -149,6 +194,41 @@ class SharedRequestParsingContractTest(SimpleTestCase):
             value='unknown',
         )
         self.assertIn('allowed', json.loads(lifecycle_error.content)['details'])
+
+    def test_shared_normalizers_keep_existing_behavior(self):
+        self.assertEqual(
+            normalize_emails([
+                ' Alice@Example.com ',
+                'alice@example.com',
+                None,
+                'BOB@example.com',
+                '',
+            ]),
+            ['alice@example.com', 'bob@example.com'],
+        )
+        self.assertEqual(parse_iso_date('2026-10-30'), date(2026, 10, 30))
+        self.assertIsNone(parse_iso_date('not-a-date'))
+        self.assertIsNone(parse_iso_date(None))
+        original = datetime(2026, 10, 30, 12, 0)
+        self.assertIs(coerce_datetime(original), original)
+        self.assertIsNone(coerce_datetime(''))
+        self.assertEqual(
+            coerce_datetime('2026-10-30T12:00:00+00:00'),
+            datetime.fromisoformat('2026-10-30T12:00:00+00:00'),
+        )
+
+    def test_actor_label_prefers_name_then_masked_prefix(self):
+        named = SimpleNamespace(name='Plan sync', key_prefix='tok_abcd')
+        unnamed = SimpleNamespace(name='', key_prefix='tok_efgh')
+        self.assertEqual(
+            actor_label(SimpleNamespace(auth_token=named)),
+            'Plan sync',
+        )
+        self.assertEqual(
+            actor_label(SimpleNamespace(auth_token=unnamed)),
+            'tok_efgh',
+        )
+        self.assertEqual(actor_label(SimpleNamespace()), 'unknown')
 
 
 class QuestionnairePersonaServiceTest(TestCase):

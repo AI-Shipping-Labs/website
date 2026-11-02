@@ -6,21 +6,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
 from payments.models import CheckoutFulfillment, PaymentAccountMismatch
-
-
-def _actor_label(request):
-    token = getattr(request, "auth_token", None)
-    if token is None:
-        return "unknown"
-    if token.name:
-        return token.name
-    return token.key_prefix
 
 
 def _user_payload(user):
@@ -302,7 +294,7 @@ def payment_mismatch_detail(request, mismatch_id):
             details={"field": "resolution_note"},
         )
 
-    actor = _actor_label(request)
+    actor = actor_label(request)
     with transaction.atomic():
         mismatch.mark_terminal(status=status, note=note, actor=request.user)
         mismatch.save(update_fields=[

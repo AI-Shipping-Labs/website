@@ -42,12 +42,12 @@ from integrations.config import (
     site_base_url,
     validate_email_config_value,
 )
+from payments.stripe_dashboard import stripe_dashboard_url
 
 logger = logging.getLogger(__name__)
 
 
 _DASH = "—"
-_STRIPE_DASHBOARD_BASE = "https://dashboard.stripe.com"
 _SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
 # Final fallback when neither the live charged amount nor a tier price is
@@ -883,9 +883,13 @@ def _build_signup_context(
     # copyable text (matches the Studio user-page behaviour). The previous
     # customer URL omitted ``<acct>`` entirely — fixed here.
     account_id = (get_config("STRIPE_DASHBOARD_ACCOUNT_ID", "") or "").strip()
-    stripe_customer_url = _dashboard_url(account_id, "customers", stripe_customer_id)
-    stripe_payment_url = _dashboard_url(account_id, "payments", payment_intent_id)
-    stripe_subscription_url = _dashboard_url(
+    stripe_customer_url = stripe_dashboard_url(
+        account_id, "customers", stripe_customer_id,
+    )
+    stripe_payment_url = stripe_dashboard_url(
+        account_id, "payments", payment_intent_id,
+    )
+    stripe_subscription_url = stripe_dashboard_url(
         account_id, "subscriptions", subscription_id,
     )
 
@@ -1216,19 +1220,6 @@ def _safe_subscription_interval(subscription_id):
             exc_info=True,
         )
         return ""
-
-
-def _dashboard_url(account_id, resource, object_id):
-    """Build an account-scoped Stripe dashboard deep-link, or "" when blank.
-
-    ``https://dashboard.stripe.com/<acct>/<resource>/<object_id>``. Returns
-    ``""`` when either the account id or the object id is missing — the
-    template then renders the id as plain copyable text (matching the
-    Studio user-page behaviour). The account id encodes test vs live mode.
-    """
-    if not account_id or not object_id:
-        return ""
-    return f"{_STRIPE_DASHBOARD_BASE}/{account_id}/{resource}/{object_id}"
 
 
 def _recent_activity_lines(user):

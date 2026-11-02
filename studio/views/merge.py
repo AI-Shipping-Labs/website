@@ -39,6 +39,7 @@ from accounts.services.account_merge import (
     merge_accounts,
 )
 from accounts.services.email_resolution import normalize_email
+from studio.actors import studio_actor_label
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -78,10 +79,6 @@ def _verify_pair(token, canonical_pk, secondary_pk, force):
         and payload.get("secondary_pk") == secondary_pk
         and bool(payload.get("force")) == bool(force)
     )
-
-
-def _actor_label(request):
-    return f"studio:{request.user.email}"
 
 
 def _conflict_context(exc):
@@ -180,7 +177,7 @@ def studio_user_merge_preview(request):
         plan = merge_accounts(
             canonical,
             secondary,
-            actor_label=_actor_label(request),
+            actor_label=studio_actor_label(request),
             actor=request.user,
             dry_run=True,
             force=force,
@@ -246,7 +243,7 @@ def studio_user_merge_confirm(request):
         plan = merge_accounts(
             canonical,
             secondary,
-            actor_label=_actor_label(request),
+            actor_label=studio_actor_label(request),
             actor=request.user,
             dry_run=False,
             force=force,

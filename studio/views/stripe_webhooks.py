@@ -24,16 +24,11 @@ from payments.services.stripe_endpoint_verifier import (
 )
 from payments.services.webhook_dispatch import CANCELLATION_EVENT_TYPES
 from payments.services.webhook_replay import ReplayError, preview_event
+from payments.stripe_dashboard import stripe_dashboard_url
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
 
 CANCELLATION_FILTER = "cancellation"
-
-
-def _stripe_dashboard_url(account_id, resource, object_id):
-    if not account_id or not object_id:
-        return ""
-    return f"https://dashboard.stripe.com/{account_id}/{resource}/{object_id}"
 
 
 def _attempt_rows(attempts, account_id):
@@ -41,22 +36,22 @@ def _attempt_rows(attempts, account_id):
     for attempt in attempts:
         rows.append({
             "attempt": attempt,
-            "customer_url": _stripe_dashboard_url(
+            "customer_url": stripe_dashboard_url(
                 account_id, "customers", attempt.stripe_customer_id,
             ),
-            "subscription_url": _stripe_dashboard_url(
+            "subscription_url": stripe_dashboard_url(
                 account_id, "subscriptions", attempt.stripe_subscription_id,
             ),
-            "charge_url": _stripe_dashboard_url(
+            "charge_url": stripe_dashboard_url(
                 account_id, "payments", attempt.stripe_charge_id,
             ),
-            "invoice_url": _stripe_dashboard_url(
+            "invoice_url": stripe_dashboard_url(
                 account_id, "invoices", attempt.stripe_invoice_id,
             ),
-            "dispute_url": _stripe_dashboard_url(
+            "dispute_url": stripe_dashboard_url(
                 account_id, "disputes", attempt.stripe_dispute_id,
             ),
-            "event_url": _stripe_dashboard_url(
+            "event_url": stripe_dashboard_url(
                 account_id, "events", attempt.stripe_event_id,
             ),
         })

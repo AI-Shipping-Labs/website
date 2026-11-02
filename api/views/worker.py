@@ -27,14 +27,13 @@ everything".
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django_q.models import Task
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit, parse_since
 from api.safety import error_response
 from api.serializers.worker import serialize_task_detail, serialize_task_row
 from api.utils import require_methods
@@ -164,62 +163,6 @@ LIMIT_DEFAULT_FAILED = 20
 LIMIT_DEFAULT_GENERIC = 50
 
 VALID_STATUS_VALUES = ("success", "failed", "all")
-
-
-def _parse_since(raw):
-    """Parse ``since`` query param, returning ``(value, error_response)``.
-
-    Accepts ISO-8601 datetimes including the trailing ``Z`` shorthand
-    that ``datetime.fromisoformat`` only handles on Python 3.11+ (we run
-    3.13 so this is safe; we still substitute ``+00:00`` defensively in
-    case django-q changes the storage format under us).
-
-    Returns ``(None, None)`` when the param is absent. Returns
-    ``(None, JsonResponse)`` when the value is unparseable so callers
-    can ``return error`` without rebuilding the response.
-    """
-    if raw is None or raw == "":
-        return None, None
-    text = raw.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        value = datetime.fromisoformat(text)
-    except ValueError:
-        return None, error_response(
-            f"Invalid ISO-8601 datetime: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": "since", "value": raw},
-        )
-    return value, None
-
-
-def _parse_limit(raw, default):
-    """Parse ``limit`` query param, returning ``(value, error_response)``.
-
-    Negative or non-integer values fail with 422. Values above
-    ``LIMIT_MAX`` are clamped silently (see module docstring).
-    """
-    if raw is None or raw == "":
-        return default, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return None, error_response(
-            f"Invalid integer: {raw!r}",
-            "validation_error",
-            status=422,
-            details={"field": "limit", "value": raw},
-        )
-    if value < 1:
-        return None, error_response(
-            "limit must be a positive integer",
-            "validation_error",
-            status=422,
-            details={"field": "limit", "value": raw},
-        )
-    return min(value, LIMIT_MAX), None
 
 
 def _parse_offset(raw):
@@ -357,10 +300,14 @@ def worker_tasks_failed(request):
     by ``started DESC``. ``since`` filters on ``started >= since`` so
     operators can fetch only the failures from a given deploy.
     """
-    limit, err = _parse_limit(request.GET.get("limit"), LIMIT_DEFAULT_FAILED)
+    limit, err = parse_limit(
+        request.GET.get("limit"),
+        default=LIMIT_DEFAULT_FAILED,
+        maximum=LIMIT_MAX,
+    )
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
 
@@ -474,13 +421,14 @@ def worker_tasks_collection(request):
             },
         )
 
-    limit, err = _parse_limit(
+    limit, err = parse_limit(
         request.GET.get("limit"),
-        LIMIT_DEFAULT_GENERIC,
+        default=LIMIT_DEFAULT_GENERIC,
+        maximum=LIMIT_MAX,
     )
     if err is not None:
         return err
-    since, err = _parse_since(request.GET.get("since"))
+    since, err = parse_since(request.GET.get("since"))
     if err is not None:
         return err
     group = request.GET.get("group") or None

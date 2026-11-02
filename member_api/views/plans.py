@@ -16,6 +16,7 @@ from accounts.auth import member_api_key_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import body_must_be_object_response, parse_json_body, require_methods
+from member_api.scopes import require_scope
 from member_api.serializers.plans import (
     serialize_member_checkpoint,
     serialize_member_deliverable,
@@ -336,7 +337,7 @@ def plans_collection(request):
 )
 def plan_detail(request, plan_id):
     if request.method == "GET":
-        denied = _require_scope(request, "plans:read")
+        denied = require_scope(request, "plans:read")
         if denied is not None:
             return denied
         plan = _owned_plan_detail_or_404(request.user, plan_id)
@@ -344,7 +345,7 @@ def plan_detail(request, plan_id):
             return error_response("Plan not found", "plan_not_found", status=404)
         return JsonResponse(serialize_member_plan_detail(plan))
 
-    denied = _require_scope(request, "plans:write")
+    denied = require_scope(request, "plans:write")
     if denied is not None:
         return denied
     plan = _owned_plan_or_404(request.user, plan_id)
@@ -594,18 +595,6 @@ _ABSENT = object()
 _EDITABLE_VISIBILITIES = frozenset(value for value, _label in PLAN_VISIBILITY_CHOICES)
 _NEXT_STEP_KINDS = frozenset(value for value, _label in NEXT_STEP_KIND_CHOICES)
 _URL_VALIDATOR = URLValidator()
-
-
-def _require_scope(request, scope):
-    """Return a 401 response if the authenticated key lacks ``scope``."""
-    if scope in getattr(request, "member_api_scopes", set()):
-        return None
-    return error_response(
-        "Member API key is missing the required scope",
-        "insufficient_scope",
-        status=401,
-        details={"required_scope": scope},
-    )
 
 
 def _json_object_body(request):

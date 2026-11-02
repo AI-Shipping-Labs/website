@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
-from api.safety import error_response
+from api.safety import error_response, read_only_field_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
@@ -131,15 +131,6 @@ def _preview_payload(page):
     }
 
 
-def _read_only_field_response(field):
-    return error_response(
-        f'{field} is read-only',
-        'read_only_field',
-        status=422,
-        details={'field': field},
-    )
-
-
 def _validation_errors(exc):
     if hasattr(exc, 'message_dict'):
         return exc.message_dict
@@ -149,7 +140,7 @@ def _validation_errors(exc):
 def _validate_payload_fields(data):
     for field in sorted(READ_ONLY_FIELDS):
         if field in data:
-            return _read_only_field_response(field)
+            return read_only_field_response(field)
     unknown = sorted(set(data) - WRITABLE_FIELDS)
     if unknown:
         return validation_response({

@@ -4,10 +4,9 @@ The visibility gate is the security-critical contract of this issue.
 Two cross-cutting tests in this module pin down the architectural
 invariant:
 
-- ``test_visibility_gate_lives_in_queryset_not_template`` reads
-  ``api/views/interview_notes.py`` as plain text and asserts the literal
-  string ``is_staff`` does not appear there. Every staff branch must
-  live in ``api/views/_permissions.py``, not the view module.
+- ``test_visibility_gate_lives_in_queryset_not_template`` reads the view
+  modules and asserts the literal string ``is_staff`` does not appear in
+  them. Staff checks live in the shared ``api.permissions`` owner.
 - The non-staff detail-by-id case returns 404 with NO leak of the
   internal note's body; the test checks the body string is absent from
   the response.
@@ -287,11 +286,10 @@ class UserInterviewNotesInboxTest(InterviewNotesTestBase):
 
 
 class VisibilityGateInQuerysetTest(TestCase):
-    """Architecturally important test: every file in ``api/views/``
-    other than ``_permissions.py`` MUST NOT contain the literal string
-    ``is_staff``. The only place the API may inspect that attribute is
-    ``api/views/_permissions.py``; views compose against the queryset
-    helpers it exports.
+    """Every file in ``api/views/`` MUST NOT contain ``is_staff``.
+
+    The shared ``api.permissions`` module owns staff checks; views compose
+    against the queryset helpers it exports.
     """
 
     def test_interview_notes_view_has_no_is_staff_reference(self):
@@ -304,8 +302,7 @@ class VisibilityGateInQuerysetTest(TestCase):
             "is_staff", source,
             msg=(
                 "is_staff must not appear in interview_notes.py -- the "
-                "visibility gate must compose against "
-                "api/views/_permissions.py instead."
+                "visibility gate must compose against api.permissions."
             ),
         )
 
@@ -324,8 +321,8 @@ class VisibilityGateInQuerysetTest(TestCase):
         # Swagger UI / OpenAPI JSON wrapper, NOT part of the
         # ``token_required`` operator-API surface. Its access check
         # gates documentation access by session role and has no plan /
-        # course / queryset narrowing to delegate to ``_permissions.py``.
-        exempt = {"_permissions.py", "__init__.py", "docs.py"}
+        # course / queryset narrowing to delegate to ``api.permissions``.
+        exempt = {"__init__.py", "docs.py"}
         for path in sorted(views_dir.glob("*.py")):
             if path.name in exempt:
                 continue
@@ -335,7 +332,9 @@ class VisibilityGateInQuerysetTest(TestCase):
         self.assertEqual(
             offending, [],
             msg=(
-                "These files inspect is_staff outside _permissions.py: "
+                "These view files inspect is_staff outside api.permissions: "
                 f"{offending}"
             ),
         )
+        permissions_path = views_dir.parent / "permissions.py"
+        self.assertIn("is_staff", permissions_path.read_text(encoding="utf-8"))

@@ -30,6 +30,7 @@ from accounts.services.account_merge import (
     merge_accounts,
 )
 from accounts.services.email_resolution import normalize_email
+from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
@@ -37,16 +38,6 @@ from api.utils import parse_json_body, require_methods
 User = get_user_model()
 
 _ALLOWED_FIELDS = {"canonical_email", "merge_email", "dry_run", "force"}
-
-
-def _actor_label(request):
-    """Short label identifying the API caller (mirrors ``api/views/users.py``)."""
-    token = getattr(request, "auth_token", None)
-    if token is None:
-        return "unknown"
-    if token.name:
-        return token.name
-    return token.key_prefix
 
 
 def _find_user(email):
@@ -281,12 +272,12 @@ def merge_users(request):
             details={"field": "merge_email"},
         )
 
-    actor_label = _actor_label(request)
+    caller_label = actor_label(request)
     try:
         plan = merge_accounts(
             canonical,
             secondary,
-            actor_label=actor_label,
+            actor_label=caller_label,
             actor=request.user,
             dry_run=dry_run,
             force=force,

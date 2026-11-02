@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from content.access import VISIBILITY_CHOICES
 from content.models.mixins import (
+    PreviewTokenMixin,
     SourceMetadataMixin,
     SyncedContentIdentityMixin,
     TimestampedModelMixin,
@@ -29,6 +30,7 @@ class Article(
     SyncedContentIdentityMixin,
     SourceMetadataMixin,
     TimestampedModelMixin,
+    PreviewTokenMixin,
     models.Model,
 ):
     """Blog article / post."""
@@ -138,10 +140,6 @@ class Article(
 
     def get_studio_edit_url(self):
         return f'/studio/articles/{self.pk}/edit'
-
-    def regenerate_preview_token(self):
-        self.preview_token = uuid.uuid4()
-        self.save(update_fields=['preview_token'])
 
     def formatted_date(self):
         return self.date.strftime('%B %d, %Y')

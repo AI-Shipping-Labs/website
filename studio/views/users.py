@@ -100,11 +100,13 @@ from payments.models import (
 )
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.tier_override_revoke import revoke_tier_override
+from payments.stripe_dashboard import stripe_dashboard_url
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
 from studio.utils import (
     coerce_page_number,
     studio_listing_querystring,
+    studio_pager_querystring,
     studio_pagination_context,
 )
 from studio.views.tier_overrides import (
@@ -552,19 +554,6 @@ def _user_status(user):
     return 'Active'
 
 
-def _pager_querystring(request, page_number):
-    """Build the ``?...`` part of a pager link, preserving existing params.
-
-    Copies every ``request.GET`` key except ``page`` (which we overwrite)
-    and re-adds ``page`` as the requested number. Returns the encoded query
-    string WITH the leading ``?`` so the template can interpolate it
-    directly into ``href``.
-    """
-    params = request.GET.copy()
-    params['page'] = str(page_number)
-    return '?' + params.urlencode()
-
-
 def _listing_querystring(request, **updates):
     """Build a list URL while preserving active filters and dropping page."""
     return studio_listing_querystring(request, **updates)
@@ -602,14 +591,18 @@ def user_list(request):
     # Pre-build pager link URLs so the template stays simple and the
     # query-param-preservation rule has one obvious home.
     if page.has_previous():
-        first_url = _pager_querystring(request, 1)
-        prev_url = _pager_querystring(request, page.previous_page_number())
+        first_url = studio_pager_querystring(request, 1)
+        prev_url = studio_pager_querystring(
+            request, page.previous_page_number(),
+        )
     else:
         first_url = None
         prev_url = None
     if page.has_next():
-        next_url = _pager_querystring(request, page.next_page_number())
-        last_url = _pager_querystring(request, paginator.num_pages)
+        next_url = studio_pager_querystring(
+            request, page.next_page_number(),
+        )
+        last_url = studio_pager_querystring(request, paginator.num_pages)
     else:
         next_url = None
         last_url = None
@@ -1176,12 +1169,6 @@ def _payment_mismatch_queryset():
     )
 
 
-def _stripe_dashboard_url(account_id, resource, object_id):
-    if not account_id or not object_id:
-        return ''
-    return f'https://dashboard.stripe.com/{account_id}/{resource}/{object_id}'
-
-
 def _payment_mismatch_rows(mismatches, stripe_account_id):
     mismatches = list(mismatches)
     fulfillments = {
@@ -1214,17 +1201,17 @@ def _payment_mismatch_rows(mismatches, stripe_account_id):
             'outcome': outcome,
             'paid_user': mismatch.paid_user,
             'candidate_user': candidate,
-            'stripe_customer_url': _stripe_dashboard_url(
+            'stripe_customer_url': stripe_dashboard_url(
                 stripe_account_id,
                 'customers',
                 mismatch.stripe_customer_id,
             ),
-            'stripe_session_url': _stripe_dashboard_url(
+            'stripe_session_url': stripe_dashboard_url(
                 stripe_account_id,
                 'checkout/sessions',
                 mismatch.stripe_session_id,
             ),
-            'stripe_subscription_url': _stripe_dashboard_url(
+            'stripe_subscription_url': stripe_dashboard_url(
                 stripe_account_id,
                 'subscriptions',
                 mismatch.stripe_subscription_id,

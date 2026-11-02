@@ -21,6 +21,8 @@ from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
 from api.openapi import openapi_spec
+from api.permissions import bearer_is_admin
+from api.request_parsing import normalize_emails
 from api.safety import error_response
 from api.serializers.enrollments import serialize_sprint_enrollment
 from api.utils import (
@@ -28,7 +30,6 @@ from api.utils import (
     parse_json_body,
     require_methods,
 )
-from api.views._permissions import bearer_is_admin
 from content.access import get_user_level
 from plans.models import Sprint, SprintEnrollment
 
@@ -47,21 +48,6 @@ SPRINT_ENROLLMENT_DELETE_NOT_AVAILABLE_MESSAGE = (
     "Sprint enrollment deletion is not available through the API. "
     "Go to Studio to unenroll this user manually."
 )
-
-
-def _normalize_emails(raw):
-    """Trim, lowercase, deduplicate while preserving input order."""
-    seen = set()
-    out = []
-    for email in raw:
-        if not isinstance(email, str):
-            continue
-        cleaned = email.strip().lower()
-        if not cleaned or cleaned in seen:
-            continue
-        seen.add(cleaned)
-        out.append(cleaned)
-    return out
 
 
 @token_required
@@ -183,7 +169,7 @@ def sprint_enrollments_collection(request, slug):
             details={'field': 'user_emails'},
         )
 
-    emails = _normalize_emails(raw_emails)
+    emails = normalize_emails(raw_emails)
     enrolled = []
     already = []
     under_tier = []

@@ -16,22 +16,9 @@ from analytics.services.signup_analytics import (
     TOP_N as SIGNUP_ANALYTICS_TOP_N,
 )
 from studio.decorators import staff_required
-from studio.utils import coerce_page_number
+from studio.utils import coerce_page_number, studio_pager_querystring
 
 TOP_N = SIGNUP_ANALYTICS_TOP_N
-
-
-def _pager_querystring(request, page_number):
-    """Build ``?...&page=N`` preserving every other request param.
-
-    Mirrors ``studio.views.ses_events._pager_querystring`` so the canonical
-    pager partial keeps the ``range`` / ``start`` / ``end`` / ``signup_path``
-    filters alive across page navigation. The leading ``?`` is included so the
-    template can drop the value straight into ``href``.
-    """
-    params = request.GET.copy()
-    params['page'] = str(page_number)
-    return '?' + params.urlencode()
 
 
 def _has_referrer_field():
@@ -68,14 +55,18 @@ def signup_analytics_dashboard(request):
     recent_has_referrer = has_referrer_data
 
     if page.has_previous():
-        first_url = _pager_querystring(request, 1)
-        prev_url = _pager_querystring(request, page.previous_page_number())
+        first_url = studio_pager_querystring(request, 1)
+        prev_url = studio_pager_querystring(
+            request, page.previous_page_number(),
+        )
     else:
         first_url = None
         prev_url = None
     if page.has_next():
-        next_url = _pager_querystring(request, page.next_page_number())
-        last_url = _pager_querystring(request, paginator.num_pages)
+        next_url = studio_pager_querystring(
+            request, page.next_page_number(),
+        )
+        last_url = studio_pager_querystring(request, paginator.num_pages)
     else:
         next_url = None
         last_url = None

@@ -32,6 +32,7 @@ from bookclub.models import (
 )
 from bookclub.reading import viewer_reading_progress
 from content.access import get_user_level
+from member_api.scopes import require_scope
 from member_api.serializers.books import serialize_book_note, serialize_book_reading
 
 _VALID_VISIBILITIES = {value for value, _ in READER_VISIBILITY_CHOICES}
@@ -62,18 +63,6 @@ def _access_error(request, book):
             status=403,
         )
     return None
-
-
-def _require_scope(request, scope):
-    """Return a 401 response if the authenticated key lacks ``scope``."""
-    if scope in getattr(request, "member_api_scopes", set()):
-        return None
-    return error_response(
-        "Member API key is missing the required scope",
-        "insufficient_scope",
-        status=401,
-        details={"required_scope": scope},
-    )
 
 
 _BOOK_READING_OPENAPI = {
@@ -356,7 +345,7 @@ def book_chapter_note(request, slug, number):
     403, unknown chapter -> 404.
     """
     required_scope = "books:read" if request.method == "GET" else "books:write_notes"
-    denied = _require_scope(request, required_scope)
+    denied = require_scope(request, required_scope)
     if denied is not None:
         return denied
 
@@ -490,7 +479,7 @@ def reader_profile(request):
     required_scope = (
         "books:read" if request.method == "GET" else "books:write_profile"
     )
-    denied = _require_scope(request, required_scope)
+    denied = require_scope(request, required_scope)
     if denied is not None:
         return denied
 

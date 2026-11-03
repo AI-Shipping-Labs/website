@@ -13,6 +13,8 @@ No network call is made in mock mode; the real backend is never invoked.
 
 import contextlib
 
+from community_base.questionnaires import ai_backend as questionnaire_llm
+
 from integrations.services import llm
 from integrations.services.llm import LLMResult
 
@@ -112,18 +114,26 @@ def mock_complete(
 
 @contextlib.contextmanager
 def patch_llm():
-    """Patch ``llm.complete`` / ``llm.is_enabled`` for a mock run.
+    """Patch both LLM entry points used by a mock run.
 
     Inside the context the callables see ``is_enabled() == True`` and a
-    scripted ``complete`` that makes no network call. The originals are
+    scripted ``complete`` that makes no network call. The integration
+    evals use ``integrations.services.llm`` while shared onboarding uses
+    ``community_base.questionnaires.ai_backend``. The originals are
     restored on exit even if the body raises.
     """
-    original_complete = llm.complete
-    original_is_enabled = llm.is_enabled
+    originals = (
+        (llm, 'complete', llm.complete),
+        (llm, 'is_enabled', llm.is_enabled),
+        (questionnaire_llm, 'complete', questionnaire_llm.complete),
+        (questionnaire_llm, 'is_enabled', questionnaire_llm.is_enabled),
+    )
     llm.complete = mock_complete
     llm.is_enabled = lambda: True
+    questionnaire_llm.complete = mock_complete
+    questionnaire_llm.is_enabled = lambda: True
     try:
         yield
     finally:
-        llm.complete = original_complete
-        llm.is_enabled = original_is_enabled
+        for module, name, original in originals:
+            setattr(module, name, original)

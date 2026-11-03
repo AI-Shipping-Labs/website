@@ -119,7 +119,13 @@ Fetched at runtime by the Django app when no direct PEM is configured in Studio 
 |-----------|---------|
 | `ai-shipping-labs/github-app-private-key` | GitHub App PEM key for private content repo sync |
 
-Why the AWS Secrets Manager fallback is kept: neither the production/dev `IntegrationSetting` database rows (`GET /api/v1/settings/GITHUB_APP_PRIVATE_KEY` reports `source="default"`, `configured=false`) nor the Coolify container environments (`GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_PRIVATE_KEY_FILE` are unset) store the PEM directly. `integrations/services/github_app.py:_resolve_github_app_private_key()` therefore retains the AWS Secrets Manager fallback (`GITHUB_APP_PRIVATE_KEY_SECRET_ID`, default `ai-shipping-labs/github-app-private-key` in `GITHUB_APP_PRIVATE_KEY_SECRET_REGION`, default `eu-west-1`). Fallback order: Studio PEM → local PEM file (`GITHUB_APP_PRIVATE_KEY_FILE`) → `GITHUB_APP_PRIVATE_KEY` env var → Studio secret path → default Secrets Manager path.
+The AWS Secrets Manager fallback remains because the authenticated Coolify
+source Service and production web Application environments do not define
+`GITHUB_APP_PRIVATE_KEY` or `GITHUB_APP_PRIVATE_KEY_FILE`. Keep
+`integrations/services/github_app.py:_resolve_github_app_private_key()` until a
+direct PEM is configured and verified for both Coolify runtimes. The fallback
+uses `GITHUB_APP_PRIVATE_KEY_SECRET_ID`, defaulting to
+`ai-shipping-labs/github-app-private-key` in `eu-west-1`.
 
 When adding a new environment, make sure `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` include all domains that will submit forms to it.
 
@@ -357,10 +363,11 @@ curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
 
 Use the API for production user state, SES event history, email logs,
 integration-setting metadata, and narrow operator writes that already
-exist as API endpoints. The settings metadata endpoint uses `Bearer` auth:
+exist as API endpoints. The settings metadata endpoint uses the same `Token`
+authentication:
 
 ```bash
-curl -sS -H "Authorization: Bearer $API_SHIPPING_LABS_API_TOKEN" \
+curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
   https://aishippinglabs.com/api/v1/settings/<key>
 ```
 

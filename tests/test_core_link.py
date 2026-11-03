@@ -45,6 +45,17 @@ name = "community-base"
 version = "0.3.0"
 """
 
+ASL_CLI_PYPROJECT = """\
+[project]
+name = "asl-cli"
+version = "0.1.0"
+dependencies = [
+    "click>=8.1.0",
+    "community-base[django_q] @ git+https://github.com/DataTalksClub/community-base@v0.3.0",
+    "httpx>=0.27.0",
+]
+"""
+
 
 def write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +66,7 @@ def make_repo(root: Path) -> Path:
     repo = root / "site"
     write(repo / "pyproject.toml", PYPROJECT)
     write(repo / "uv.lock", LOCK)
+    write(repo / "asl_cli" / "pyproject.toml", ASL_CLI_PYPROJECT)
     env = {
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.com",
@@ -86,9 +98,7 @@ def commit_all(repo: Path, root: Path, message: str) -> None:
         "HOME": str(root),
     }
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True, env=env, capture_output=True)
-    subprocess.run(
-        ["git", "-C", str(repo), "commit", "-q", "-m", message], check=True, env=env, capture_output=True
-    )
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", message], check=True, env=env, capture_output=True)
 
 
 class LinkRoundTripTests(SimpleTestCase):
@@ -102,6 +112,7 @@ class LinkRoundTripTests(SimpleTestCase):
         self.snapshot = self.repo / ".tmp" / "core-link"
         self.original_pyproject = (self.repo / "pyproject.toml").read_bytes()
         self.original_lock = (self.repo / "uv.lock").read_bytes()
+        self.original_cli_pyproject = (self.repo / "asl_cli" / "pyproject.toml").read_bytes()
         patcher = mock.patch.object(community_base_link, "run_uv")
         self.run_uv = patcher.start()
         self.addCleanup(patcher.stop)
@@ -127,6 +138,13 @@ class LinkRoundTripTests(SimpleTestCase):
         self.assertTrue(self.snapshot.is_dir())
         self.assertEqual((self.snapshot / "pyproject.toml.orig").read_bytes(), self.original_pyproject)
         self.assertEqual((self.snapshot / "uv.lock.orig").read_bytes(), self.original_lock)
+        self.assertEqual(
+            (self.snapshot / "asl_cli__pyproject.toml.orig").read_bytes(),
+            self.original_cli_pyproject,
+        )
+        linked_cli = (self.repo / "asl_cli" / "pyproject.toml").read_text()
+        self.assertIn('"community-base[django_q]"', linked_cli)
+        self.assertNotIn("community-base[django_q] @ git+", linked_cli)
         meta = json.loads((self.snapshot / "snapshot.json").read_text())
         self.assertEqual(meta["package"], "community-base")
         self.run_uv.assert_called_once_with(["sync"], self.repo)
@@ -136,11 +154,23 @@ class LinkRoundTripTests(SimpleTestCase):
         self.assertEqual(self.unlink()[0], 0)
         self.assertEqual((self.repo / "pyproject.toml").read_bytes(), self.original_pyproject)
         self.assertEqual((self.repo / "uv.lock").read_bytes(), self.original_lock)
+        self.assertEqual(
+            (self.repo / "asl_cli" / "pyproject.toml").read_bytes(),
+            self.original_cli_pyproject,
+        )
         self.assertFalse(self.snapshot.exists())
         self.run_uv.assert_any_call(["sync", "--locked"], self.repo)
 
     def test_link_refuses_dirty_dependency_files(self):
         (self.repo / "uv.lock").write_text(LOCK + "\n# stray edit\n")
+        code, stderr = self.link()
+        self.assertEqual(code, 1)
+        self.assertIn("uncommitted changes", stderr)
+        self.assertFalse(self.snapshot.exists())
+
+    def test_link_refuses_dirty_nested_cli_manifest(self):
+        cli_pyproject = self.repo / "asl_cli" / "pyproject.toml"
+        cli_pyproject.write_text(cli_pyproject.read_text() + "\n# stray edit\n")
         code, stderr = self.link()
         self.assertEqual(code, 1)
         self.assertIn("uncommitted changes", stderr)
@@ -156,9 +186,7 @@ class LinkRoundTripTests(SimpleTestCase):
         self.assertIn("core-unlink", stderr)
 
     def test_link_inserts_into_existing_sources_table(self):
-        existing = (
-            PYPROJECT + '\n[tool.uv.sources]\nasl-cli = { path = "asl_cli", editable = true }\n'
-        )
+        existing = PYPROJECT + '\n[tool.uv.sources]\nasl-cli = { path = "asl_cli", editable = true }\n'
         write(self.repo / "pyproject.toml", existing)
         commit_all(self.repo, self.root, "with sources table")
         self.assertEqual(self.link()[0], 0)
@@ -172,8 +200,7 @@ class LinkRoundTripTests(SimpleTestCase):
     def test_link_refuses_existing_community_base_entry(self):
         write(
             self.repo / "pyproject.toml",
-            PYPROJECT
-            + '\n[tool.uv.sources]\ncommunity-base = { path = "../community-base", editable = true }\n',
+            PYPROJECT + '\n[tool.uv.sources]\ncommunity-base = { path = "../community-base", editable = true }\n',
         )
         commit_all(self.repo, self.root, "pre-linked")
         code, stderr = self.link()
@@ -203,13 +230,34 @@ class LinkRoundTripTests(SimpleTestCase):
         # Recovery state survives so the situation stays recoverable.
         self.assertTrue((self.snapshot / "snapshot.json").exists())
 
+    def test_unlink_refuses_on_unrelated_nested_cli_edit(self):
+        self.assertEqual(self.link()[0], 0)
+        cli_pyproject = self.repo / "asl_cli" / "pyproject.toml"
+        cli_pyproject.write_text(cli_pyproject.read_text() + "\n# unrelated edit\n")
+        code, stderr = self.unlink()
+        self.assertEqual(code, 1)
+        self.assertIn("changes beyond the link edit", stderr)
+        self.assertTrue((self.snapshot / "snapshot.json").exists())
+
     def test_failed_sync_restores_files_and_removes_snapshot(self):
         self.run_uv.side_effect = community_base_link.LinkError("uv sync failed")
         code, _ = self.link()
         self.assertEqual(code, 1)
         self.assertEqual((self.repo / "pyproject.toml").read_bytes(), self.original_pyproject)
         self.assertEqual((self.repo / "uv.lock").read_bytes(), self.original_lock)
+        self.assertEqual(
+            (self.repo / "asl_cli" / "pyproject.toml").read_bytes(),
+            self.original_cli_pyproject,
+        )
         self.assertFalse(self.snapshot.exists())
+
+    def test_link_round_trip_without_nested_cli_manifest(self):
+        cli_pyproject = self.repo / "asl_cli" / "pyproject.toml"
+        cli_pyproject.unlink()
+        commit_all(self.repo, self.root, "without nested CLI project")
+        self.assertEqual(self.link()[0], 0)
+        self.assertEqual(self.unlink()[0], 0)
+        self.assertFalse(cli_pyproject.exists())
 
 
 class SourceGuardTests(SimpleTestCase):
@@ -244,8 +292,7 @@ class SourceGuardTests(SimpleTestCase):
         text = (self.repo / "pyproject.toml").read_text()
         write(
             self.repo / "pyproject.toml",
-            text
-            + '\n[tool.uv.sources]\ncommunity-base = { path = "../community-base", editable = true }\n',
+            text + '\n[tool.uv.sources]\ncommunity-base = { path = "../community-base", editable = true }\n',
         )
         self.assertEqual(self.check(), 1)
         self.assertIn("core-unlink", self.detained_stderr)

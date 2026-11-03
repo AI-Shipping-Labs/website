@@ -22,6 +22,13 @@ def _resolve_provider():
     return (get_config('LLM_PROVIDER', 'anthropic') or 'anthropic').strip()
 
 
+def provider_identity():
+    """Return the configured provider and model for shared AI telemetry."""
+    provider = _resolve_provider()
+    model = (get_config('LLM_MODEL', 'claude-sonnet-4-5') or '').strip()
+    return provider[:32], model[:120]
+
+
 def is_enabled():
     """Return True iff the LLM service can run.
 
@@ -153,4 +160,4 @@ def stream(
     )
 
 
-__all__ = ['LLMError', 'complete', 'is_enabled', 'stream']
+__all__ = ['LLMError', 'complete', 'is_enabled', 'provider_identity', 'stream']

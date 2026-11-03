@@ -51,7 +51,7 @@ from .backends import (
     LLMTimeoutError,
     StreamEvent,
 )
-from .service import complete, is_enabled, stream
+from .service import complete, is_enabled, provider_identity, stream
 
 
 class TraceSink:
@@ -81,5 +81,6 @@ __all__ = [
     'StreamEvent',
     'complete',
     'is_enabled',
+    'provider_identity',
     'stream',
 ]

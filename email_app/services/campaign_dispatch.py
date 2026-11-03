@@ -19,39 +19,60 @@ class CampaignDeliveryConflict(Exception):
     pass
 
 
-def claim_and_enqueue_campaign(campaign_id, *, source, actor=None):
+def claim_and_enqueue_campaign(
+    campaign_id, *, source, actor=None, scheduled_due_by=None,
+):
     """Commit the campaign claim and ORM-broker enqueue together."""
-    from jobs.tasks import async_task, build_task_name
-
     with transaction.atomic():
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
-        if campaign.status != 'draft':
+        if not _campaign_can_be_claimed(campaign, scheduled_due_by):
             return CampaignClaimResult(False, campaign)
+        _mark_campaign_sending(campaign)
+        task_id = _enqueue_campaign(campaign, actor=actor, source=source)
+        return CampaignClaimResult(True, campaign, task_id)
 
-        campaign.status = 'sending'
-        campaign.sent_count = 0
-        campaign.sent_at = None
-        # Claiming the send consumes any pending schedule (manual send beats
-        # the dispatcher; the due-scan filter also only picks drafts).
-        campaign.scheduled_at = None
-        campaign.scheduled_timezone = None
-        campaign.save(update_fields=[
-            'status', 'sent_count', 'sent_at', 'scheduled_at',
-            'scheduled_timezone',
-        ])
-        task_kwargs = {"campaign_id": campaign.pk}
-        if actor is not None:
-            task_kwargs["released_by_id"] = actor.pk
-        task_id = async_task(
-            'email_app.tasks.send_campaign.send_campaign',
-            **task_kwargs,
-            task_name=build_task_name(
-                'Send campaign',
-                f'#{campaign.pk} {campaign.subject}',
-                source,
-            ),
-        )
-        return CampaignClaimResult(True, campaign, str(task_id) if task_id else None)
+
+def _campaign_can_be_claimed(campaign, scheduled_due_by):
+    if campaign.status != 'draft':
+        return False
+    if scheduled_due_by is None:
+        return True
+    if campaign.scheduled_at is None:
+        return False
+    return campaign.scheduled_at <= scheduled_due_by
+
+
+def _mark_campaign_sending(campaign):
+    campaign.status = 'sending'
+    campaign.sent_count = 0
+    campaign.sent_at = None
+    # Claiming consumes the schedule. Manual send beats the dispatcher.
+    campaign.scheduled_at = None
+    campaign.scheduled_timezone = None
+    campaign.save(update_fields=[
+        'status', 'sent_count', 'sent_at', 'scheduled_at',
+        'scheduled_timezone',
+    ])
+
+
+def _enqueue_campaign(campaign, *, actor, source):
+    from jobs.tasks import async_task, build_task_name
+
+    task_kwargs = {"campaign_id": campaign.pk}
+    if actor is not None:
+        task_kwargs["released_by_id"] = actor.pk
+    task_id = async_task(
+        'email_app.tasks.send_campaign.send_campaign',
+        **task_kwargs,
+        task_name=build_task_name(
+            'Send campaign',
+            f'#{campaign.pk} {campaign.subject}',
+            source,
+        ),
+    )
+    if task_id:
+        return str(task_id)
+    return None
 
 
 def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation"):

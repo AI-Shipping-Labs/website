@@ -15,6 +15,7 @@ safe to use on public views:
   consent state so the consent banner does not leak across states.
 """
 
+import hashlib
 from functools import wraps
 from uuid import uuid4
 
@@ -22,10 +23,28 @@ from django.conf import settings
 from django.core.cache import cache
 
 from analytics.consent import analytics_consent_state
+from content.utils.tags import parse_bounded_selected_tags
 from integrations.shared_cache import get_shared_cache, set_shared_cache
 
 ANON_PAGE_CACHE_TIMEOUT = 300
 _ANON_PAGE_KEY_PREFIX = "anon-page:v1"
+
+
+def _safe_cache_key_segment(value, max_length=100):
+    """Return a memcache-safe key segment bounded to ``max_length`` chars."""
+    if len(value) > max_length:
+        digest = hashlib.sha256(
+            value.encode("utf-8", errors="replace"),
+        ).hexdigest()[:32]
+        return f"{value[:40]}:{digest}"
+    for ch in value:
+        code = ord(ch)
+        if code < 33 or code >= 127:
+            digest = hashlib.sha256(
+                value.encode("utf-8", errors="replace"),
+            ).hexdigest()[:32]
+            return f"sha256:{digest}"
+    return value
 
 
 def _anonymous_cache_key(request, cache_group=None):
@@ -36,9 +55,18 @@ def _anonymous_cache_key(request, cache_group=None):
     if cache_group:
         version_key = _cache_group_version_key(cache_group)
         group_version = get_shared_cache(version_key, "initial")
+    path_token = _safe_cache_key_segment(request.path, max_length=100)
+    if not query:
+        return (
+            f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{cache_group}:"
+            f"{group_version}:{path_token}"
+        )
+    query_digest = hashlib.sha256(
+        query.encode("utf-8", errors="replace"),
+    ).hexdigest()[:32]
     return (
-        f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{cache_group}:{group_version}:"
-        f"{request.path}?{query}"
+        f"{_ANON_PAGE_KEY_PREFIX}:{consent}:{cache_group}:"
+        f"{group_version}:{path_token}?{query_digest}"
     )
 
 
@@ -78,6 +106,9 @@ def _is_cacheable_request(request):
         return False
     session_cookie = getattr(settings, "SESSION_COOKIE_NAME", "sessionid")
     if request.COOKIES.get(session_cookie):
+        return False
+    _, is_valid_tags = parse_bounded_selected_tags(request.GET.getlist("tag"))
+    if not is_valid_tags:
         return False
     return True
 

@@ -761,6 +761,10 @@ else:
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'OPTIONS': {
+            'MAX_ENTRIES': 4096,
+            'CULL_FREQUENCY': 4,
+        },
     },
     'django_q': _django_q_cache,
 }

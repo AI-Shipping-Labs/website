@@ -32,7 +32,8 @@ from content.access import (
 )
 from content.caching import cache_anonymous_page
 from content.services.related_content import build_related_content_rail
-from content.views.pages import _filter_by_tags, _get_selected_tags
+from content.utils.tags import resolve_bounded_selected_tags
+from content.views.pages import _filter_by_tags
 from events.models import (
     Event,
     EventFeedback,
@@ -372,7 +373,9 @@ def events_list(request):
         else 'upcoming'
     )
 
-    selected_tags = _get_selected_tags(request)
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
     now = timezone.now()
     user = request.user
     viewer_tz = viewer_timezone(user)

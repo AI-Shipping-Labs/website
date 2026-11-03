@@ -29,6 +29,10 @@ from content.topics import (
     primary_topic,
     topics_with_matches,
 )
+from content.utils.tags import (
+    filter_items_by_tags,
+    resolve_bounded_selected_tags,
+)
 from events.models.event import PUBLIC_EVENT_STATUSES
 from plans.models import Plan, Sprint, SprintEnrollment
 
@@ -334,37 +338,42 @@ def blog_list(request):
     ``?tag=<slug>`` is still honored so inbound links and article-detail
     tag chips keep working.
     """
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
     articles = list(Article.objects.filter(
         published=True, page_type='blog',
     ).select_related('source_event').order_by('-date'))
-    selected_tags = _get_selected_tags(request)
     selected_topic = (request.GET.get('topic') or '').strip()
 
     # Curated topic pills — only those matching at least one published article.
     topic_filters = topics_with_matches(articles)
-    valid_topic = selected_topic if selected_topic in BLOG_TOPICS else ''
+    valid_topic = ''
+    if selected_topic in BLOG_TOPICS:
+        valid_topic = selected_topic
 
     if valid_topic:
         articles = filter_by_topic(articles, valid_topic)
     elif selected_tags:
-        articles = list(_filter_by_tags(
-            Article.objects.filter(
-                published=True, page_type='blog',
-            ).select_related('source_event').order_by('-date'),
-            selected_tags,
-        ))
+        articles = filter_items_by_tags(articles, selected_tags)
 
     # Attach the primary curated topic label for the per-card eyebrow.
     for article in articles:
         match = primary_topic(article.tags)
-        article.primary_topic_label = match[1] if match else ''
+        article.primary_topic_label = ''
+        if match:
+            article.primary_topic_label = match[1]
+
+    current_tag = ''
+    if len(selected_tags) == 1:
+        current_tag = selected_tags[0]
 
     context = {
         'articles': articles,
         'topic_filters': topic_filters,
         'selected_topic': valid_topic,
         'selected_tags': selected_tags,
-        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'current_tag': current_tag,
         'base_path': '/blog',
     }
     return render(request, 'content/blog_list.html', context)
@@ -422,16 +431,17 @@ def blog_preview(request, preview_token):
 @cache_anonymous_page(cache_group='projects-list')
 def projects_list(request):
     """Projects listing page with optional difficulty and tag filtering."""
-    projects = Project.objects.filter(published=True)
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
 
     difficulty = request.GET.get('difficulty', '').strip()
-    selected_tags = _get_selected_tags(request)
+    published_projects = list(Project.objects.filter(published=True))
 
-    # Collect all tags and difficulties from published projects for the filter UI
     all_tags = set()
     all_difficulties = set()
     has_unspecified_difficulty = False
-    for project in projects:
+    for project in published_projects:
         if project.tags:
             all_tags.update(project.tags)
         if project.difficulty:
@@ -441,15 +451,17 @@ def projects_list(request):
     all_tags = sorted(all_tags)
     all_difficulties = sorted(all_difficulties)
 
-    # Filter by difficulty if provided. The reserved sentinel 'unspecified'
-    # isolates the empty-difficulty cohort, which real choices cannot reach.
+    projects = published_projects
     if difficulty == 'unspecified':
-        projects = projects.filter(difficulty='')
+        projects = [p for p in projects if p.difficulty == '']
     elif difficulty:
-        projects = projects.filter(difficulty=difficulty)
+        projects = [p for p in projects if p.difficulty == difficulty]
 
-    # Filter by tags if provided (AND logic)
-    projects = _filter_by_tags(projects, selected_tags)
+    projects = filter_items_by_tags(projects, selected_tags)
+
+    current_tag = ''
+    if len(selected_tags) == 1:
+        current_tag = selected_tags[0]
 
     context = {
         'projects': projects,
@@ -458,7 +470,7 @@ def projects_list(request):
         'current_difficulty': difficulty,
         'has_unspecified_difficulty': has_unspecified_difficulty,
         'selected_tags': selected_tags,
-        'current_tag': selected_tags[0] if len(selected_tags) == 1 else '',
+        'current_tag': current_tag,
         'base_path': '/projects',
     }
     return render(request, 'content/projects_list.html', context)
@@ -507,8 +519,10 @@ def collection_list(request):
     category_display_order = [
         'workshops', 'courses', 'articles', 'tools', 'models', 'other',
     ]
-    links = CuratedLink.objects.filter(published=True)
-    selected_tags = _get_selected_tags(request)
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
+    links = list(CuratedLink.objects.filter(published=True))
 
     # Collect all tags from published links for the tag filter UI
     all_tags = set()
@@ -518,7 +532,7 @@ def collection_list(request):
     all_tags = sorted(all_tags)
 
     # Filter by tags if provided (AND logic)
-    links = _filter_by_tags(links, selected_tags)
+    links = filter_items_by_tags(links, selected_tags)
 
     # Build per-link access info and strip URLs from gated links. The
     # upgrade message verb comes from the shared curated-link copy source
@@ -635,8 +649,10 @@ def tutorial_detail(request, slug):
 
 def downloads_list(request):
     """Downloadable resources listing page with optional tag filtering."""
-    downloads = Download.objects.filter(published=True)
-    selected_tags = _get_selected_tags(request)
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
+    downloads = list(Download.objects.filter(published=True))
 
     # Collect all tags from published downloads for the tag filter UI
     all_tags = set()
@@ -646,7 +662,7 @@ def downloads_list(request):
     all_tags = sorted(all_tags)
 
     # Filter by tags if provided (AND logic)
-    downloads = _filter_by_tags(downloads, selected_tags)
+    downloads = filter_items_by_tags(downloads, selected_tags)
 
     # Annotate each download with one clean catalog destination. Email
     # capture lives on the detail page, never inside repeated cards.

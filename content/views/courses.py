@@ -120,7 +120,8 @@ from content.services.module_home import (
     module_reader_navigation,
     module_tree_units,
 )
-from content.views.pages import _filter_by_tags, _get_selected_tags
+from content.utils.tags import resolve_bounded_selected_tags
+from content.views.pages import _filter_by_tags
 from events.services.display_time import (
     resolve_event_display_timezone,
     should_use_browser_timezone,
@@ -183,6 +184,9 @@ def courses_list(request):
     "External courses" section below — excluded from the tag-filter pool
     and never filtered out by the selected tag.
     """
+    selected_tags, invalid_response = resolve_bounded_selected_tags(request)
+    if invalid_response is not None:
+        return invalid_response
     instructor_prefetch = Prefetch(
         'aisl_instructor_links',
         queryset=CourseInstructor.objects.select_related('instructor').order_by('position'),
@@ -196,7 +200,6 @@ def courses_list(request):
     entitlement_courses = list(
         published.filter(aisl_extension__access_mode='entitlement').order_by('-created_at')
     )
-    selected_tags = _get_selected_tags(request)
 
     # Filter standard courses by tag if provided (AND logic). Entitlement
     # courses are never filtered — they always show in their own section.

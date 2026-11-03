@@ -6,6 +6,12 @@ normalization: lowercase, replace spaces with hyphens, strip special characters.
 
 import re
 
+from django.http import HttpResponse
+
+CATALOG_MAX_TAGS = 2
+CATALOG_MAX_TAG_LENGTH = 100
+CATALOG_MAX_RAW_TAG_PARAMS = 10
+
 
 def collect_tag_names(content_configs):
     """Return tag occurrences using one tags-only query per configuration.
@@ -74,3 +80,65 @@ def normalize_tags(tags):
             seen.add(normalized)
             result.append(normalized)
     return result
+
+
+def _has_invalid_raw_tag(raw_tag):
+    """Return True if a raw tag query param exceeds length or has control chars."""
+    if len(raw_tag) > CATALOG_MAX_TAG_LENGTH:
+        return True
+    for ch in raw_tag:
+        code = ord(ch)
+        if code < 32 or code == 127:
+            return True
+    return False
+
+
+def parse_bounded_selected_tags(raw_tags):
+    """Return ``(tags, is_valid)`` for a catalog ``?tag=`` parameter list."""
+    if len(raw_tags) > CATALOG_MAX_RAW_TAG_PARAMS:
+        return [], False
+    tags = []
+    seen = set()
+    for raw in raw_tags:
+        if _has_invalid_raw_tag(raw):
+            return [], False
+        cleaned = raw.strip()
+        if cleaned and cleaned not in seen:
+            tags.append(cleaned)
+            seen.add(cleaned)
+    if len(tags) > CATALOG_MAX_TAGS:
+        return [], False
+    return tags, True
+
+
+def invalid_tag_filter_response():
+    """Return an uncacheable 400 response for out-of-bounds tag filter queries."""
+    response = HttpResponse(
+        'Invalid tag filter.',
+        status=400,
+        content_type='text/plain; charset=utf-8',
+    )
+    response['Cache-Control'] = 'no-store'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+
+def resolve_bounded_selected_tags(request):
+    """Extract bounded selected tags from ``request.GET`` or return a 400 response."""
+    tags, is_valid = parse_bounded_selected_tags(request.GET.getlist('tag'))
+    if not is_valid:
+        return [], invalid_tag_filter_response()
+    return tags, None
+
+
+def filter_items_by_tags(items, selected_tags):
+    """Return items whose ``tags`` list contains every tag in ``selected_tags``."""
+    if not selected_tags:
+        return list(items)
+    required = set(selected_tags)
+    matched = []
+    for item in items:
+        item_tags = set(item.tags or [])
+        if required.issubset(item_tags):
+            matched.append(item)
+    return matched

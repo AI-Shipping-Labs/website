@@ -94,6 +94,7 @@ from integrations.services.banner_generator.dispatch import enqueue_force
 from integrations.services.banner_generator.resolve import effective_banner_url
 from integrations.services.llm import is_enabled as llm_is_enabled
 from integrations.services.zoom import ZoomAPIError, create_meeting
+from studio.services.banner_status import get_last_banner_task
 from studio.utils import is_synced
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,7 @@ _EVENT_EXAMPLE = {
         }
     ],
     "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
+    "banner_status": None,
     "recap_notes": "## What we covered\n\nBatching and KV cache.",
     "has_recap": True,
     "recap_published": True,
@@ -378,8 +380,13 @@ def _serialize_event_series_ref(event):
     return {"id": series.id, "slug": series.slug, "name": series.name}
 
 
-def serialize_event(event):
-    """Return the canonical event object for list/detail/create/update."""
+def serialize_event(event, banner_status=None):
+    """Return the canonical event object for list/detail/create/update.
+
+    ``banner_status`` is the trimmed banner-render task state computed by
+    the caller; detail GET populates it, list/create/update leave it
+    ``None`` so the collection endpoint never pays the per-row task lookup.
+    """
     return {
         "id": event.id,
         "slug": event.slug,
@@ -419,6 +426,7 @@ def serialize_event(event):
         "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
         "banner_url": effective_banner_url(event),
+        "banner_status": banner_status,
         # Issue #1458: Studio/API-authored recap notes plus the derived
         # publication state. ``has_recap`` is true for a synced content-repo
         # recap too, even though ``recap_notes`` is empty in that case.
@@ -433,6 +441,21 @@ def serialize_event(event):
         "created_at": isoformat_or_none(event.created_at),
         "updated_at": isoformat_or_none(event.updated_at),
     }
+
+
+def _event_banner_status(event):
+    """Return the trimmed banner-render status for the event detail API.
+
+    Shares the Studio panel's task lookup so ``asl events get`` reports the
+    same failed/success/in-progress state. Returns ``None`` when the
+    generator is disabled. ``task_detail_url`` is a Studio-internal URL and
+    is dropped from the API payload.
+    """
+    if not banner_generator_is_enabled():
+        return None
+    status = get_last_banner_task("event", event.pk)
+    status.pop("task_detail_url", None)
+    return status
 
 
 def _parse_iso_datetime(value):
@@ -1186,6 +1209,12 @@ def events_collection(request):
     methods={
         "GET": {
             "summary": "Retrieve an event",
+            "description": (
+                "Detail responses populate ``banner_status`` with the most "
+                "recent banner-render task state (none / in_progress / "
+                "success / failed plus a ``result_excerpt`` on failure). "
+                "Collection, create, and update responses leave it null."
+            ),
             "responses": {
                 200: {
                     "description": "Event detail.",
@@ -1376,7 +1405,10 @@ def event_detail(request, slug):
         )
 
     if request.method == "GET":
-        return JsonResponse(serialize_event(event), status=200)
+        return JsonResponse(
+            serialize_event(event, banner_status=_event_banner_status(event)),
+            status=200,
+        )
 
     if event.origin == "github" or is_synced(event):
         return error_response(
@@ -1739,7 +1771,9 @@ def event_retry_recording_upload(request, slug):
                 "event and returns the django-q task id. The render runs as a "
                 "background task; the resolved banner_url stays empty until the "
                 "worker finishes, so poll GET /api/worker/tasks/<task_id> (or "
-                "re-GET the event for banner_url). Regeneration is ALLOWED for "
+                "re-GET the event: banner_status reports the render outcome, "
+                "including a failed state with result_excerpt when the Lambda "
+                "render errored). Regeneration is ALLOWED for "
                 "synced/GitHub-origin events: the PATCH read-only rule protects "
                 "content fields owned by the source repo, but the auto-banner is "
                 "derived presentation state the platform owns regardless of "

@@ -106,6 +106,17 @@ def get_last_banner_task(content_type, content_pk):
         'studio_worker_task_detail', kwargs={'task_id': task.id},
     )
     if task.success:
+        # ``render_banner_for_content`` catches render errors and returns a
+        # ``render_failure`` dict instead of raising, so a green task can
+        # still mean "no banner was produced". Surface that as failed.
+        result = task.result
+        if isinstance(result, dict) and result.get('ok') is False:
+            return {
+                'state': 'failed',
+                'started_at': task.started,
+                'result_excerpt': _clamp_excerpt(result.get('error')) or None,
+                'task_detail_url': detail_url,
+            }
         return {
             'state': 'success',
             'started_at': task.started,

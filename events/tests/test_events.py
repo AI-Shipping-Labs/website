@@ -1722,6 +1722,38 @@ class EventDetailCoverImageTest(TestCase):
         self.assertNotContains(response, 'data-testid="event-cover-fallback"')
 
 
+class ApiCreatedEventGracefulDegradationTest(TestCase):
+    """Intake ec842352: events created via the API carry no cover image,
+    no auto banner (the render pipeline is async and can fail), and no
+    linked Workshop row. The detail page must still render fully, with
+    social-preview tags falling back to the site default image, and the
+    workshop-writeup card simply absent."""
+
+    def test_event_without_banner_or_workshop_renders_with_default_og_image(self):
+        event = Event.objects.create(
+            title='Tracing',
+            slug='api-created-no-banner',
+            kind='workshop',
+            start_datetime=timezone.now() + timedelta(days=7),
+            end_datetime=timezone.now() + timedelta(days=7, hours=2),
+            status='upcoming',
+            tags=['workshop'],
+            description='Instrument the agent with OpenTelemetry and read the traces.',
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="event-status-pill"')
+        self.assertContains(response, 'data-testid="event-description"')
+        # No linked Workshop row -> the writeup hand-off card is absent,
+        # not broken.
+        self.assertNotContains(response, 'data-testid="event-workshop-writeup"')
+        # Missing auto banner degrades to the site-default OG image.
+        self.assertContains(
+            response,
+            '<meta property="og:image" content="https://aishippinglabs.com/static/ai-shipping-labs.jpg"',
+        )
+
+
 class EventDetailInstructorTest(TestCase):
     """Issue #484: event detail page shows speaker / instructor info."""
 

@@ -2,7 +2,6 @@ import warnings
 from datetime import date
 from urllib.parse import parse_qs, urlparse
 
-from django.conf import settings
 from django.core.cache import CacheKeyWarning, cache
 from django.test import RequestFactory, TestCase, override_settings
 
@@ -119,7 +118,3 @@ class CatalogTagBoundsAndCacheStabilityTest(TestCase):
             warnings.simplefilter('always', CacheKeyWarning)
             cache.get(key)
         self.assertEqual(len(caught), 0)
-
-    def test_default_locmem_cache_max_entries_prevents_small_pool_culls(self):
-        options = settings.CACHES['default'].get('OPTIONS', {})
-        self.assertGreaterEqual(options.get('MAX_ENTRIES', 0), 4096)

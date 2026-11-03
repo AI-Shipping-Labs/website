@@ -25,6 +25,7 @@ from time import monotonic
 from django.contrib.auth import get_user_model
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import DeletedUserArchive
@@ -72,6 +73,9 @@ def _due_deliveries(campaign, now):
         state=CampaignDelivery.State.SENT,
         completed_at__isnull=False,
         completed_at__lte=cutoff,
+    ).filter(
+        Q(email_log__isnull=True)
+        | Q(email_log__email_type="campaign_verify_deadline")
     )
 
 

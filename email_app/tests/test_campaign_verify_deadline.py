@@ -5,10 +5,13 @@ from urllib.parse import parse_qs, urlparse
 
 import jwt
 from django.conf import settings
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
 from django.test import TestCase, tag
 from django.utils import timezone
 
+from email_app.admin.email_campaign import EmailCampaignAdmin
 from email_app.models import EmailCampaign
 from email_app.services.campaign_repermission import (
     VERIFY_DEADLINE_CTA,
@@ -24,6 +27,45 @@ User = get_user_model()
 
 def _token(url):
     return parse_qs(urlparse(url).query)["token"][0]
+
+
+class CampaignAdminConcurrentSendTest(TestCase):
+    def test_admin_rejects_stale_content_after_send_begins(self):
+        campaign = EmailCampaign.objects.create(
+            subject="Confirm", body="Delete after 7 days.",
+            audience_verification="unverified_only", verify_deadline_days=7,
+        )
+        stale_campaign = EmailCampaign.objects.get(pk=campaign.pk)
+        EmailCampaign.objects.filter(pk=campaign.pk).update(
+            status="sending",
+        )
+        stale_campaign.body = "No deletion warning."
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+
+        with self.assertRaises(PermissionDenied):
+            campaign_admin.save_model(None, stale_campaign, None, True)
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, "sending")
+        self.assertEqual(campaign.body, "Delete after 7 days.")
+
+    def test_admin_stale_noop_preserves_send_snapshot(self):
+        campaign = EmailCampaign.objects.create(
+            subject="Confirm", body="Delete after 7 days.",
+            audience_verification="unverified_only", verify_deadline_days=7,
+        )
+        stale_campaign = EmailCampaign.objects.get(pk=campaign.pk)
+        snapshot_time = timezone.now()
+        EmailCampaign.objects.filter(pk=campaign.pk).update(
+            status="sending", audience_snapshotted_at=snapshot_time,
+        )
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+
+        campaign_admin.save_model(None, stale_campaign, None, True)
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, "sending")
+        self.assertEqual(campaign.audience_snapshotted_at, snapshot_time)
 
 
 @tag("core")

@@ -11,6 +11,7 @@ Archive (hide) by ``PATCH {"is_archived": true}``; there is no DELETE route
 registered for either endpoint, so DELETE returns 405 from ``require_methods``.
 """
 
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -589,15 +590,10 @@ def campaign_detail(request, campaign_id):
     DELETE is not in the allowed-methods list (see ``campaigns_collection``
     docstring); ``require_methods`` returns 405 for it.
     """
-    campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
-    if campaign is None:
-        return error_response(
-            "Campaign not found",
-            "unknown_campaign",
-            status=404,
-        )
-
     if request.method == "GET":
+        campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+        if campaign is None:
+            return _campaign_not_found()
         return JsonResponse(_serialize_campaign(campaign), status=200)
 
     # PATCH
@@ -607,27 +603,53 @@ def campaign_detail(request, campaign_id):
     if not isinstance(data, dict):
         return body_must_be_object_response()
 
-    # ``status`` is a special-case read-only field: PATCH with the row's
-    # current status is a silent no-op (so round-tripping detail JSON works);
-    # any other value is rejected with the immutability error message.
-    if "status" in data:
-        if data["status"] != campaign.status:
-            return validation_response({
-                "status": (
-                    "status is immutable through the API; "
-                    "use Studio to send the campaign."
-                ),
-            })
+    return _patch_campaign_detail(campaign_id, data)
 
-    for field in sorted(READ_ONLY_FIELDS):
-        if field == "status":
-            continue
+
+def _campaign_not_found():
+    return error_response("Campaign not found", "unknown_campaign", status=404)
+
+
+def _campaign_patch_values(campaign, data):
+    if "status" in data and data["status"] != campaign.status:
+        return None, validation_response({
+            "status": (
+                "status is immutable through the API; "
+                "use Studio to send the campaign."
+            ),
+        })
+
+    promise_fields = {"audience_verification", "verify_deadline_days"}
+    if campaign.verify_deadline_days:
+        promise_fields.update({"subject", "body"})
+    changed_promise_fields = promise_fields.intersection(data)
+    if campaign.status != "draft" and changed_promise_fields:
+        return None, validation_response({
+            field: "Cannot change verification settings or warning content after sending begins."
+            for field in sorted(changed_promise_fields)
+        })
+
+    for field in sorted(READ_ONLY_FIELDS - {"status"}):
         if field in data:
-            return read_only_field_response(field)
+            return None, read_only_field_response(field)
 
     values, errors = _collect_campaign_values(data, existing=campaign)
     if errors:
-        return validation_response(errors)
+        return None, validation_response(errors)
+    return values, None
+
+
+@transaction.atomic
+def _patch_campaign_detail(campaign_id, data):
+    campaign = EmailCampaign.objects.select_for_update().filter(
+        pk=campaign_id,
+    ).first()
+    if campaign is None:
+        return _campaign_not_found()
+
+    values, error = _campaign_patch_values(campaign, data)
+    if error is not None:
+        return error
 
     _apply_campaign_values(campaign, values)
     campaign.save()

@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -536,54 +537,13 @@ def campaign_edit(request, campaign_id):
     page with a flash error so the operator sees the campaign's current
     state instead of a blank 404.
     """
+    if request.method == "POST":
+        return _save_draft_campaign(request, campaign_id)
+
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
 
     if campaign.status != "draft":
-        messages.error(
-            request,
-            f"This campaign is already {campaign.get_status_display().lower()} "
-            f"and cannot be edited.",
-        )
-        return redirect("studio_campaign_detail", campaign_id=campaign.pk)
-
-    if request.method == "POST":
-        subject = request.POST.get("subject", "").strip()
-        body = request.POST.get("body", "")
-        target_min_level = int(request.POST.get("target_min_level", 0))
-        target_tags_any = _parse_campaign_tags(request, "target_tags_any")
-        target_tags_none = _parse_campaign_tags(request, "target_tags_none")
-        slack_filter = _normalize_slack_filter(
-            request.POST.get("slack_filter", "")
-        )
-        audience_verification = _normalize_audience_verification(
-            request.POST.get("audience_verification", "")
-        )
-        target_event = _resolve_target_event(request.POST.get("target_event"))
-
-        campaign.subject = subject
-        campaign.body = body
-        campaign.target_min_level = target_min_level
-        campaign.target_tags_any = target_tags_any
-        campaign.target_tags_none = target_tags_none
-        campaign.slack_filter = slack_filter
-        campaign.audience_verification = audience_verification
-        campaign.target_event = target_event
-        campaign.save(update_fields=[
-            "subject",
-            "body",
-            "target_min_level",
-            "target_tags_any",
-            "target_tags_none",
-            "slack_filter",
-            "audience_verification",
-            "target_event",
-        ])
-
-        messages.success(
-            request,
-            f'Campaign "{campaign.subject}" updated.',
-        )
-        return redirect("studio_campaign_detail", campaign_id=campaign.pk)
+        return _campaign_not_editable(request, campaign)
 
     recipient_count = campaign.get_recipient_count()
     return render(
@@ -599,6 +559,48 @@ def campaign_edit(request, campaign_id):
             "selected_event_id": campaign.target_event_id,
         },
     )
+
+
+def _campaign_not_editable(request, campaign):
+    messages.error(
+        request,
+        f"This campaign is already {campaign.get_status_display().lower()} "
+        f"and cannot be edited.",
+    )
+    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
+
+
+def _draft_campaign_values(request):
+    return {
+        "subject": request.POST.get("subject", "").strip(),
+        "body": request.POST.get("body", ""),
+        "target_min_level": int(request.POST.get("target_min_level", 0)),
+        "target_tags_any": _parse_campaign_tags(request, "target_tags_any"),
+        "target_tags_none": _parse_campaign_tags(request, "target_tags_none"),
+        "slack_filter": _normalize_slack_filter(
+            request.POST.get("slack_filter", "")
+        ),
+        "audience_verification": _normalize_audience_verification(
+            request.POST.get("audience_verification", "")
+        ),
+        "target_event": _resolve_target_event(request.POST.get("target_event")),
+    }
+
+
+@transaction.atomic
+def _save_draft_campaign(request, campaign_id):
+    campaign = get_object_or_404(
+        EmailCampaign.objects.select_for_update(), pk=campaign_id,
+    )
+    if campaign.status != "draft":
+        return _campaign_not_editable(request, campaign)
+
+    values = _draft_campaign_values(request)
+    for field, value in values.items():
+        setattr(campaign, field, value)
+    campaign.save(update_fields=list(values))
+    messages.success(request, f'Campaign "{campaign.subject}" updated.')
+    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
 
 @staff_required

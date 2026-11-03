@@ -124,3 +124,31 @@ class CampaignVerifyApiTest(TierSetupMixin, TestCase):
         self.assertEqual(ok.status_code, 201)
         self.assertEqual(ok.json()["verify_deadline_days"], 7)
         self.assertEqual(bad.status_code, 422)
+
+    def test_sent_campaign_deletion_promise_is_immutable(self):
+        deadline = self.call(
+            "patch", f"/api/campaigns/{self.campaign.pk}",
+            {"verify_deadline_days": 1},
+        )
+        audience = self.call(
+            "patch", f"/api/campaigns/{self.campaign.pk}",
+            {"audience_verification": "everyone"},
+        )
+        body = self.call(
+            "patch", f"/api/campaigns/{self.campaign.pk}",
+            {"body": "Confirm your email."},
+        )
+        subject = self.call(
+            "patch", f"/api/campaigns/{self.campaign.pk}",
+            {"subject": "Confirm now"},
+        )
+
+        self.campaign.refresh_from_db()
+        self.assertEqual(deadline.status_code, 422)
+        self.assertEqual(audience.status_code, 422)
+        self.assertEqual(body.status_code, 422)
+        self.assertEqual(subject.status_code, 422)
+        self.assertEqual(self.campaign.verify_deadline_days, 7)
+        self.assertEqual(self.campaign.audience_verification, "unverified_only")
+        self.assertEqual(self.campaign.body, "Body")
+        self.assertEqual(self.campaign.subject, "Confirm")

@@ -54,11 +54,12 @@ class ProductionWorkflowTest(SimpleTestCase):
         self.assertIn("confirmProdDeploy:", text)
         self.assertIn("default: false", text)
 
-    def test_retired_ecs_emergency_workflows_are_removed_and_coolify_runbook_exists(self):
+    def test_retired_ecs_emergency_workflows_are_removed(self):
         for name in RETIRED_EMERGENCY_WORKFLOWS:
             with self.subTest(workflow=name):
                 self.assertFalse((WORKFLOWS_DIR / name).exists())
 
+    def test_coolify_runbook_documents_diagnostics_and_rollback(self):
         coolify_doc = COOLIFY_DEPLOY_DOC.read_text(encoding="utf-8")
         for marker in (
             "## Emergency diagnostics",
@@ -71,6 +72,7 @@ class ProductionWorkflowTest(SimpleTestCase):
             with self.subTest(coolify_marker=marker):
                 self.assertIn(marker, coolify_doc)
 
+    def test_setup_docs_describe_coolify_runtime_and_runbook(self):
         setup_doc = SETUP_DOC.read_text(encoding="utf-8")
         for marker in (
             "aisl-staging",

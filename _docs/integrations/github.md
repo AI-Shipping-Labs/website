@@ -164,10 +164,14 @@ environment's installation id in the per-env override.
 
 Purpose: AWS Secrets Manager secret name, path, or ARN containing the
 GitHub App's PEM private key. Read by
-`integrations/services/github_sync/client.py:_resolve_github_app_private_key`
-when the direct `GITHUB_APP_PRIVATE_KEY` setting is empty. The
-recommended production path — keeps the PEM out of the Integration
-Settings table.
+`integrations/services/github_app.py:_resolve_github_app_private_key`
+when the direct `GITHUB_APP_PRIVATE_KEY` setting is empty. Kept
+intentionally after the Coolify cutover (intake `a3fd29dc`): an
+authenticated read of the current source Service and production web
+Application found neither `GITHUB_APP_PRIVATE_KEY` nor
+`GITHUB_APP_PRIVATE_KEY_FILE` in their runtime environments. The
+Secrets Manager fallback remains necessary when no direct PEM is set
+in Studio; recheck the Coolify environments before removing it.
 
 Default: `ai-shipping-labs/github-app-private-key`. Leaving this at
 its default counts as "configured" in Studio (it points at the
@@ -225,7 +229,7 @@ environment to keep the keys isolated.
 
 Purpose: AWS region where the Secrets Manager secret lives. Default
 `eu-west-1`. Read by
-`integrations/services/github_sync/client.py:_resolve_github_app_private_key`
+`integrations/services/github_app.py:_resolve_github_app_private_key`
 and passed to `boto3.client('secretsmanager', region_name=region)`.
 
 Without it: Defaults to `eu-west-1`. If the secret lives elsewhere,
@@ -253,9 +257,9 @@ Test vs live: n/a beyond per-environment override.
 Purpose: Direct PEM private key — the same string that goes into the
 Secrets Manager secret, but stored inline as an
 `IntegrationSetting`. Used by
-`integrations/services/github_sync/client.py:78` before any AWS
-fallback is attempted. Marked as multiline because PEM blocks span
-many lines.
+`integrations/services/github_app.py:_resolve_github_app_private_key`
+before any AWS fallback is attempted. Marked as multiline because PEM
+blocks span many lines.
 
 Optional in production: the recommended path is the AWS Secrets
 Manager indirection above. Leave this field empty in production so

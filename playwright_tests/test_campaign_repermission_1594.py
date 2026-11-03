@@ -148,7 +148,7 @@ def test_staff_proves_the_controlled_consent_action_before_release(
 
         page.locator("#test-recipients").fill(controlled.email)
         with mock.patch(
-            "studio.views.campaigns.send_campaign_delivery_to_relay",
+            "email_app.services.relay_campaigns.send_campaign_delivery_to_relay",
             side_effect=capture,
         ):
             with page.expect_navigation(wait_until="domcontentloaded"):

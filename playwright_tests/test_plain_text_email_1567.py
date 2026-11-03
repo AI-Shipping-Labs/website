@@ -53,7 +53,7 @@ def _assert_preview_contract(page, relay_templates, campaign):
 def _send_campaign_test(page, recipient):
     page.locator("#test-recipients").fill(recipient)
     with mock.patch(
-        "studio.views.campaigns.send_campaign_delivery_to_relay",
+        "email_app.services.relay_campaigns.send_campaign_delivery_to_relay",
         return_value="playwright-campaign-relay",
     ) as relay_send:
         page.get_by_role("button", name="Send Test").click()

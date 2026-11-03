@@ -90,7 +90,7 @@ def _chip(page, email):
 
 def _send_test(page):
     with mock.patch(
-        "studio.views.campaigns.send_campaign_delivery_to_relay",
+        "email_app.services.relay_campaigns.send_campaign_delivery_to_relay",
         return_value="relay-id",
     ) as relay_send:
         page.get_by_role("button", name="Send Test").click()

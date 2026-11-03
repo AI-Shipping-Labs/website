@@ -2,6 +2,7 @@
 
 import ast
 import logging
+from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import Q
@@ -13,6 +14,7 @@ from email_app.tasks.send_campaign import (
     _append_diagnostic,
     _chunk,
     _expire_stale_claim,
+    _get_batch_interval_seconds,
     _get_batch_size,
     get_max_delivery_attempts,
     refresh_campaign_status,
@@ -71,6 +73,7 @@ def _enqueue_delivery_chunks(campaign, delivery_ids, covered):
     batch_size = _get_batch_size()
     chunks = list(_chunk(orphans, batch_size))
     now = timezone.now()
+    interval = _get_batch_interval_seconds(batch_size)
     created = 0
     for index, chunk in enumerate(chunks):
         task_name = build_task_name(
@@ -83,7 +86,7 @@ def _enqueue_delivery_chunks(campaign, delivery_ids, covered):
             func=BATCH_FUNC,
             schedule_type=Schedule.ONCE,
             repeats=1,
-            next_run=now,
+            next_run=now + timedelta(seconds=index * interval),
             kwargs={
                 'campaign_id': campaign.pk,
                 'delivery_ids': chunk,

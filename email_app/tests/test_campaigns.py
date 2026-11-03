@@ -612,7 +612,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
 
         before = timezone.now()
         from email_app.tasks.send_campaign import send_campaign
-        # Default interval is 60s; force 4 batches at batch_size=2.
+        # The safe minimum is 300s; force 4 batches at batch_size=2.
         send_campaign(self.campaign.pk, batch_size=2)
         after = timezone.now()
 
@@ -626,12 +626,12 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         self.assertGreaterEqual(first_run, before)
         self.assertLessEqual(first_run, after)
 
-        # Each subsequent batch is offset by index * 60s from batch 0.
+        # Each subsequent batch is offset by index * 300s from batch 0.
         base = schedules[0].next_run
         for index, sched in enumerate(schedules):
             offset = (sched.next_run - base).total_seconds()
             # Allow a small slack for the per-row creation wall-clock drift.
-            self.assertAlmostEqual(offset, index * 60, delta=2)
+            self.assertAlmostEqual(offset, index * 300, delta=2)
 
     def test_send_campaign_interval_read_from_config(self):
         """The stagger reads CAMPAIGN_BATCH_INTERVAL_SECONDS from config."""
@@ -644,7 +644,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         from email_app.tasks.send_campaign import send_campaign
         # override_settings flows through get_config (it checks Django
         # settings before env/default), so this exercises the config read.
-        with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS=120):
+        with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS=600):
             send_campaign(self.campaign.pk, batch_size=2)
 
         schedules = self._batch_schedules()
@@ -653,32 +653,29 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         base = schedules[0].next_run
         for index, sched in enumerate(schedules):
             offset = (sched.next_run - base).total_seconds()
-            self.assertAlmostEqual(offset, index * 120, delta=2)
+            self.assertAlmostEqual(offset, index * 600, delta=2)
 
-    def test_send_campaign_zero_interval_schedules_all_immediately(self):
-        """Interval 0 means no stagger: every batch is scheduled at ~now."""
+    def test_send_campaign_zero_interval_is_clamped_to_safe_minimum(self):
+        """Interval 0 cannot schedule campaign batches without pacing."""
         for i in range(5):
             create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
 
-        before = timezone.now()
         from email_app.tasks.send_campaign import send_campaign
         with override_settings(CAMPAIGN_BATCH_INTERVAL_SECONDS=0):
             send_campaign(self.campaign.pk, batch_size=2)
-        after = timezone.now()
 
         schedules = self._batch_schedules()
         self.assertEqual(len(schedules), 4)
-        # All next_run values fall within the fan-out window (no future
-        # offset), so nothing is deferred.
-        for sched in schedules:
-            self.assertGreaterEqual(sched.next_run, before)
-            self.assertLessEqual(sched.next_run, after)
+        base = schedules[0].next_run
+        for index, sched in enumerate(schedules):
+            offset = (sched.next_run - base).total_seconds()
+            self.assertAlmostEqual(offset, index * 300, delta=2)
 
     def test_send_campaign_unparseable_interval_falls_back_to_default(self):
-        """A non-numeric config value falls back to the 60s default."""
+        """A non-numeric config value falls back to the 300s safe minimum."""
         for i in range(5):
             create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
@@ -694,7 +691,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         base = schedules[0].next_run
         for index, sched in enumerate(schedules):
             offset = (sched.next_run - base).total_seconds()
-            self.assertAlmostEqual(offset, index * 60, delta=2)
+            self.assertAlmostEqual(offset, index * 300, delta=2)
 
     def test_send_campaign_batch_schedule_name_is_descriptive(self):
         """Scheduled batches carry a descriptive name (relates to #920)."""

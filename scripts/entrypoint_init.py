@@ -65,13 +65,19 @@ separate fail-closed phase: a stale schedule could let an overlapping worker
 claim incompatible work, so service startup must stop if deletion fails.
 """
 
-import logging
 import os
 import sys
 import time
 
 import django
 
+from scripts.entrypoint_routines import (
+    _initialize_runtime_observability,
+    _reconcile_r1_expand,
+    _register_schedules,
+    _suppress_r1_incompatible_schedules,
+)
+from scripts.entrypoint_timing import _emit_timing, _timed, persist_boot_timing
 from scripts.gunicorn_runtime import (
     apply_web_statement_timeout,
     gunicorn_argv,
@@ -80,8 +86,6 @@ from scripts.gunicorn_runtime import (
 )
 from scripts.gunicorn_runtime import gunicorn_worker_count as _gunicorn_worker_count
 
-logger = logging.getLogger(__name__)
-
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
@@ -89,150 +93,6 @@ def _truthy_env(name, *, default=False):
     if name not in os.environ:
         return default
     return os.environ[name].strip().lower() in _TRUTHY_ENV_VALUES
-
-
-def _emit_timing(phase, seconds):
-    """Print a single flushed ``BOOT_TIMING`` line for CloudWatch.
-
-    Format matches the ``CI_TIMING phase=... seconds=...`` convention used
-    in ``.github/workflows/deploy-dev.yml`` so ops can grep both with the
-    same tooling. ``flush=True`` is mandatory: the container may crash in a
-    later phase before gunicorn binds, and the line must still reach
-    CloudWatch. See issue #1141 Phase 1.
-    """
-    print(f"BOOT_TIMING phase={phase} seconds={seconds:.3f}", flush=True)
-
-
-def _timed(phase, fn, record=None):
-    """Run ``fn()``, emit its elapsed ``BOOT_TIMING`` line, return its result.
-
-    Purely additive observability: it does NOT change ordering, behavior, or
-    crash semantics of the wrapped phase. The timing line is emitted from a
-    ``finally`` block so a phase that raises still records its elapsed time
-    in CloudWatch before the exception propagates unchanged. ``fn``'s return
-    value is passed straight through to the caller.
-
-    Uses ``time.perf_counter()`` for a monotonic wall-clock measurement.
-
-    The elapsed value is computed exactly once. When ``record`` is a dict, the
-    same number that ``_emit_timing`` prints is stored under ``phase`` so the
-    persisted boot-timing payload (issue #1142) is the single source of truth
-    -- there is no recomputation. See ``persist_boot_timing``.
-    """
-    start = time.perf_counter()
-    try:
-        return fn()
-    finally:
-        elapsed = time.perf_counter() - start
-        _emit_timing(phase, elapsed)
-        if record is not None:
-            record[phase] = elapsed
-
-
-def persist_boot_timing(role, phases):
-    """Persist one boot-timing payload for ``role`` to the shared cache.
-
-    Issue #1142: writes ``{tag, recorded_at, role, phases}`` to the shared
-    ``django_q`` ``DatabaseCache`` (``django_q_cache`` table) under
-    ``boot_timing:<role>`` with ``timeout=None`` so the web diagnostics
-    endpoint can read the latest numbers for BOTH tiers (the worker's numbers
-    are produced in a different container; the per-process ``default``
-    ``LocMemCache`` cannot carry them across the container boundary).
-
-    The build ``tag`` comes from the ``VERSION`` env var (the full commit
-    SHA baked into the image at build time), falling back to ``"unknown"`` for
-    local runs.
-
-    Fail-safe: the entire write is wrapped in a broad ``except`` that logs the
-    traceback and swallows it -- exactly the discipline ``_register_schedules``
-    uses. A store/cache failure at boot (e.g. the ``django_q_cache`` table not
-    yet created on a first-ever deploy) must NEVER crash the container or halt
-    a rollout; the worst case is that this one boot's numbers are missing and
-    the endpoint returns ``null`` for that tier until the next boot.
-    """
-    try:
-        from django.core.cache import caches
-        from django.utils import timezone
-
-        payload = {
-            "tag": os.environ.get("VERSION") or "unknown",
-            "recorded_at": timezone.now().isoformat(),
-            "role": role,
-            "phases": dict(phases),
-        }
-        caches["django_q"].set(
-            f"boot_timing:{role}", payload, timeout=None,
-        )
-    except Exception:
-        # Log the traceback but keep booting. Persisting diagnostics is
-        # non-critical for serving requests or running the qcluster; a bad
-        # cache/DB state cannot be allowed to take a tier down.
-        logger.exception("persist_boot_timing failed during entrypoint boot")
-
-
-def _register_schedules():
-    """Register recurring django-q schedules. Idempotent and fail-safe.
-
-    Runs on every container boot for both web and worker variants. Wrapped
-    in a broad ``except`` because schedule registration is non-critical for
-    serving requests or running the qcluster — a failure here must not
-    prevent the container from starting. See issue #708.
-    """
-    from django.core.management import call_command
-
-    print("Register recurring job schedules", flush=True)
-    try:
-        call_command("setup_schedules", verbosity=0)
-    except Exception as exc:
-        # Log the traceback but keep booting. A bad schedule entry cannot
-        # be allowed to take the web tier down; the worst-case fallout is
-        # that one cron does not fire until the next deploy, which is
-        # still better than a crash loop.
-        logger.exception("setup_schedules failed during entrypoint boot")
-        try:
-            from jobs.schedule_reconciliation import (
-                build_schedule_definitions,
-                expected_schedule_names,
-                publish_schedule_reconciliation_state,
-            )
-            from website.release_phase import background_work_enabled
-
-            definitions = build_schedule_definitions(
-                background_enabled=background_work_enabled(),
-            )
-            publish_schedule_reconciliation_state(
-                status="degraded",
-                expected_names=expected_schedule_names(definitions),
-                error=exc,
-            )
-        except Exception:
-            # Diagnostics are valuable but remain subordinate to the explicit
-            # fail-open boot contract.
-            logger.exception(
-                "schedule reconciliation degraded state publication failed"
-            )
-
-
-def _suppress_r1_incompatible_schedules():
-    """Delete stale R2 work vocabulary and propagate any failure.
-
-    Unlike ordinary schedule registration, this is release safety-critical:
-    continuing after a failed delete could let an overlapping old worker claim
-    work it does not understand.
-    """
-    from django.core.management import call_command
-
-    print("Suppress R1-incompatible recurring schedules", flush=True)
-    call_command("suppress_r1_incompatible_schedules", verbosity=0)
-
-
-def _reconcile_r1_expand():
-    """Repair compatibility writes before web serves or a worker consumes."""
-
-    from django.core.management import call_command
-
-    print("Reconcile R1 expanded-schema compatibility writes", flush=True)
-    call_command("reconcile_r1_expand", verbosity=0)
 
 
 def _serving_boot_smoke_check_enabled():
@@ -316,13 +176,6 @@ def _run_migrate(phases):
         record=phases,
     )
     print("Database migrations applied successfully.", flush=True)
-
-
-def _initialize_runtime_observability():
-    """Apply Studio observability settings after Django setup, before serve."""
-    from integrations.services.observability import init_logfire
-
-    init_logfire(use_runtime_config=True)
 
 
 def _finalize_serving(role, phases, boot_start):

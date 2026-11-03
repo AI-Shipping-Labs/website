@@ -42,6 +42,8 @@ by this service (asserted in tests, mirroring banner_generator).
 """
 
 
+from community_base.questionnaires.onboarding_ai import TraceSink
+
 from .backends import (
     STREAM_DONE,
     STREAM_TEXT_DELTA,
@@ -52,23 +54,6 @@ from .backends import (
     StreamEvent,
 )
 from .service import complete, is_enabled, provider_identity, stream
-
-
-class TraceSink:
-    """No-op hooks for callables that expose LLM request tracing."""
-
-    def on_request(self, *, system, messages, tool):
-        """Called before the LLM request."""
-
-    def on_result(self, *, result, latency_seconds):
-        """Called after the LLM request returns."""
-
-    def on_parsed(self, *, parsed):
-        """Called after structured output validation."""
-
-    def on_error(self, *, error):
-        """Called when the call or parse fails."""
-
 
 __all__ = [
     'STREAM_DONE',

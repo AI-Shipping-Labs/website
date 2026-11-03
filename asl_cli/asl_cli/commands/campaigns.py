@@ -101,7 +101,8 @@ def campaigns_update(campaign_id, fmt, **kwargs):
     required=True,
     help=(
         "ISO 8601 datetime to send at, e.g. 2026-11-05T10:00:00. "
-        "Naive times are interpreted in --tz; the time must be in the future."
+        "Naive times use --tz; DST gaps are rejected and ambiguous times "
+        "need an explicit UTC offset. The time must be in the future."
     ),
 )
 @click.option(

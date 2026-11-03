@@ -227,10 +227,6 @@ def _serialize_campaign(campaign):
     }
 
 
-def _read_only_field_response(field):
-    return read_only_field_response(field, hint=READ_ONLY_FIELD_HINTS.get(field))
-
-
 def _collect_campaign_values(data, *, existing=None):
     """Validate API payload and return model field values + per-field errors.
 
@@ -508,7 +504,9 @@ def campaigns_collection(request):
             # Silently overwritten below; see contract above.
             continue
         if field in data:
-            return read_only_field_response(field)
+            return read_only_field_response(
+                field, hint=READ_ONLY_FIELD_HINTS.get(field)
+            )
 
     values, errors = _collect_campaign_values(data, existing=None)
     if errors:
@@ -650,7 +648,9 @@ def _campaign_patch_values(campaign, data):
 
     for field in sorted(READ_ONLY_FIELDS - {"status"}):
         if field in data:
-            return None, read_only_field_response(field)
+            return None, read_only_field_response(
+                field, hint=READ_ONLY_FIELD_HINTS.get(field)
+            )
 
     values, errors = _collect_campaign_values(data, existing=campaign)
     if errors:

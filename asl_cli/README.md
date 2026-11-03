@@ -431,7 +431,9 @@ uv run asl campaigns test-send 42 --recipient you@example.com
 ```
 
 `--at` is an ISO 8601 datetime in the future; a naive value (no UTC offset)
-is interpreted in `--tz` (`--tz` is required then). The server dispatches
+is interpreted in `--tz` (`--tz` is required then). Local times skipped by a
+daylight-saving change are rejected; repeated local times require an explicit
+UTC offset in `--at`. The server dispatches
 scheduled drafts every minute, so a campaign scheduled at 10:00 goes out
 within a minute of that time. The schedule is visible in Studio on the
 campaign detail page with a cancel button. Scheduling or sending a

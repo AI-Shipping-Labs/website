@@ -13,7 +13,7 @@ claiming also clears the schedule fields.
 from dataclasses import dataclass
 from datetime import datetime
 from datetime import timezone as dt_timezone
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import transaction
 from django.utils import timezone
@@ -42,15 +42,7 @@ class CampaignScheduleConflict(Exception):
     """The campaign state does not allow the schedule operation."""
 
 
-def parse_scheduled_time(raw, timezone_name, *, now):
-    """Parse an ISO datetime + optional IANA tz into a UTC dispatch instant.
-
-    A naive ``raw`` is interpreted in ``timezone_name`` (required in that
-    case). An aware ``raw`` is used as-is; when ``timezone_name`` is also
-    given it must agree with the datetime's offset so the stored display
-    timezone never contradicts the instant. Returns ``(instant, tz_name)``
-    where ``tz_name`` is the caller's timezone name or ``None``.
-    """
+def _parse_iso_datetime(raw):
     if not isinstance(raw, str) or not raw.strip():
         raise CampaignScheduleValidationError({
             "scheduled_at": "Must be an ISO 8601 datetime string.",
@@ -61,48 +53,110 @@ def parse_scheduled_time(raw, timezone_name, *, now):
         raise CampaignScheduleValidationError({
             "scheduled_at": f"Could not parse {raw!r} as an ISO 8601 datetime.",
         })
+    return parsed
 
-    zone = None
-    if timezone_name:
-        if not isinstance(timezone_name, str):
-            raise CampaignScheduleValidationError({
-                "scheduled_timezone": "Must be an IANA timezone name string.",
-            })
-        try:
-            zone = ZoneInfo(timezone_name.strip())
-        except Exception:
-            raise CampaignScheduleValidationError({
-                "scheduled_timezone": (
-                    f"Unknown IANA timezone {timezone_name!r}."
-                ),
-            })
 
+def _get_timezone(timezone_name):
+    if not timezone_name:
+        return None, None
+    if not isinstance(timezone_name, str):
+        raise CampaignScheduleValidationError({
+            "scheduled_timezone": "Must be an IANA timezone name string.",
+        })
+    normalized_name = timezone_name.strip()
+    try:
+        zone = ZoneInfo(normalized_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise CampaignScheduleValidationError({
+            "scheduled_timezone": (
+                f"Unknown IANA timezone {timezone_name!r}."
+            ),
+        })
+    return zone, normalized_name
+
+
+def _valid_local_time_candidates(local_datetime, zone):
+    candidates = {}
+    for fold in (0, 1):
+        candidate = local_datetime.replace(tzinfo=zone, fold=fold)
+        instant = candidate.astimezone(dt_timezone.utc)
+        round_trip = instant.astimezone(zone).replace(tzinfo=None)
+        if round_trip == local_datetime:
+            candidates[instant] = candidate
+    return list(candidates.values())
+
+
+def _interpret_naive_datetime(parsed, zone, timezone_name):
+    candidates = _valid_local_time_candidates(parsed, zone)
+    if not candidates:
+        raise CampaignScheduleValidationError({
+            "scheduled_at": (
+                f"This local time does not exist in {timezone_name} "
+                "because of a daylight-saving transition."
+            ),
+        })
+    if len(candidates) > 1:
+        raise CampaignScheduleValidationError({
+            "scheduled_at": (
+                f"This local time occurs twice in {timezone_name}; include "
+                "an explicit UTC offset to choose one."
+            ),
+        })
+    return candidates[0]
+
+
+def _validate_aware_datetime(parsed, zone, timezone_name):
+    candidates = _valid_local_time_candidates(parsed.replace(tzinfo=None), zone)
+    if not candidates:
+        raise CampaignScheduleValidationError({
+            "scheduled_at": (
+                f"This local time does not exist in {timezone_name} "
+                "because of a daylight-saving transition."
+            ),
+        })
+    valid_offsets = {candidate.utcoffset() for candidate in candidates}
+    if parsed.utcoffset() not in valid_offsets:
+        raise CampaignScheduleValidationError({
+            "scheduled_timezone": (
+                f"{timezone_name} does not match the UTC offset in "
+                "scheduled_at."
+            ),
+        })
+
+
+def _resolve_scheduled_datetime(parsed, zone, timezone_name):
+    if zone is None:
+        if parsed.tzinfo is not None:
+            return parsed
+        raise CampaignScheduleValidationError({
+            "scheduled_timezone": (
+                "Required when scheduled_at carries no UTC offset "
+                "(e.g. \"Europe/Berlin\")."
+            ),
+        })
     if parsed.tzinfo is None:
-        if zone is None:
-            raise CampaignScheduleValidationError({
-                "scheduled_timezone": (
-                    "Required when scheduled_at carries no UTC offset "
-                    "(e.g. \"Europe/Berlin\")."
-                ),
-            })
-        parsed = parsed.replace(tzinfo=zone)
-    elif zone is not None:
-        local_offset = parsed.replace(tzinfo=zone).utcoffset()
-        if parsed.utcoffset() != local_offset:
-            raise CampaignScheduleValidationError({
-                "scheduled_timezone": (
-                    f"{timezone_name} does not match the UTC offset in "
-                    "scheduled_at."
-                ),
-            })
+        return _interpret_naive_datetime(parsed, zone, timezone_name)
+    _validate_aware_datetime(parsed, zone, timezone_name)
+    return parsed
+
+
+def parse_scheduled_time(raw, timezone_name, *, now):
+    """Return a validated UTC instant and its optional IANA display timezone.
+
+    Naive local times require a timezone and are rejected when a daylight-
+    saving transition makes them nonexistent or ambiguous. An aware datetime
+    may include a timezone when its offset is valid for that local time.
+    """
+    parsed = _parse_iso_datetime(raw)
+    zone, normalized_name = _get_timezone(timezone_name)
+    parsed = _resolve_scheduled_datetime(parsed, zone, normalized_name)
 
     if parsed <= now:
         raise CampaignScheduleValidationError({
             "scheduled_at": "Must be in the future.",
         })
 
-    tz_name = timezone_name.strip() if timezone_name else None
-    return parsed.astimezone(dt_timezone.utc), tz_name
+    return parsed.astimezone(dt_timezone.utc), normalized_name
 
 
 def schedule_campaign(campaign_id, *, scheduled_at, scheduled_timezone, now=None):
@@ -183,6 +237,7 @@ def dispatch_due_campaigns(*, now=None):
         result = claim_and_enqueue_campaign(
             campaign_id,
             source="Scheduled campaign dispatch",
+            scheduled_due_by=now,
         )
         outcome = CampaignDispatchOutcome(
             campaign_id=campaign_id,

@@ -266,7 +266,6 @@ class DispatchDueCampaignsTest(TestCase):
         self.due.refresh_from_db()
         self.assertEqual(self.due.status, "sending")
 
-
 class ClaimConsumesScheduleTest(TestCase):
     """Manual sends (Studio or API) consume any pending schedule."""
 

@@ -80,7 +80,7 @@ A task that catches its own error returns `success=True` with `result=None` — 
 
 Drafts: `asl campaigns list|get|create|update` (draft authoring, recipients via `asl campaigns get` + `/recipients`). Sending/scheduling is a deliberate staff action:
 
-- `asl campaigns schedule <id> --at "2026-11-05T10:00:00" --tz Europe/Berlin` — set/replace the send time. `--at` is ISO 8601; a naive time is interpreted in `--tz` (required then). The server sends the campaign at that time (every-minute dispatcher); `asl campaigns get` shows `scheduled_at` (UTC) and `scheduled_timezone`.
+- `asl campaigns schedule <id> --at "2026-11-05T10:00:00" --tz Europe/Berlin` — set/replace the send time. `--at` is ISO 8601; a naive time is interpreted in `--tz` (required then). Local times skipped by daylight-saving changes are rejected; repeated local times require an explicit UTC offset. The server sends the campaign at that time (every-minute dispatcher); `asl campaigns get` shows `scheduled_at` (UTC) and `scheduled_timezone`.
 - `asl campaigns unschedule <id>` — cancel a scheduled send (draft only).
 - `asl campaigns send <id> --yes` — send immediately. `--yes` is required for non-interactive use; without it the CLI asks for confirmation.
 - `asl campaigns test-send <id> --recipient you@example.com` — one probe email; never changes the draft or audience. (API equivalent: `POST /api/campaigns/<id>/test-send` with `{"email": ...}`.)

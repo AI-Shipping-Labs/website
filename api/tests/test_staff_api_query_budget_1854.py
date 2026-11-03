@@ -12,6 +12,8 @@ from django.test.utils import CaptureQueriesContext
 
 from accounts.models import EmailAlias, Token
 from accounts.utils.tags import add_tag
+from integrations.config import reset_local_config_cache
+from integrations.shared_cache import reset_local_shared_cache_memo
 from payments.models import Tier
 from tests.fixtures import create_user_with_membership
 
@@ -35,7 +37,12 @@ class StaffEndpointQueryBudgetTest(TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
 
     def _queries(self, call):
-        call()  # warm per-process caches (redirect table, config stamp)
+        # Redirect/config caches can outlive neighboring tests in a shard.
+        # Start each sample from a known cold state, then keep cache setup
+        # outside the measured request.
+        reset_local_config_cache()
+        reset_local_shared_cache_memo()
+        call()  # warm redirect and config caches before counting endpoint queries
         with CaptureQueriesContext(connection) as ctx:
             response = call()
         return ctx.captured_queries, response
@@ -54,16 +61,18 @@ class StaffEndpointQueryBudgetTest(TestCase):
     def test_user_detail_query_count_does_not_grow_with_related_rows(self):
         baseline, _ = self._queries(self._user_detail)
 
-        for index in range(5):
-            EmailAlias.objects.create(
-                user=self.member, email=f"alias{index}@test.com",
-            )
-            add_tag(self.member, f"cohort-{index}")
-        grown, response = self._queries(self._user_detail)
+        for batch in range(20):
+            for offset in range(5):
+                index = batch * 5 + offset
+                EmailAlias.objects.create(
+                    user=self.member, email=f"alias{index}@test.com",
+                )
+                add_tag(self.member, f"cohort-{index}")
+            grown, response = self._queries(self._user_detail)
 
-        self.assertEqual(len(response.json()["aliases"]), 5)
-        self.assertEqual(len(grown), len(baseline))
-        self.assertLessEqual(len(grown), 6)
+            self.assertEqual(len(response.json()["aliases"]), (batch + 1) * 5)
+            self.assertEqual(len(grown), len(baseline))
+            self.assertLessEqual(len(grown), 6)
 
     def test_recipient_count_is_one_aggregate_over_distinct_user_ids(self):
         for index in range(5):

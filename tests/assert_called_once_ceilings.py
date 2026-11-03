@@ -168,8 +168,6 @@ DIRECT_BARE_CALL_CEILING: tuple[str, ...] = (
     "integrations/tests/test_zoom.py::ZoomRecordingCompletedTest.test_oversized_timestamp_rejects_before_all_side_effects::visible-assert-called-once-reference::c154823343fed8bd9f69cfd53e4555ecdc77156c92b2969e7c50997da5cc594c::1",
     "integrations/tests/test_zoom.py::ZoomValidateWebhookSignatureTest.test_fresh_signature_uses_constant_time_comparison::visible-assert-called-once-reference::2fc1429556ac85da350a264e7c80b69030d1dcb3908bba9b90098a34afe31310::1",
     "integrations/tests/test_zoom.py::ZoomWaitingRoomSettingsTest.test_update_meeting_settings_patches_settings_only::visible-assert-called-once-reference::9360bf6515e56919b2543d4c9c59852cb59c29a473264d6160f6ead68acab5d2::1",
-    "jobs/tests/test_entrypoint_boot_mode.py::NoInfraServingBootTest.test_combined_worker_waits_for_web_schema_before_qcluster::visible-assert-called-once-reference::27397428dc927b5dafeb173b80a6b8e82e4ec34aeac787589adbecc6bc3cf0b6::1",
-    "jobs/tests/test_entrypoint_boot_mode.py::NoInfraServingBootTest.test_combined_worker_waits_for_web_schema_before_qcluster::visible-assert-called-once-reference::69e25ead8bfff81e3e3f681b1a0c73c15e26217b7ed7a2912351aae042ac87d5::1",
     "jobs/tests/test_entrypoint_boot_mode.py::NoInfraServingBootTest.test_web_migrates_schedules_and_serves_without_check_by_default::visible-assert-called-once-reference::1c6122e722d6fdbf0f5d5239a2f68e6e0e65020180e89e15ea147c2122727beb::1",
     "jobs/tests/test_entrypoint_boot_mode.py::NoInfraServingBootTest.test_web_migrates_schedules_and_serves_without_check_by_default::visible-assert-called-once-reference::c86dd3ab6974c5d6216add9f312c31c2bd1651bf6d2863a46c56f84b73270a83::1",
     "jobs/tests/test_entrypoint_boot_mode.py::NoInfraServingBootTest.test_worker_schedules_and_starts_qcluster_without_migrate_or_check::visible-assert-called-once-reference::1c6122e722d6fdbf0f5d5239a2f68e6e0e65020180e89e15ea147c2122727beb::1",
@@ -252,13 +250,13 @@ NONCALL_REFERENCE_CEILING: tuple[str, ...] = ()
 
 UNKNOWN_DYNAMIC_REFERENCE_CEILING: tuple[str, ...] = ()
 
-DIRECT_BARE_CALL_GOLDEN_SHA256 = "817b1e341b15f459bda995e8740d7f3bcfc55b874856994c9f8a9dc17ce5f267"
+DIRECT_BARE_CALL_GOLDEN_SHA256 = "9803763937e06cc3a1a4bf8d8abd44ecf5e6f4d6d80aeaa80754dfaddc35aa6c"
 UNKNOWN_CALL_SHAPE_GOLDEN_SHA256 = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 NONCALL_REFERENCE_GOLDEN_SHA256 = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 UNKNOWN_DYNAMIC_REFERENCE_GOLDEN_SHA256 = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
 
 EXPECTED_CEILING_COUNTS = {
-    "DIRECT_BARE_CALL": 239,
+    "DIRECT_BARE_CALL": 237,
     "UNKNOWN_CALL_SHAPE": 0,
     "NONCALL_REFERENCE": 0,
     "UNKNOWN_DYNAMIC_REFERENCE": 0,

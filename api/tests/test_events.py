@@ -219,6 +219,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "materials",
                 "hosts",
                 "banner_url",
+                "banner_status",
                 # Issue #1458: Studio/API-authored recap notes + derived state.
                 "recap_notes",
                 "has_recap",

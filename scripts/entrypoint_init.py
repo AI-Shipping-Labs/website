@@ -4,8 +4,7 @@ Replaces the entrypoint.sh that ran three separate ``manage.py`` processes
 (migrate / createcachetable / check) before exec-ing gunicorn. Each
 process re-imported ``website/settings.py`` and re-paid the eager
 AWS-network cost (Secrets Manager + RDS DatabaseCache + IntegrationSetting
-query), adding ~30s of redundant cold-start that raced the ALB
-unhealthy-threshold (3 x 30s).
+query), adding about 30s of avoidable startup latency.
 
 This script imports settings ONCE and runs all four steps in one Python
 process, then hands off to gunicorn via ``gunicorn.app.wsgiapp.run`` --

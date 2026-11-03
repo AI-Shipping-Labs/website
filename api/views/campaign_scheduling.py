@@ -15,6 +15,8 @@ same exactly-once claim Studio uses. Test sends never change campaign
 status, mirroring Studio.
 """
 
+import logging
+
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.http import JsonResponse
@@ -43,6 +45,8 @@ from email_app.services.campaign_test_send import (
     send_campaign_test_recipient,
     send_test_campaign_delivery,
 )
+
+logger = logging.getLogger(__name__)
 
 _SCHEDULE_REQUEST_EXAMPLE = {
     "scheduled_at": "2026-11-05T10:00:00",
@@ -383,6 +387,7 @@ def campaign_test_send(request, campaign_id):
         )
     except Exception:
         # External rendering/transport boundary: never leak provider payloads.
+        logger.exception("Campaign test delivery failed for campaign %s", campaign.pk)
         return error_response(
             "Test delivery failed. Inspect the server logs.",
             "campaign_test_send_failed",

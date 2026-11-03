@@ -632,7 +632,7 @@ def _campaign_patch_values(campaign, data):
         return None, validation_response({
             "status": (
                 "status is immutable through the API; "
-                "use Studio to send the campaign."
+                "use the campaign send endpoint."
             ),
         })
 

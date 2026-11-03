@@ -381,16 +381,17 @@ class TestSendEndpointTest(CampaignSchedulingApiTestBase):
         self.assertEqual(response.json()["code"], "campaign_test_send_failed")
 
     def test_test_send_transport_failure_502(self):
-        with patch(
-            "api.views.campaign_scheduling.send_campaign_test_recipient",
-            side_effect=RuntimeError("relay exploded"),
-        ):
-            response = self.client.post(
-                f"/api/campaigns/{self.draft.pk}/test-send",
-                data=json.dumps({"email": "probe@example.com"}),
-                content_type="application/json",
-                **self._auth(),
-            )
+        with self.assertLogs("api.views.campaign_scheduling", level="ERROR"):
+            with patch(
+                "api.views.campaign_scheduling.send_campaign_test_recipient",
+                side_effect=RuntimeError("relay exploded"),
+            ):
+                response = self.client.post(
+                    f"/api/campaigns/{self.draft.pk}/test-send",
+                    data=json.dumps({"email": "probe@example.com"}),
+                    content_type="application/json",
+                    **self._auth(),
+                )
         self.assertEqual(response.status_code, 502)
         self.assertNotIn("relay exploded", response.json()["error"])
 

@@ -107,6 +107,18 @@ class PurgeDecisionTest(PurgeBase):
         self.assertEqual(result["due_deliveries"], 0)
         self.assertTrue(self.exists(recent))
 
+    def test_delivery_without_deletion_warning_is_not_a_candidate(self):
+        recipient = self.recipient("repermission")
+        EmailLog.objects.filter(campaign=self.campaign, user=recipient).update(
+            email_type="campaign_repermission",
+        )
+
+        result = self.run_purge()
+
+        self.assertEqual(result["due_deliveries"], 0)
+        self.assertEqual(result["deleted"], 0)
+        self.assertTrue(self.exists(recipient))
+
     def test_protected_accounts_survive_and_are_counted_by_reason(self):
         protected = {
             "logged_in": self.recipient("logged", last_login=timezone.now()),

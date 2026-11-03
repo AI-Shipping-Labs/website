@@ -1,6 +1,8 @@
 """Low-level Django admin for inspecting and editing email campaigns."""
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
 
 from email_app.models import EmailCampaign
 from studio.admin_links import studio_link
@@ -52,6 +54,18 @@ class EmailCampaignAdmin(admin.ModelAdmin):
                 'studio_link',
             ]
         return self.readonly_fields
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        if change:
+            current = EmailCampaign.objects.select_for_update().get(pk=obj.pk)
+            if current.status != 'draft':
+                if obj.subject != current.subject or obj.body != current.body:
+                    raise PermissionDenied(
+                        'Campaign content cannot change after sending begins.'
+                    )
+                return
+        super().save_model(request, obj, form, change)
 
     def get_urls(self):
         """Remove Django's unnamed legacy change-URL redirect.

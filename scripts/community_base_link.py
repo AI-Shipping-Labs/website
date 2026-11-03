@@ -6,15 +6,16 @@ development, `make core-unlink` restores the pinned dependency exactly.
 
 Contract:
 
-- The dependency files (`pyproject.toml`, `uv.lock`) must be clean to link;
-  their exact original bytes are snapshotted under `.tmp/core-link/`.
+- The root dependency files (`pyproject.toml`, `uv.lock`) and, when present,
+  `asl_cli/pyproject.toml` must be clean to link; their exact original bytes
+  are snapshotted under `.tmp/core-link/`.
 - Link refuses when a snapshot already exists, when the sibling checkout is
   missing or is not a community-base checkout, or when the dependency files
   carry uncommitted changes.
-- Unlink refuses when there is no snapshot or when `pyproject.toml` has
+- Unlink refuses when there is no snapshot or when a dependency manifest has
   changes beyond the link edit; it never discards unrelated edits and never
   uses a blanket `git checkout --`.
-- Nothing outside the two dependency files and `.tmp/core-link/` is mutated.
+- Nothing outside the dependency files and `.tmp/core-link/` is mutated.
 """
 
 from __future__ import annotations
@@ -23,12 +24,18 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 DEPENDENCY_FILES = ("pyproject.toml", "uv.lock")
+ASL_CLI_DEPENDENCY_FILE = "asl_cli/pyproject.toml"
+_COMMUNITY_BASE_GIT_REQUIREMENT = re.compile(
+    r"(?P<quote>['\"])(?P<requirement>community-base(?:\[[^]]+\])?)"
+    r"\s*@\s*git\+[^'\"]+(?P=quote)"
+)
 PACKAGE_NAME = "community-base"
 SNAPSHOT_DIRNAME = Path(".tmp") / "core-link"
 SNAPSHOT_META = "snapshot.json"
@@ -49,7 +56,16 @@ def snapshot_dir(repo: Path) -> Path:
 
 
 def dependency_paths(repo: Path) -> dict[str, Path]:
-    return {name: repo / name for name in DEPENDENCY_FILES}
+    paths = {name: repo / name for name in DEPENDENCY_FILES}
+    cli_dependency = repo / ASL_CLI_DEPENDENCY_FILE
+    if cli_dependency.is_file():
+        paths[ASL_CLI_DEPENDENCY_FILE] = cli_dependency
+    return paths
+
+
+def snapshot_path(target: Path, dependency: str) -> Path:
+    """Return a flat snapshot filename for a repository-relative path."""
+    return target / f"{dependency.replace('/', '__')}.orig"
 
 
 def git(args: list[str], repo: Path) -> str:
@@ -64,16 +80,16 @@ def git(args: list[str], repo: Path) -> str:
 
 
 def assert_dependency_files_clean(repo: Path) -> None:
+    dependency_names = tuple(dependency_paths(repo))
     for staged_args in (["diff", "--quiet", "--"], ["diff", "--cached", "--quiet", "--"]):
         result = subprocess.run(
-            ["git", "-C", str(repo), *staged_args, *DEPENDENCY_FILES],
+            ["git", "-C", str(repo), *staged_args, *dependency_names],
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
             raise LinkError(
-                "pyproject.toml/uv.lock have uncommitted changes. "
-                "Commit or stash them before running `make core-link`."
+                "Dependency files have uncommitted changes. Commit or stash them before running `make core-link`."
             )
 
 
@@ -141,6 +157,23 @@ def link_edit(pyproject_bytes: bytes, relative_path: str) -> bytes:
     return pyproject_bytes + block.encode()
 
 
+def link_asl_cli_edit(pyproject_bytes: bytes) -> bytes:
+    """Drop the nested CLI project's Git URL so the root source can win.
+
+    AISL's root project and its editable ``asl-cli`` project both depend on
+    community-base. uv rejects a local path override when the nested project
+    still declares a conflicting direct Git URL. Replacing only that URL
+    keeps any requested extras and lets the root ``tool.uv.sources`` entry
+    select the shared checkout for the whole environment.
+    """
+    content = pyproject_bytes.decode()
+    linked = _COMMUNITY_BASE_GIT_REQUIREMENT.sub(
+        lambda match: f"{match.group('quote')}{match.group('requirement')}{match.group('quote')}",
+        content,
+    )
+    return linked.encode()
+
+
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -156,7 +189,7 @@ def cmd_link(repo: Path, sibling_arg: Path | None) -> None:
         )
     sibling = resolve_sibling(repo, sibling_arg)
     relative_path = os.path.relpath(sibling, repo).replace(os.sep, "/")
-    originals = {name: paths[name].read_bytes() for name in DEPENDENCY_FILES}
+    originals = {name: path.read_bytes() for name, path in paths.items()}
     existing = existing_source_entry(originals["pyproject.toml"])
     if existing is not None:
         raise LinkError(
@@ -166,7 +199,7 @@ def cmd_link(repo: Path, sibling_arg: Path | None) -> None:
     target.mkdir(parents=True)
     try:
         for name, data in originals.items():
-            (target / f"{name}.orig").write_bytes(data)
+            snapshot_path(target, name).write_bytes(data)
         (target / SNAPSHOT_META).write_text(
             json.dumps(
                 {
@@ -179,34 +212,47 @@ def cmd_link(repo: Path, sibling_arg: Path | None) -> None:
             )
             + "\n"
         )
-        paths["pyproject.toml"].write_bytes(
-            link_edit(originals["pyproject.toml"], relative_path)
-        )
+        linked = {
+            "pyproject.toml": link_edit(originals["pyproject.toml"], relative_path),
+        }
+        if ASL_CLI_DEPENDENCY_FILE in originals:
+            linked[ASL_CLI_DEPENDENCY_FILE] = link_asl_cli_edit(originals[ASL_CLI_DEPENDENCY_FILE])
+        for name, data in linked.items():
+            paths[name].write_bytes(data)
         run_uv(["sync"], repo)
     except Exception:
         for name, data in originals.items():
             paths[name].write_bytes(data)
-        for leftover in (
-            target / "pyproject.toml.orig",
-            target / "uv.lock.orig",
-            target / SNAPSHOT_META,
-        ):
-            leftover.unlink(missing_ok=True)
+        for name in originals:
+            snapshot_path(target, name).unlink(missing_ok=True)
+        (target / SNAPSHOT_META).unlink(missing_ok=True)
         target.rmdir()
         raise
 
     print(f"Linked {PACKAGE_NAME} to {sibling} ({relative_path}).")
     print(
-        "Verify with: uv run python -c \"import community_base, pathlib; "
-        "print(pathlib.Path(community_base.__file__).resolve())\""
+        'Verify with: uv run python -c "import community_base, pathlib; '
+        'print(pathlib.Path(community_base.__file__).resolve())"'
     )
 
 
-def expected_linked_pyproject(repo: Path) -> bytes:
+def expected_linked_files(repo: Path) -> dict[str, bytes]:
     target = snapshot_dir(repo)
     meta = json.loads((target / SNAPSHOT_META).read_text())
-    original = (target / "pyproject.toml.orig").read_bytes()
-    return link_edit(original, meta["sibling_relative_path"])
+    expected = {}
+    for name in meta["files"]:
+        if name == "uv.lock":
+            # uv sync rewrites the lock for the linked source; restore the
+            # snapshotted bytes below instead of treating that as a conflict.
+            continue
+        original = snapshot_path(target, name).read_bytes()
+        if name == "pyproject.toml":
+            expected[name] = link_edit(original, meta["sibling_relative_path"])
+        elif name == ASL_CLI_DEPENDENCY_FILE:
+            expected[name] = link_asl_cli_edit(original)
+        else:
+            expected[name] = original
+    return expected
 
 
 def cmd_unlink(repo: Path) -> None:
@@ -217,23 +263,22 @@ def cmd_unlink(repo: Path) -> None:
             f"No link snapshot at {target}; there is nothing to unlink. "
             "If a link was interrupted, restore the dependency files by hand."
         )
-    current = paths["pyproject.toml"].read_bytes()
-    if current != expected_linked_pyproject(repo):
-        raise LinkError(
-            "pyproject.toml has changes beyond the link edit. Resolve them manually "
-            "(keep your edits, remove the [tool.uv.sources] block), then delete "
-            f"{target} once pyproject.toml/uv.lock are in the pinned state."
-        )
-    restored = {name: (target / f"{name}.orig").read_bytes() for name in DEPENDENCY_FILES}
+    meta = json.loads((target / SNAPSHOT_META).read_text())
+    expected = expected_linked_files(repo)
+    for name, content in expected.items():
+        if name not in paths or paths[name].read_bytes() != content:
+            raise LinkError(
+                f"{name} has changes beyond the link edit. Resolve them manually "
+                "(keep your edits, remove the link changes), then delete "
+                f"{target} once the dependency files are in the pinned state."
+            )
+    restored = {name: snapshot_path(target, name).read_bytes() for name in meta["files"]}
     for name, data in restored.items():
         paths[name].write_bytes(data)
     run_uv(["sync", "--locked"], repo)
-    for leftover in (
-        target / "pyproject.toml.orig",
-        target / "uv.lock.orig",
-        target / SNAPSHOT_META,
-    ):
-        leftover.unlink()
+    for name in restored:
+        snapshot_path(target, name).unlink()
+    (target / SNAPSHOT_META).unlink()
     target.rmdir()
     print(f"Restored the pinned {PACKAGE_NAME} dependency from the snapshot.")
 

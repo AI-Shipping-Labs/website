@@ -7730,6 +7730,7 @@
                 "example": {
                   "events": [
                     {
+                      "banner_status": null,
                       "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
                       "created_at": "2026-04-15T12:00:00+00:00",
                       "description": "Open Q&A.",
@@ -8008,6 +8009,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "banner_status": null,
                   "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "description": "Open Q&A.",
@@ -8598,6 +8600,7 @@
         ]
       },
       "get": {
+        "description": "Detail responses populate ``banner_status`` with the most recent banner-render task state (none / in_progress / success / failed plus a ``result_excerpt`` on failure). Collection, create, and update responses leave it null.",
         "parameters": [
           {
             "in": "path",
@@ -8613,6 +8616,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "banner_status": null,
                   "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "description": "Open Q&A.",
@@ -8872,6 +8876,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "banner_status": null,
                   "banner_url": "https://cdn.aishippinglabs.com/banners/event/office-hours.jpg",
                   "created_at": "2026-04-15T12:00:00+00:00",
                   "description": "Open Q&A.",
@@ -9398,7 +9403,7 @@
     },
     "/api/events/{slug}/regenerate-banner": {
       "post": {
-        "description": "Force-enqueues a banner-generator render for an existing event and returns the django-q task id. The render runs as a background task; the resolved banner_url stays empty until the worker finishes, so poll GET /api/worker/tasks/<task_id> (or re-GET the event for banner_url). Regeneration is ALLOWED for synced/GitHub-origin events: the PATCH read-only rule protects content fields owned by the source repo, but the auto-banner is derived presentation state the platform owns regardless of origin (the sync pipeline itself enqueues renders for synced records), so there is no 409 here. Returns 422 banner_generator_not_configured (no enqueue) when the generator is not configured.",
+        "description": "Force-enqueues a banner-generator render for an existing event and returns the django-q task id. The render runs as a background task; the resolved banner_url stays empty until the worker finishes, so poll GET /api/worker/tasks/<task_id> (or re-GET the event: banner_status reports the render outcome, including a failed state with result_excerpt when the Lambda render errored). Regeneration is ALLOWED for synced/GitHub-origin events: the PATCH read-only rule protects content fields owned by the source repo, but the auto-banner is derived presentation state the platform owns regardless of origin (the sync pipeline itself enqueues renders for synced records), so there is no 409 here. Returns 422 banner_generator_not_configured (no enqueue) when the generator is not configured.",
         "parameters": [
           {
             "in": "path",

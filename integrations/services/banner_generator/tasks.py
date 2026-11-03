@@ -545,14 +545,26 @@ def delete_generated_banner_object(content_type, url):
 # --------------------------------------------------------------------------
 
 
+def render_failure(error, status_code=None):
+    """Return the task-result dict for a failed render attempt.
+
+    ``render_banner_for_content`` never raises, so this dict is the only
+    record that an attempt happened and failed. ``banner_status`` reads it
+    to show a real failure in Studio and the events API instead of a
+    silent "success with no banner".
+    """
+    return {'ok': False, 'error': error, 'status_code': status_code}
+
+
 def render_banner_for_content(content_type, content_pk):
     """Worker task: render and persist a banner for one content record.
 
-    Returns the ``auto_banner_url`` on success, ``None`` on any failure
-    or short-circuit (unsupported type, missing record, missing CDN
-    config, Lambda error). All exceptions from the Lambda client are
-    caught and logged at WARNING — this is a best-effort fire-and-forget
-    job that must never bubble up to the worker process.
+    Returns the ``auto_banner_url`` string on success, a
+    :func:`render_failure` dict on a failed render attempt, and ``None``
+    on a short-circuit where no render was attempted (unsupported type,
+    unknown model, missing record). All exceptions from the Lambda client
+    are caught and logged at WARNING — this is a best-effort
+    fire-and-forget job that must never bubble up to the worker process.
     """
     if content_type not in SUPPORTED_CONTENT_TYPES:
         logger.warning(
@@ -602,7 +614,7 @@ def render_banner_for_content(content_type, content_pk):
                 'render_banner_for_content: %s pk=%s failed: %s',
                 content_type, content_pk, exc,
             )
-            return None
+            return render_failure(str(exc), exc.status_code)
         logger.warning(
             'render_banner_for_content: %s pk=%s timed out; retrying once '
             '(cold-start warm-up): %s',
@@ -615,7 +627,7 @@ def render_banner_for_content(content_type, content_pk):
                 'render_banner_for_content: %s pk=%s failed after retry: %s',
                 content_type, content_pk, retry_exc,
             )
-            return None
+            return render_failure(str(retry_exc), retry_exc.status_code)
 
     previous_banner_url = getattr(record, 'auto_banner_url', '') or ''
     banner_url = cdn_url_for_key(s3_key)
@@ -628,7 +640,9 @@ def render_banner_for_content(content_type, content_pk):
             'CONTENT_CDN_BASE is unset; skipping URL persistence',
             content_type, content_pk,
         )
-        return None
+        return render_failure(
+            'rendered to S3 but CONTENT_CDN_BASE is unset; URL not persisted',
+        )
 
     # Persist via ``.update()`` so we don't trigger ``save()``-time side
     # effects (Article.save re-renders markdown; Workshop.save re-runs

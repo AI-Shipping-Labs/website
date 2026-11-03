@@ -282,6 +282,87 @@ class PatchBannerTest(EventBannerApiTestBase):
         enqueue.assert_not_called()
 
 
+def _make_render_task(event_pk, success, result, started=None):
+    import datetime as dt
+    import uuid
+
+    from django.utils import timezone as tz
+    from django_q.models import Task
+
+    from studio.services.banner_status import RENDER_TASK_PATH
+
+    started = started or tz.now()
+    return Task.objects.create(
+        id=uuid.uuid4().hex,
+        name=f"Render banner: event #{event_pk} from studio regenerate button",
+        func=RENDER_TASK_PATH,
+        hook="",
+        args=("event", event_pk),
+        kwargs={},
+        result=result,
+        started=started,
+        stopped=started + dt.timedelta(seconds=2),
+        success=success,
+        attempt_count=1,
+    )
+
+
+class SerializeBannerStatusTest(EventBannerApiTestBase):
+    """Detail GET surfaces the banner-render task state (intake ec842352)."""
+
+    def test_failed_render_is_reported_despite_green_task(self):
+        # The worker task catches Lambda errors and returns a failure dict,
+        # so django-q shows success=True. The API must still report failed.
+        _make_render_task(
+            self.studio_event.pk,
+            success=True,
+            result={
+                "ok": False,
+                "error": "banner-generator returned HTTP 502",
+                "status_code": 502,
+            },
+        )
+        with patch(ENABLED_PATH, return_value=True):
+            response = self.client.get(
+                "/api/events/studio-banner-event", **self._auth(),
+            )
+        self.assertEqual(response.status_code, 200)
+        status = response.json()["banner_status"]
+        self.assertEqual(status["state"], "failed")
+        self.assertEqual(
+            status["result_excerpt"], "banner-generator returned HTTP 502",
+        )
+        self.assertNotIn("task_detail_url", status)
+
+    def test_successful_render_reports_success(self):
+        _make_render_task(
+            self.studio_event.pk,
+            success=True,
+            result="https://cdn.example.com/banners/event/1-abc.jpg",
+        )
+        with patch(ENABLED_PATH, return_value=True):
+            response = self.client.get(
+                "/api/events/studio-banner-event", **self._auth(),
+            )
+        status = response.json()["banner_status"]
+        self.assertEqual(status["state"], "success")
+        self.assertIsNone(status["result_excerpt"])
+
+    def test_banner_status_null_when_generator_disabled(self):
+        with patch(ENABLED_PATH, return_value=False):
+            response = self.client.get(
+                "/api/events/studio-banner-event", **self._auth(),
+            )
+        self.assertIsNone(response.json()["banner_status"])
+
+    def test_banner_status_null_with_no_task_history(self):
+        with patch(ENABLED_PATH, return_value=True):
+            response = self.client.get(
+                "/api/events/studio-banner-event", **self._auth(),
+            )
+        self.assertEqual(response.json()["banner_status"]["state"], "none")
+
+
 class SerializeBannerUrlTest(EventBannerApiTestBase):
     def test_detail_echoes_resolved_banner_url(self):
         self.studio_event.auto_banner_url = (

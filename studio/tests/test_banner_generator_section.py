@@ -149,6 +149,35 @@ class GetLastBannerTaskHelperTest(_CacheCleanupMixin, TestCase):
             'first line second line with tabs',
         )
 
+    def test_green_task_with_render_failure_result_reports_failed(self):
+        # ``render_banner_for_content`` catches render errors and returns a
+        # ``render_failure`` dict, so the django-q task succeeds while no
+        # banner was produced. The panel must show that as failed.
+        started = timezone.now() - dt.timedelta(minutes=3)
+        _make_task(
+            'event', 67,
+            success=True,
+            started=started,
+            result={'ok': False, 'error': 'banner-generator returned HTTP 502',
+                    'status_code': 502},
+        )
+        result = get_last_banner_task('event', 67)
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['result_excerpt'],
+                         'banner-generator returned HTTP 502')
+
+    def test_green_task_with_url_result_stays_success(self):
+        started = timezone.now() - dt.timedelta(minutes=3)
+        _make_task(
+            'event', 68,
+            success=True,
+            started=started,
+            result='https://cdn.example.com/banners/event/68-abc.jpg',
+        )
+        result = get_last_banner_task('event', 68)
+        self.assertEqual(result['state'], 'success')
+        self.assertIsNone(result['result_excerpt'])
+
     def test_most_recent_task_wins(self):
         old = timezone.now() - dt.timedelta(hours=1)
         new = timezone.now() - dt.timedelta(minutes=1)

@@ -29,6 +29,7 @@ from integrations.services.banner_generator.tasks import (
     cdn_url_for_key,
     delete_generated_banner_object,
     render_banner_for_content,
+    render_failure,
     s3_key_for,
     template_for,
 )
@@ -909,8 +910,14 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
             auto_banner_url='https://cdn.example.com/banners/article/old.jpg',
             auto_banner_title_hash='old-hash',
         )
-        # Should NOT raise.
-        render_banner_for_content('article', article.pk)
+        # Should NOT raise, and must report the failure in the task result so
+        # Studio and the events API can show it (a bare None used to make the
+        # render look successful with no banner).
+        result = render_banner_for_content('article', article.pk)
+        self.assertEqual(
+            result,
+            {'ok': False, 'error': 'boom', 'status_code': 500},
+        )
         article.refresh_from_db()
         self.assertEqual(
             article.auto_banner_url,
@@ -918,6 +925,49 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         )
         self.assertEqual(article.auto_banner_title_hash, 'old-hash')
         mock_delete.assert_not_called()
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_timeout_retry_failure_reports_render_failure(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.side_effect = BannerGeneratorError(
+            'timed out', is_timeout=True,
+        )
+        article = _make_article()
+        result = render_banner_for_content('article', article.pk)
+        self.assertEqual(
+            result,
+            {'ok': False, 'error': 'timed out', 'status_code': None},
+        )
+        article.refresh_from_db()
+        self.assertEqual(article.auto_banner_url, '')
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
+    def test_unpersistable_render_reports_render_failure(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.return_value = {'ok': True}
+        from integrations.config import clear_config_cache
+
+        Setting.objects.filter(key='CONTENT_CDN_BASE').delete()
+        # get_config falls through to the Django setting; blank it too so
+        # the unpersistable branch is actually exercised.
+        with override_settings(CONTENT_CDN_BASE=''):
+            clear_config_cache()
+            article = _make_article()
+            result = render_banner_for_content('article', article.pk)
+        self.assertEqual(result['ok'], False)
+        self.assertIn('CONTENT_CDN_BASE', result['error'])
+        article.refresh_from_db()
+        self.assertEqual(article.auto_banner_url, '')
+
+    def test_render_failure_shape(self):
+        self.assertEqual(
+            render_failure('boom', 502),
+            {'ok': False, 'error': 'boom', 'status_code': 502},
+        )
 
     @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
@@ -1186,7 +1236,8 @@ class RenderBannerColdStartRetryTest(
         workshop = _make_workshop()
         result = render_banner_for_content('workshop', workshop.pk)
         self.assertEqual(mock_post.call_count, 1)
-        self.assertIsNone(result)
+        self.assertEqual(result['ok'], False)
+        self.assertEqual(result['status_code'], 500)
         workshop.refresh_from_db()
         self.assertEqual(workshop.auto_banner_url, '')
 
@@ -1197,7 +1248,7 @@ class RenderBannerColdStartRetryTest(
         workshop = _make_workshop()
         result = render_banner_for_content('workshop', workshop.pk)
         self.assertEqual(mock_post.call_count, 1)
-        self.assertIsNone(result)
+        self.assertEqual(result['ok'], False)
 
     @patch(DELETE_PATCH)
     @patch(POST_PATCH)
@@ -1215,7 +1266,8 @@ class RenderBannerColdStartRetryTest(
         ) as log_cm:
             result = render_banner_for_content('workshop', workshop.pk)
         self.assertEqual(mock_post.call_count, 2)
-        self.assertIsNone(result)
+        self.assertEqual(result['ok'], False)
+        self.assertIn('request failed: Timeout', result['error'])
         workshop.refresh_from_db()
         self.assertEqual(workshop.auto_banner_url, '')
         joined = '\n'.join(log_cm.output)

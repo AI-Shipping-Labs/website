@@ -400,13 +400,13 @@ class RepositoryAssertCalledOnceRatchetTests(SimpleTestCase):
             ),
         }
         expected_counts = {
-            DIRECT_BARE_CALL: 239,
+            DIRECT_BARE_CALL: 237,
             UNKNOWN_CALL_SHAPE: 0,
             NONCALL_REFERENCE: 0,
             UNKNOWN_DYNAMIC_REFERENCE: 0,
         }
         expected_goldens = {
-            DIRECT_BARE_CALL: "817b1e341b15f459bda995e8740d7f3bcfc55b874856994c9f8a9dc17ce5f267",
+            DIRECT_BARE_CALL: "9803763937e06cc3a1a4bf8d8abd44ecf5e6f4d6d80aeaa80754dfaddc35aa6c",
             UNKNOWN_CALL_SHAPE: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             NONCALL_REFERENCE: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
             UNKNOWN_DYNAMIC_REFERENCE: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",

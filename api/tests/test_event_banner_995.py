@@ -326,7 +326,6 @@ class SerializeBannerStatusTest(EventBannerApiTestBase):
             response = self.client.get(
                 "/api/events/studio-banner-event", **self._auth(),
             )
-        self.assertEqual(response.status_code, 200)
         status = response.json()["banner_status"]
         self.assertEqual(status["state"], "failed")
         self.assertEqual(

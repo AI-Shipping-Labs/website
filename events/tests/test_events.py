@@ -1741,7 +1741,6 @@ class ApiCreatedEventGracefulDegradationTest(TestCase):
             description='Instrument the agent with OpenTelemetry and read the traces.',
         )
         response = self.client.get(event.get_absolute_url())
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="event-status-pill"')
         self.assertContains(response, 'data-testid="event-description"')
         # No linked Workshop row -> the writeup hand-off card is absent,

@@ -70,6 +70,46 @@ def send_onboarding_staff_notification(attempt_id):
     return {'status': 'succeeded', 'attempt_id': attempt_id}
 
 
+def enqueue_onboarding_staff_notification(*, attempt_id):
+    """Dispatch the shared AI completion hook through AISL's task runner."""
+    from website.release_phase import background_work_enabled  # noqa: PLC0415
+
+    if not background_work_enabled():
+        from crm.services.onboarding_notify import (  # noqa: PLC0415
+            notify_staff_onboarding_submitted,
+        )
+        from questionnaires.models import OnboardingTurnAttempt  # noqa: PLC0415
+
+        attempt = OnboardingTurnAttempt.objects.select_related(
+            'conversation__response__respondent',
+        ).get(pk=attempt_id)
+        notify_staff_onboarding_submitted(
+            attempt.conversation.response.respondent,
+        )
+        return
+
+    try:
+        from jobs.tasks import async_task, build_task_name  # noqa: PLC0415
+
+        async_task(
+            'questionnaires.tasks.send_onboarding_staff_notification',
+            attempt_id,
+            max_retries=3,
+            retry_backoff=60,
+            task_name=build_task_name(
+                'Notify staff of onboarding',
+                f'attempt #{attempt_id}',
+                'onboarding completion',
+            ),
+        )
+    except Exception:  # noqa: BLE001 - completion state already committed
+        logger.warning(
+            'Failed to enqueue onboarding staff notification',
+            extra={'onboarding_attempt_id': attempt_id},
+            exc_info=True,
+        )
+
+
 def reconcile_onboarding_staff_notifications(limit=100):
     """Retry durable pending/failed rows and reclaim expired worker leases."""
     now = timezone.now()

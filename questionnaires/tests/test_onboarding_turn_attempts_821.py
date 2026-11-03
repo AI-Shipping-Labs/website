@@ -611,6 +611,8 @@ class LogicalTurnContractTest(TestCase):
             return_value=final,
         ), patch(
             'jobs.tasks.async_task', side_effect=RuntimeError('queue down'),
+        ), patch(
+            'website.release_phase.background_work_enabled', return_value=True,
         ), self.captureOnCommitCallbacks(execute=True):
             outcome = run_logical_member_turn(
                 self.conversation, uuid.uuid4(), 'answer',

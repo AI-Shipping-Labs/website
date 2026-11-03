@@ -859,8 +859,29 @@ def _package_relay_api_key():
         return os.getenv('RELAY_API_KEY', '')
 
 
+def _package_onboarding_ai_deadline_seconds():
+    from integrations.config import get_config
+
+    return get_config('ONBOARDING_AI_DEADLINE_SECONDS', 25)
+
+
+def _package_onboarding_ai_max_attempts():
+    from integrations.config import get_config
+
+    return get_config('ONBOARDING_AI_MAX_ATTEMPTS', 2)
+
+
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
+    # Questionnaire onboarding stays on the shared domain implementation;
+    # these hooks preserve AISL's IntegrationSetting and task/audit adapters.
+    'AI_BACKEND': 'integrations.services.llm.service',
+    'AI_ONBOARDING_COMPLETED_HOOK': (
+        'questionnaires.tasks.enqueue_onboarding_staff_notification'
+    ),
+    'AI_ONBOARDING_DEADLINE_SECONDS': _package_onboarding_ai_deadline_seconds,
+    'AI_ONBOARDING_MAX_ATTEMPTS': _package_onboarding_ai_max_attempts,
+    'STUDIO_AUDIT_WRITER': 'questionnaires.response_workflows.write_studio_audit_event',
     # Canonical origin used by shared public-resource API URLs. Keep this
     # aligned with SITE_BASE_URL so request hosts cannot change API links.
     'SITE_URL': SITE_BASE_URL,

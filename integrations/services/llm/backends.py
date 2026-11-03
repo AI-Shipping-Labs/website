@@ -18,8 +18,19 @@ and structured output via SDK tools + ``tool_choice``.
 
 import logging
 import random
-import threading
 import time
+
+from community_base.questionnaires.ai_backend import (
+    STREAM_DONE,
+    STREAM_TEXT_DELTA,
+    LLMError,
+    LLMResult,
+    LLMTimeoutError,
+    StreamEvent,
+)
+from community_base.questionnaires.ai_backend import (
+    CancellationToken as CancellationToken,
+)
 
 from integrations.config import get_config
 
@@ -34,134 +45,6 @@ DEFAULT_MAX_TOKENS = 4096
 # the loop with a patched sleep without waiting.
 _BACKOFF_BASE_SECONDS = 1.0
 _BACKOFF_CAP_SECONDS = 30.0
-
-
-class LLMError(Exception):
-    """Raised on any LLM service failure.
-
-    Failure modes: not configured (empty key), unsupported provider,
-    transport/SDK error after retries are exhausted, a non-transient SDK
-    error (converted immediately), or an empty/blocked response. The
-    exception string never includes the API key value — see
-    :func:`_safe_error_message`.
-    """
-
-
-class LLMTimeoutError(LLMError):
-    """Raised when the provider-specific request deadline expires."""
-
-
-class CancellationToken:
-    """Thread-safe cooperative cancellation for an in-flight provider call."""
-
-    def __init__(self):
-        self._cancelled = threading.Event()
-        self._lock = threading.Lock()
-        self._callbacks = []
-
-    @property
-    def cancelled(self):
-        return self._cancelled.is_set()
-
-    def wait(self, timeout=None):
-        return self._cancelled.wait(timeout)
-
-    def register(self, callback):
-        with self._lock:
-            if not self._cancelled.is_set():
-                self._callbacks.append(callback)
-                return
-        callback()
-
-    def cancel(self):
-        with self._lock:
-            if self._cancelled.is_set():
-                return
-            self._cancelled.set()
-            callbacks = list(reversed(self._callbacks))
-            self._callbacks.clear()
-        for callback in callbacks:
-            try:
-                callback()
-            except Exception:  # noqa: BLE001 - continue all cleanup callbacks
-                logger.exception('LLM provider cleanup failed during cancellation')
-
-
-class LLMResult:
-    """Provider-neutral result of a single completion.
-
-    Exposes the assistant text (concatenated text blocks) and, when the
-    model used a tool, the structured tool input dict — so callers can
-    read ``result.text`` for plain completions or
-    ``MyModel.model_validate(result.tool_input)`` for structured output
-    without re-parsing the vendor SDK's response shape.
-    """
-
-    def __init__(
-        self,
-        *,
-        text='',
-        tool_input=None,
-        tool_name=None,
-        input_tokens=None,
-        output_tokens=None,
-        cache_read_tokens=None,
-        cache_write_tokens=None,
-    ):
-        self.text = text
-        self.tool_input = tool_input
-        self.tool_name = tool_name
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens
-        self.cache_read_tokens = cache_read_tokens
-        self.cache_write_tokens = cache_write_tokens
-
-    def __repr__(self):
-        return (
-            f'LLMResult(text={self.text!r}, '
-            f'tool_name={self.tool_name!r}, '
-            f'has_tool_input={self.tool_input is not None})'
-        )
-
-
-# Event kinds yielded by ``stream(...)``. Kept as plain string constants so
-# the surface stays provider-neutral and JSON-serialisable at the transport
-# layer (no vendor enum leaks to callers).
-STREAM_TEXT_DELTA = 'text_delta'
-STREAM_DONE = 'done'
-
-
-class StreamEvent:
-    """One provider-neutral event yielded by :func:`stream`.
-
-    Two kinds, distinguished by ``kind``:
-
-    - ``text_delta``: ``text`` carries the next incremental chunk of the
-      assistant's reply. ``result`` is ``None``.
-    - ``done``: the terminal event. ``result`` carries the fully assembled
-      :class:`LLMResult` — the SAME object ``complete()`` would have
-      returned for the same input (``.text`` is the concatenation of every
-      delta; ``.tool_input`` is set when a tool was used). ``text`` is
-      empty on the terminal event.
-
-    A mid-stream transport/SDK failure is NOT signalled as an event: it is
-    re-raised from the generator so the transport layer can trigger the
-    graceful fallback (see :func:`AnthropicBackend.stream`).
-    """
-
-    def __init__(self, *, kind, text='', result=None):
-        self.kind = kind
-        self.text = text
-        self.result = result
-
-    @property
-    def is_done(self):
-        return self.kind == STREAM_DONE
-
-    def __repr__(self):
-        if self.is_done:
-            return f'StreamEvent(done, result={self.result!r})'
-        return f'StreamEvent(text_delta, text={self.text!r})'
 
 
 def _retry_delay(attempt, *, base, cap):

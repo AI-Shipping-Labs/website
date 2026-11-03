@@ -102,6 +102,12 @@ def _project_relay_group(group):
 
 def _project_email_descriptions(group):
     replacements = {
+        "CAMPAIGN_BATCH_INTERVAL_SECONDS": (
+            "Requested spacing between campaign batches. Effective spacing is "
+            "clamped to at least 300 seconds and the configured batch size times "
+            "the 1.5-second per-send delay. Lower values, including 0, cannot "
+            "disable pacing. Batch i is scheduled at now + i * the effective interval."
+        ),
         "SES_WEBHOOK_SHARED_SECRET": (
             "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. "
             "In production, Relay's aisl-ses-ingress reads it from Secrets Manager. Leave blank locally to allow "

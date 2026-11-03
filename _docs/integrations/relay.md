@@ -115,8 +115,10 @@ outcomes are not automatically retried.
 
 ## CAMPAIGN_BATCH_INTERVAL_SECONDS
 
-Seconds between scheduled campaign batches. Zero schedules all batches
-without staggering.
+Requested spacing between scheduled campaign batches. The effective interval
+is at least 300 seconds and at least the configured batch size multiplied by
+the 1.5-second per-send delay. Lower values, including zero, are clamped to
+that minimum. The initial fan-out and automatic recovery use the same spacing.
 
 ## CAMPAIGN_TEST_RECIPIENTS
 

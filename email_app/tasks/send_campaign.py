@@ -1,7 +1,6 @@
 """Fail-closed campaign fan-out and per-recipient delivery tasks."""
 
 import logging
-import time
 import uuid
 from datetime import timedelta
 
@@ -16,6 +15,11 @@ from email_app.services.campaign_message import (
     UNSUBSCRIBED_AT_SEND,
     prepare_campaign_message,
 )
+from email_app.services.campaign_pacing import (
+    DEFAULT_SEND_DELAY,
+    get_campaign_batch_interval_seconds,
+    paced_campaign_send,
+)
 from email_app.services.campaign_repermission import (
     monitored_message_parts,
 )
@@ -29,13 +33,9 @@ from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
-# 1.5s per send keeps one worker near 40 sends/min, under the edge's
-# per-IP rate rule (300 requests / 5 min).
-DEFAULT_SEND_DELAY = 1.5
 EDGE_BLOCK_MARKER = 'edge_blocked:'
 DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS = 900
 DEFAULT_BATCH_SIZE = 200
-DEFAULT_BATCH_INTERVAL_SECONDS = 60
 DEFAULT_MAX_DELIVERY_ATTEMPTS = 3
 # Q tasks time out after 300 seconds and retry after 360 seconds. A claim that
 # outlives the worker timeout but expires before the retry is fail-closed and
@@ -58,15 +58,10 @@ def _get_batch_size():
     return value
 
 
-def _get_batch_interval_seconds():
-    raw = get_config(
-        'CAMPAIGN_BATCH_INTERVAL_SECONDS', DEFAULT_BATCH_INTERVAL_SECONDS,
-    )
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_BATCH_INTERVAL_SECONDS
-    return max(value, 0)
+def _get_batch_interval_seconds(batch_size=None):
+    if batch_size is None:
+        batch_size = _get_batch_size()
+    return get_campaign_batch_interval_seconds(batch_size)
 
 
 def get_max_delivery_attempts():
@@ -307,7 +302,7 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
             }
 
         chunks = list(_chunk(delivery_ids, batch_size))
-        interval = _get_batch_interval_seconds()
+        interval = _get_batch_interval_seconds(batch_size)
         for index, delivery_chunk in enumerate(chunks):
             chunk_user_ids = list(
                 CampaignDelivery.objects.filter(pk__in=delivery_chunk)
@@ -779,7 +774,9 @@ def send_campaign_batch(
         if claim_token is None:
             continue
         try:
-            message_id = _send_campaign_transport(
+            message_id = paced_campaign_send(
+                _send_campaign_transport,
+                delay_seconds=send_delay,
                 prepared=prepared,
                 campaign_id=campaign_id,
                 delivery_id=delivery_id,
@@ -842,9 +839,6 @@ def send_campaign_batch(
 
         if _finalize_delivery_sent(delivery_id, claim_token, message_id):
             sent_count += 1
-        if send_delay > 0:
-            time.sleep(send_delay)
-
     refresh_campaign_status(campaign_id)
     return {
         'campaign_id': campaign_id,

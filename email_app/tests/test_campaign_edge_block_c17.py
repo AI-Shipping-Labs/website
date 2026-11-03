@@ -109,3 +109,16 @@ class EdgeBreakerBatchTest(TierSetupMixin, TestCase):
                 campaign.pk, [d.pk for d in deliveries], send_delay=0,
             )
         transport.assert_not_called()
+
+    def test_cooldown_seconds_read_from_config(self):
+        campaign, deliveries = self._campaign(1)
+        CampaignDelivery.objects.filter(pk=deliveries[0].pk).update(
+            last_error="edge_blocked: edge 403",
+        )
+        self.assertTrue(edge_breaker_open(campaign.pk))
+        with override_settings(CAMPAIGN_EDGE_BLOCK_COOLDOWN_SECONDS=0):
+            clear_config_cache()
+            try:
+                self.assertFalse(edge_breaker_open(campaign.pk))
+            finally:
+                clear_config_cache()

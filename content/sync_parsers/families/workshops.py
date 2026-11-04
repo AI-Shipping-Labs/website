@@ -26,6 +26,13 @@ from content.sync_parsers.families.instructors import (
     _attach_instructors_to_workshop,
     _resolve_instructors_for_yaml,
 )
+from content.sync_parsers.families.workshop_recording import (
+    link_preserved_workshop_event,
+    read_workshop_recording,
+)
+from content.sync_parsers.families.workshop_recording import (
+    resolve_explicit_workshop_event as _resolve_explicit_workshop_event,
+)
 from content.sync_parsers.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
@@ -297,39 +304,9 @@ def _sync_single_workshop(
                 f'<= pages_required_level ({pages_required_level}).'
             )
 
-        # Recording block (optional). When present and ``url`` is set,
-        # ``required_level`` must be set AND must be >= pages_required_level.
-        # Fails closed — missing or too-low gate means no workshop row.
-        recording = data.get('recording') or {}
-        if not isinstance(recording, dict):
-            raise ValueError(
-                f'recording must be a mapping/dict, got {type(recording).__name__}'
-            )
-        recording_url = str(recording.get('url', '') or '').strip()
-        if recording_url:
-            recording_required_level = recording.get('required_level')
-            if recording_required_level is None:
-                raise ValueError(
-                    'recording.url is set but recording.required_level is '
-                    'missing — refusing to leak the recording under the '
-                    'pages_required_level gate.'
-                )
-            if recording_required_level not in valid_levels:
-                raise ValueError(
-                    f'Invalid recording.required_level='
-                    f'{recording_required_level!r}; must be one of '
-                    f'{sorted(valid_levels)}'
-                )
-            if recording_required_level < pages_required_level:
-                raise ValueError(
-                    f'recording.required_level ({recording_required_level}) '
-                    f'must be >= pages_required_level ({pages_required_level}).'
-                )
-        else:
-            # No recording URL — default the gate to pages_required_level
-            # so the model invariant holds. When the recording is added
-            # later, the author must update the yaml with a proper level.
-            recording_required_level = pages_required_level
+        recording, recording_url, recording_required_level, preserved_event = (
+            read_workshop_recording(data, pages_required_level, valid_levels)
+        )
 
         # Slug collision check across sources.
         if _check_slug_collision(Workshop, slug, source.repo_name, rel_path):
@@ -539,6 +516,8 @@ def _sync_single_workshop(
                 event_slug=data.get('event_slug'),
                 resolved_hosts=resolved_event_hosts,
             )
+        elif preserved_event is not None:
+            link_preserved_workshop_event(workshop, preserved_event)
         else:
             _cleanup_generated_empty_workshop_event(
                 workshop, source, stats,
@@ -645,31 +624,6 @@ def _resolve_heuristic_workshop_event(workshop, workshop_date):
     if len(matches) == 1:
         return 1, matches[0]
     return len(matches), None
-
-
-def _resolve_explicit_workshop_event(event_id, event_slug):
-    """Resolve an explicit ``event_id`` / ``event_slug`` reference.
-
-    Issue #879. Returns ``(reference_present, event)``:
-
-    - ``(False, None)`` when neither key is set — caller falls through to the
-      legacy slug-match-then-create path.
-    - ``(True, <Event>)`` when the reference resolves to an existing event.
-    - ``(True, None)`` when a reference WAS given but does not resolve — the
-      caller must record an error and skip, never create a fallback duplicate.
-
-    ``event_id`` takes precedence; ``event_slug`` is consulted only when
-    ``event_id`` is absent.
-    """
-    from events.models import Event
-
-    if event_id not in (None, ''):
-        return True, Event.objects.filter(pk=event_id).first()
-    if event_slug not in (None, ''):
-        slug = str(event_slug).strip()
-        if slug:
-            return True, Event.objects.filter(slug=slug).first()
-    return False, None
 
 
 def _link_or_create_workshop_event(

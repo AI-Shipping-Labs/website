@@ -44,6 +44,31 @@
   {% endif %}
 
   {% if has_timestamps %}
+  <nav class="mt-3" aria-label="Video chapter timeline" data-testid="video-chapter-timeline">
+    <div class="overflow-x-auto pb-1">
+      <ol class="flex min-w-max items-start gap-1 sm:min-w-0">
+        {% for ts in timestamps %}
+        <li class="w-16 shrink-0 sm:w-auto sm:flex-1">
+          <button
+            type="button"
+            class="video-chapter-marker group flex min-h-[44px] w-full flex-col items-center justify-center gap-1.5 rounded-md px-1 py-2 transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            data-video-chapter-index="{{ forloop.counter0 }}"
+            data-time-seconds="{{ ts.time_seconds }}"
+            data-chapter-label="{{ ts.label }}"
+            aria-label="Jump to {{ ts.label }} at {{ ts.formatted_time|cut:'[]' }}"
+            title="{{ ts.formatted_time }} {{ ts.label }}"
+          >
+            <span aria-hidden="true" class="h-1.5 w-full rounded-full bg-border transition-colors group-data-[active=true]:bg-accent"></span>
+            <time class="font-mono text-xs text-muted-foreground group-data-[active=true]:text-accent">{{ ts.formatted_time }}</time>
+          </button>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    <p class="mt-1 min-h-5 text-xs text-muted-foreground" aria-live="polite" aria-atomic="true" data-video-active-chapter>
+      Play the video or choose a chapter to follow along.
+    </p>
+  </nav>
   {% comment %}
     Issue #516: Chapters accordion uses the shared section-header partial
     so its summary typography matches the workshop transcript and the
@@ -143,30 +168,89 @@
 </script>
 {% endif %}
 
+{% if has_timestamps %}
 <script>
-  // Timestamp click handlers
-  document.querySelectorAll('.video-timestamp').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var timeSeconds = parseInt(this.dataset.timeSeconds, 10);
-      var source = this.dataset.source;
-      var videoId = this.dataset.videoId;
-
-      if (source === 'youtube' && window._ytPlayers && window._ytPlayers[videoId]) {
-        window._ytPlayers[videoId].seekTo(timeSeconds, true);
-      } else if (source === 'loom' && videoId) {
-        var iframe = document.getElementById('loom-player-' + videoId);
-        if (iframe) {
-          var baseUrl = 'https://www.loom.com/embed/' + videoId;
-          iframe.src = baseUrl + '?t=' + timeSeconds;
-        }
-      } else if (source === 'self_hosted') {
-        var video = document.getElementById('video-player-self-hosted');
-        if (video) {
-          video.currentTime = timeSeconds;
-          video.play();
-        }
+  // Timestamp click handlers can start playback; the initial-load cue above stays paused.
+window.setActiveVideoChapter = window.setActiveVideoChapter || function(root, currentTime) {
+    var markers = root.querySelectorAll('.video-chapter-marker');
+    var activeMarker = null;
+    var activeSeconds = -1;
+    markers.forEach(function(marker) {
+      var seconds = Number(marker.dataset.timeSeconds);
+      if (seconds <= currentTime && seconds > activeSeconds) {
+        activeMarker = marker;
+        activeSeconds = seconds;
       }
     });
-  });
+    markers.forEach(function(marker) {
+      var active = marker === activeMarker;
+      marker.dataset.active = String(active);
+      if (active) marker.setAttribute('aria-current', 'location');
+      else marker.removeAttribute('aria-current');
+    });
+    var status = root.querySelector('[data-video-active-chapter]');
+    if (status) {
+      var activeIndex = '';
+      if (activeMarker) activeIndex = activeMarker.dataset.videoChapterIndex;
+      if (status.dataset.activeChapterIndex !== activeIndex) {
+        status.dataset.activeChapterIndex = activeIndex;
+        if (activeMarker) {
+          status.textContent = 'Chapter ' + (Number(activeIndex) + 1) + ': ' + activeMarker.dataset.chapterLabel;
+        } else {
+          status.textContent = 'Play the video or choose a chapter to follow along.';
+        }
+      }
+    }
+  };
+
+window.seekVideoChapter = window.seekVideoChapter || function(root, timeSeconds) {
+    var source = root.dataset.source;
+    var videoId = root.dataset.videoId;
+    if (source === 'youtube' && window._ytPlayers && window._ytPlayers[videoId]) {
+      window._ytPlayers[videoId].seekTo(timeSeconds, true);
+    } else if (source === 'loom' && videoId) {
+      var iframe = document.getElementById('loom-player-' + videoId);
+      if (iframe) iframe.src = 'https://www.loom.com/embed/' + videoId + '?t=' + timeSeconds;
+    } else if (source === 'self_hosted') {
+      var video = root.querySelector('video');
+      if (video) {
+        video.currentTime = timeSeconds;
+        video.play();
+      }
+    }
+  };
+
+window.handleVideoChapterClick = window.handleVideoChapterClick || function(event) {
+    var button = event.target.closest('.video-timestamp, .video-chapter-marker');
+    if (!button) return;
+    var root = button.closest('.video-player');
+    if (!root) return;
+    var timeSeconds = Number(button.dataset.timeSeconds);
+    window.setActiveVideoChapter(root, timeSeconds);
+    window.seekVideoChapter(root, timeSeconds);
+  };
+
+window.handleVideoTimeUpdate = window.handleVideoTimeUpdate || function(event) {
+    if (event.target.tagName !== 'VIDEO') return;
+    var root = event.target.closest('.video-player');
+    if (root) window.setActiveVideoChapter(root, event.target.currentTime);
+  };
+
+window.updateYouTubeVideoChapters = window.updateYouTubeVideoChapters || function() {
+    document.querySelectorAll('.video-player[data-source="youtube"]').forEach(function(root) {
+      if (!root.querySelector('.video-chapter-marker')) return;
+      var player = window._ytPlayers && window._ytPlayers[root.dataset.videoId];
+      if (!player || !player.getCurrentTime || !player.getPlayerState) return;
+      if (player.getPlayerState() === 1) window.setActiveVideoChapter(root, player.getCurrentTime());
+    });
+  };
+
+if (!window._videoChapterNavigationInitialized) {
+  window._videoChapterNavigationInitialized = true;
+  document.addEventListener('click', window.handleVideoChapterClick);
+  document.addEventListener('timeupdate', window.handleVideoTimeUpdate, true);
+  window.setInterval(window.updateYouTubeVideoChapters, 1000);
+}
 </script>
+{% endif %}
 {% endif %}

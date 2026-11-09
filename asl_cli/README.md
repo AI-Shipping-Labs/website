@@ -9,6 +9,21 @@ uv sync
 uv run asl --help
 ```
 
+### Installed CLI updates
+
+Install the standalone CLI from the website repository with uv:
+
+```bash
+uv tool install "asl-cli @ git+https://github.com/AI-Shipping-Labs/website.git@main#subdirectory=asl_cli"
+```
+
+An installed `asl` checks the current `main` revision on each run. When a newer
+revision is available, it upgrades itself and restarts before running the
+requested command. The check needs `git` and repository access and times out
+after 10 seconds; installation times out after 180 seconds. Failures exit
+non-zero with an error. Set `ASL_AUTO_UPDATE=0` to run the installed version
+without checking. Project commands such as `uv run asl` do not self-update.
+
 ## Auth
 
 Device login is the preferred way to sign in. On a machine with a browser:
@@ -417,18 +432,36 @@ Choice questions take the 1-based option index (`2`, or `1,3` for checkboxes)
 or the exact option text. When the slug exists in several cohorts, the
 member's own cohort is used, otherwise pass `--cohort`.
 
-### Newsletter campaigns: schedule, send, test-send
+### Tier campaigns: count, inspect, schedule, send, test-send
 
 Drafts are managed with `asl campaigns list|get|create|update`. Sending and
 scheduling are deliberate staff actions (same as Studio > Campaigns):
 
 ```bash
+uv run asl campaigns recipient-count --target-min-level main --target-tags-any sprint:may-2026
+uv run asl campaigns recipient-count --campaign-id 42
+uv run asl campaigns send 42 --dry-run           # count and tier filter; sends nothing
+uv run asl campaigns recipients 42 --format table
+uv run asl campaigns recipients 42 --json       # complete API response
+uv run asl campaigns waves 42 --format table
+uv run asl campaigns waves 42 --json            # complete API response
 uv run asl campaigns schedule 42 --at "2026-11-05T10:00:00" --tz Europe/Berlin
 uv run asl campaigns get 42                     # scheduled_at (UTC) + scheduled_timezone
 uv run asl campaigns unschedule 42              # cancel a scheduled send (draft only)
 uv run asl campaigns send 42 --yes              # immediate send; --yes skips the prompt
 uv run asl campaigns test-send 42 --recipient you@example.com
 ```
+
+`recipient-count` accepts the same audience filter flags as campaign creation;
+`--campaign-id` reads a saved campaign and counts its existing filters. The
+send `--dry-run` path reads that campaign and calls only the aggregate count
+endpoint. `recipients` and `waves` are read-only; `--json` preserves the full
+API response and `--format table` shows the collection rows. A campaign without
+monitored waves returns the API's clear 409 error.
+
+`test-send` posts one explicit address to
+`/api/campaigns/<id>/test-send` with `{"email": "..."}`. It sends one probe
+email and never dispatches to the campaign audience.
 
 `--at` is an ISO 8601 datetime in the future; a naive value (no UTC offset)
 is interpreted in `--tz` (`--tz` is required then). Local times skipped by a
@@ -439,6 +472,11 @@ within a minute of that time. The schedule is visible in Studio on the
 campaign detail page with a cancel button. Scheduling or sending a
 non-draft returns 409. Verify every campaign with `test-send` to your own
 address before any real `send`.
+
+`asl crm-export` follows the API's `limit`/`offset` pages sequentially and
+prints one complete response envelope only after every page succeeds. The
+`members` array and `count` cover all rows; `total` remains the API's matching
+row count.
 
 ### Escape hatch
 

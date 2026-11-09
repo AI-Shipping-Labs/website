@@ -355,7 +355,7 @@ jobs:
 
   playwright-tests:
     name: Playwright E2E Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # #888: gate on every test shard plus the checks job. A `needs` entry for a
     # matrix job only succeeds when all its shards succeed.
     needs: [checks, unit-tests]

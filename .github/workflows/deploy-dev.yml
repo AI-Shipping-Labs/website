@@ -470,7 +470,7 @@ jobs:
 
   playwright-core:
     name: Playwright Core E2E (${{ matrix.shard_name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The core partition is the deploy-critical Playwright smoke set. Shard
     # the sorted file inventory with the same proven round-robin selector as
     # scheduled-playwright.yml. Every test_*.py file belongs to exactly one

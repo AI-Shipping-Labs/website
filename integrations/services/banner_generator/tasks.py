@@ -610,7 +610,7 @@ def render_banner_for_content(content_type, content_pk):
         # in ~1.5s (issue #900). Non-timeout failures (HTTP 4xx/5xx,
         # ``ok=False``) are NOT cold-start symptoms — never retry those.
         if not getattr(exc, 'is_timeout', False):
-            logger.warning(
+            logger.error(
                 'render_banner_for_content: %s pk=%s failed: %s',
                 content_type, content_pk, exc,
             )
@@ -623,7 +623,7 @@ def render_banner_for_content(content_type, content_pk):
         try:
             _render()
         except BannerGeneratorError as retry_exc:
-            logger.warning(
+            logger.error(
                 'render_banner_for_content: %s pk=%s failed after retry: %s',
                 content_type, content_pk, retry_exc,
             )

@@ -204,6 +204,28 @@ class RenderToS3ErrorTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         self.assertEqual(cm.exception.status_code, 500)
 
     @patch(PATCH_TARGET)
+    def test_http_502_message_says_lambda_failed_not_bare_status(self, mock_post):
+        mock_post.return_value = MagicMock(
+            status_code=502, text='{"message": "Internal Server Error"}',
+        )
+        with self.assertRaises(BannerGeneratorError) as cm:
+            render_to_s3(**self._make_payload_kwargs())
+        message = str(cm.exception)
+        self.assertEqual(cm.exception.status_code, 502)
+        self.assertIn('returned HTTP 502', message)
+        self.assertIn('Lambda failed to run the render', message)
+        self.assertIn('Internal Server Error', message)
+        self.assertNotIn(self.TOKEN, message)
+
+    @patch(PATCH_TARGET)
+    def test_timeout_message_names_the_timeout(self, mock_post):
+        mock_post.side_effect = requests.Timeout('slow')
+        with self.assertRaises(BannerGeneratorError) as cm:
+            render_to_s3(**self._make_payload_kwargs(), timeout=7)
+        self.assertTrue(cm.exception.is_timeout)
+        self.assertIn('no response within 7s', str(cm.exception))
+
+    @patch(PATCH_TARGET)
     def test_raises_on_request_exception(self, mock_post):
         mock_post.side_effect = requests.ConnectionError('boom')
         with self.assertRaises(BannerGeneratorError) as cm:

@@ -2092,6 +2092,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_links_an_unlinked_cohort_to_its_series",
     })
 
+    video_chapter_owners = frozenset({
+        "playwright_tests/test_video_player_chapters.py::"
+        "test_main_member_uses_keyboard_chapters_and_tracks_self_hosted_playback",
+        "playwright_tests/test_video_player_chapters.py::"
+        "test_youtube_playback_updates_the_active_chapter",
+    })
+
     design_layout_guard_owners = frozenset({
         "playwright_tests/test_design_layout_guard.py::"
         "test_course_home_tabs_keep_actions_below_their_headings",
@@ -2279,8 +2286,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2960)
-        self.assertEqual(len(inventory.owners), 2755)
+        self.assertEqual(inventory.item_count, 2962)
+        self.assertEqual(len(inventory.owners), 2757)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2323,6 +2330,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
+            | self.video_chapter_owners
             | self.hotfix_cohort_owners
             | self.issue_1916_owners
             | self.design_layout_guard_owners

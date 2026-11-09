@@ -29,18 +29,23 @@ def _in_hours(hours):
     return timezone.now() + timedelta(hours=hours)
 
 
+# parse_scheduled_time validates "Must be in the future" against the `now`
+# it is handed. Freeze that reference point so the fixed fixture datetimes
+# below never rot as the wall clock passes them.
+FROZEN_NOW = datetime(2026, 11, 1, 12, 0, tzinfo=dt_timezone.utc)
+
+
 class ParseScheduledTimeTest(TestCase):
     def test_naive_datetime_requires_timezone(self):
         with self.assertRaises(CampaignScheduleValidationError) as ctx:
             parse_scheduled_time(
-                "2026-11-05T10:00:00", None, now=timezone.now(),
+                "2026-11-05T10:00:00", None, now=FROZEN_NOW,
             )
         self.assertIn("scheduled_timezone", ctx.exception.errors)
 
     def test_naive_datetime_interpreted_in_timezone(self):
-        now = datetime(2026, 11, 1, 12, 0, tzinfo=dt_timezone.utc)
         instant, tz_name = parse_scheduled_time(
-            "2026-11-05T10:00:00", "Europe/Berlin", now=now,
+            "2026-11-05T10:00:00", "Europe/Berlin", now=FROZEN_NOW,
         )
         self.assertEqual(
             instant,
@@ -49,9 +54,8 @@ class ParseScheduledTimeTest(TestCase):
         self.assertEqual(tz_name, "Europe/Berlin")
 
     def test_aware_datetime_converted_to_utc_instant(self):
-        now = datetime(2026, 11, 1, 12, 0, tzinfo=dt_timezone.utc)
         instant, tz_name = parse_scheduled_time(
-            "2026-11-05T10:00:00+01:00", None, now=now,
+            "2026-11-05T10:00:00+01:00", None, now=FROZEN_NOW,
         )
         self.assertEqual(
             instant,
@@ -60,25 +64,22 @@ class ParseScheduledTimeTest(TestCase):
         self.assertIsNone(tz_name)
 
     def test_aware_datetime_without_timezone_has_no_zone_name(self):
-        now = timezone.now()
         instant, tz_name = parse_scheduled_time(
-            "2026-11-05T10:00:00+01:00", None, now=now,
+            "2026-11-05T10:00:00+01:00", None, now=FROZEN_NOW,
         )
         self.assertIsNone(tz_name)
 
     def test_offset_timezone_mismatch_rejected(self):
-        now = timezone.now()
         # +02:00 is never the Europe/Berlin offset in November (CET = +01:00).
         with self.assertRaises(CampaignScheduleValidationError) as ctx:
             parse_scheduled_time(
-                "2026-11-05T10:00:00+02:00", "Europe/Berlin", now=now,
+                "2026-11-05T10:00:00+02:00", "Europe/Berlin", now=FROZEN_NOW,
             )
         self.assertIn("scheduled_timezone", ctx.exception.errors)
 
     def test_offset_timezone_match_accepted(self):
-        now = timezone.now()
         instant, tz_name = parse_scheduled_time(
-            "2026-11-05T10:00:00+01:00", "Europe/Berlin", now=now,
+            "2026-11-05T10:00:00+01:00", "Europe/Berlin", now=FROZEN_NOW,
         )
         self.assertEqual(tz_name, "Europe/Berlin")
         self.assertEqual(
@@ -96,20 +97,20 @@ class ParseScheduledTimeTest(TestCase):
     def test_unknown_timezone_rejected(self):
         with self.assertRaises(CampaignScheduleValidationError) as ctx:
             parse_scheduled_time(
-                "2026-11-05T10:00:00", "Mars/Olympus", now=timezone.now(),
+                "2026-11-05T10:00:00", "Mars/Olympus", now=FROZEN_NOW,
             )
         self.assertIn("scheduled_timezone", ctx.exception.errors)
 
     def test_garbage_datetime_rejected(self):
         with self.assertRaises(CampaignScheduleValidationError) as ctx:
             parse_scheduled_time(
-                "next tuesday please", "UTC", now=timezone.now(),
+                "next tuesday please", "UTC", now=FROZEN_NOW,
             )
         self.assertIn("scheduled_at", ctx.exception.errors)
 
     def test_non_string_datetime_rejected(self):
         with self.assertRaises(CampaignScheduleValidationError):
-            parse_scheduled_time(123, "UTC", now=timezone.now())
+            parse_scheduled_time(123, "UTC", now=FROZEN_NOW)
 
 
 class ScheduleCampaignServiceTest(TestCase):
@@ -123,7 +124,7 @@ class ScheduleCampaignServiceTest(TestCase):
             self.draft.pk,
             scheduled_at="2026-11-05T10:00:00",
             scheduled_timezone="Europe/Berlin",
-            now=timezone.now(),
+            now=FROZEN_NOW,
         )
         campaign.refresh_from_db()
         self.assertEqual(
@@ -138,11 +139,13 @@ class ScheduleCampaignServiceTest(TestCase):
             self.draft.pk,
             scheduled_at="2026-11-05T10:00:00",
             scheduled_timezone="UTC",
+            now=FROZEN_NOW,
         )
         campaign = schedule_campaign(
             self.draft.pk,
             scheduled_at="2026-12-01T08:00:00",
             scheduled_timezone="Europe/Berlin",
+            now=FROZEN_NOW,
         )
         campaign.refresh_from_db()
         self.assertEqual(
@@ -159,6 +162,7 @@ class ScheduleCampaignServiceTest(TestCase):
                 self.draft.pk,
                 scheduled_at="2026-11-05T10:00:00",
                 scheduled_timezone="UTC",
+                now=FROZEN_NOW,
             )
 
     def test_schedule_unknown_campaign_raises(self):
@@ -167,6 +171,7 @@ class ScheduleCampaignServiceTest(TestCase):
                 99999,
                 scheduled_at="2026-11-05T10:00:00",
                 scheduled_timezone="UTC",
+                now=FROZEN_NOW,
             )
 
     def test_unschedule_clears_fields(self):
@@ -174,6 +179,7 @@ class ScheduleCampaignServiceTest(TestCase):
             self.draft.pk,
             scheduled_at="2026-11-05T10:00:00",
             scheduled_timezone="Europe/Berlin",
+            now=FROZEN_NOW,
         )
         campaign = unschedule_campaign(self.draft.pk)
         campaign.refresh_from_db()
@@ -189,6 +195,7 @@ class ScheduleCampaignServiceTest(TestCase):
             self.draft.pk,
             scheduled_at="2026-11-05T10:00:00",
             scheduled_timezone="UTC",
+            now=FROZEN_NOW,
         )
         self.draft.status = "sending"
         self.draft.save(update_fields=["status"])

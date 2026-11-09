@@ -8,20 +8,48 @@ send.
 """
 
 import json
-from datetime import datetime
+from datetime import timedelta
 from datetime import timezone as dt_timezone
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import EmailCampaign
 
 User = get_user_model()
 
-FUTURE_LOCAL = "2026-11-05T10:00:00"
-FUTURE_UTC = datetime(2026, 11, 5, 9, 0, tzinfo=dt_timezone.utc)
+
+def _future_berlin_inputs(days_ahead, hour):
+    """Naive Europe/Berlin datetime ~days_ahead out and its UTC instant.
+
+    The schedule endpoint validates "in the future" against the real wall
+    clock, so the fixture datetimes are computed at import time instead of
+    being hard-coded. Hour 10 local never lands in a DST transition.
+    """
+    berlin = ZoneInfo("Europe/Berlin")
+    local = (
+        timezone.now().astimezone(berlin) + timedelta(days=days_ahead)
+    ).replace(hour=hour, minute=0, second=0, microsecond=0)
+    instant = local.replace(tzinfo=berlin).astimezone(dt_timezone.utc)
+    return local.strftime("%Y-%m-%dT%H:%M:%S"), instant
+
+
+def _future_utc_inputs(days_ahead, hour):
+    """Naive UTC datetime ~days_ahead out and its aware UTC instant."""
+    instant = (
+        timezone.now() + timedelta(days=days_ahead)
+    ).astimezone(dt_timezone.utc).replace(
+        hour=hour, minute=0, second=0, microsecond=0,
+    )
+    return instant.replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S"), instant
+
+
+FUTURE_LOCAL, FUTURE_UTC = _future_berlin_inputs(days_ahead=1, hour=10)
+RESCHEDULE_LOCAL, RESCHEDULE_UTC = _future_utc_inputs(days_ahead=2, hour=8)
 
 
 class CampaignSchedulingApiTestBase(TestCase):
@@ -105,7 +133,7 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
             {"scheduled_at": FUTURE_LOCAL, "scheduled_timezone": "Europe/Berlin"},
         )
         body = response.json()
-        self.assertEqual(body["scheduled_at"], "2026-11-05T09:00:00+00:00")
+        self.assertEqual(body["scheduled_at"], FUTURE_UTC.isoformat())
         self.assertEqual(body["scheduled_timezone"], "Europe/Berlin")
         self.draft.refresh_from_db()
         self.assertEqual(self.draft.scheduled_at, FUTURE_UTC)
@@ -118,14 +146,11 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
         )
         response = self._post(
             self.draft.pk,
-            {"scheduled_at": "2026-12-01T08:00:00", "scheduled_timezone": "UTC"},
+            {"scheduled_at": RESCHEDULE_LOCAL, "scheduled_timezone": "UTC"},
         )
         self.assertEqual(response.json()["scheduled_timezone"], "UTC")
         self.draft.refresh_from_db()
-        self.assertEqual(
-            self.draft.scheduled_at,
-            datetime(2026, 12, 1, 8, 0, tzinfo=dt_timezone.utc),
-        )
+        self.assertEqual(self.draft.scheduled_at, RESCHEDULE_UTC)
         self.assertEqual(self.draft.scheduled_timezone, "UTC")
 
     def test_schedule_unknown_campaign_404(self):
@@ -227,7 +252,7 @@ class ScheduleEndpointTest(CampaignSchedulingApiTestBase):
             f"/api/campaigns/{self.draft.pk}", **self._auth(),
         )
         body = response.json()
-        self.assertEqual(body["scheduled_at"], "2026-11-05T09:00:00+00:00")
+        self.assertEqual(body["scheduled_at"], FUTURE_UTC.isoformat())
         self.assertEqual(body["scheduled_timezone"], "Europe/Berlin")
 
 

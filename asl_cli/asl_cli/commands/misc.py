@@ -7,6 +7,7 @@ import click
 from asl_cli.commands._shared import emit, format_option, get_client
 
 API = "/api"
+CRM_EXPORT_PAGE_SIZE = 200
 
 groups = []
 
@@ -77,8 +78,55 @@ groups.append(ses_events)
 @click.command("crm-export")
 @format_option
 def crm_export(fmt):
-    """Full CRM export (one row per user)."""
-    emit(get_client().get(f"{API}/crm/export"), fmt)
+    """Full CRM export (one row per user), fetching every API page."""
+    emit(_crm_export_all(get_client()), fmt)
+
+
+def _crm_export_all(client):
+    """Collect all CRM export pages before returning a single response."""
+    offset = 0
+    expected_total = None
+    result = None
+    members = []
+    while expected_total is None or offset < expected_total:
+        page = client.get(
+            f"{API}/crm/export",
+            params={"limit": CRM_EXPORT_PAGE_SIZE, "offset": offset},
+        )
+        total, page_members = _validate_crm_export_page(page, offset, expected_total)
+        if expected_total is None:
+            expected_total = total
+            result = dict(page)
+        members.extend(page_members)
+        offset += len(page_members)
+
+    if result is None:
+        raise click.ClickException("CRM export API returned no pages.")
+    result["members"] = members
+    result["count"] = len(members)
+    result["offset"] = 0
+    return result
+
+
+def _validate_crm_export_page(page, offset, expected_total):
+    """Validate paging metadata and return the page's total and rows."""
+    if not isinstance(page, dict) or not isinstance(page.get("members"), list):
+        raise click.ClickException("CRM export API returned an invalid members page.")
+    total = page.get("total")
+    if isinstance(total, bool) or not isinstance(total, int) or total < 0:
+        raise click.ClickException("CRM export API returned an invalid total count.")
+    if expected_total is not None and total != expected_total:
+        raise click.ClickException(
+            "CRM export total changed during pagination; rerun the export."
+        )
+    if page.get("offset") != offset:
+        raise click.ClickException(
+            f"CRM export API returned offset {page.get('offset')!r}; expected {offset}."
+        )
+    rows = page["members"]
+    if not rows and offset < total:
+        raise click.ClickException(f"CRM export stopped at {offset} of {total} rows.")
+    return total, rows
 
 
 groups.append(crm_export)

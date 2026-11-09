@@ -1,4 +1,4 @@
-"""``asl campaigns test-send`` posts one recipient to the test-send route."""
+"""``asl campaigns test-send`` follows the documented API contract."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def test_test_send_posts_exactly_one_recipient(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert client.calls == [
-        ("/studio/campaigns/17/test-send", {"test_recipients": "a@example.com"}),
+        ("/api/campaigns/17/test-send", {"email": "a@example.com"}),
     ]
     assert "accepted" in result.output
 

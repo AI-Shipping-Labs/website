@@ -5,8 +5,10 @@ from __future__ import annotations
 import sys
 
 import click
+import httpx
 
 from asl_cli import __version__
+from asl_cli.auto_update import UpdateError, maybe_update, restart_current_process
 from asl_cli.client import APIError
 from asl_cli.commands import groups
 
@@ -37,9 +39,23 @@ for _group in groups:
 
 def main():
     try:
+        if maybe_update():
+            restart_current_process()
         cli()
+    except UpdateError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
     except APIError as exc:
         click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    except httpx.TimeoutException:
+        click.echo("Error: API request timed out after 30 seconds.", err=True)
+        sys.exit(1)
+    except httpx.RequestError as exc:
+        click.echo(
+            f"Error: API request failed ({type(exc).__name__}); check network and API availability.",
+            err=True,
+        )
         sys.exit(1)
 
 

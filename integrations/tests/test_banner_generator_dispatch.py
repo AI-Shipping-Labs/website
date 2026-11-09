@@ -928,6 +928,21 @@ class RenderBannerForContentTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     @patch(DELETE_PATCH)
     @patch(CLIENT_PATCH)
+    def test_render_failure_is_logged_at_error_level(
+        self, mock_render, mock_delete,
+    ):
+        mock_render.side_effect = BannerGeneratorError(
+            'banner-generator returned HTTP 502', status_code=502,
+        )
+        article = _make_article()
+        with self.assertLogs(
+            'integrations.services.banner_generator.tasks', level='ERROR',
+        ) as log_cm:
+            render_banner_for_content('article', article.pk)
+        self.assertIn('HTTP 502', '\n'.join(log_cm.output))
+
+    @patch(DELETE_PATCH)
+    @patch(CLIENT_PATCH)
     def test_timeout_retry_failure_reports_render_failure(
         self, mock_render, mock_delete,
     ):

@@ -81,6 +81,31 @@ def _resolve_timeout_seconds():
     return value
 
 
+def _http_failure_message(response):
+    """Return an operator-facing message for a non-2xx Lambda response.
+
+    A 5xx (502 in particular, issue: event 77) means the Lambda Function
+    URL could not run the function at all (image unavailable, crash,
+    init failure) rather than a problem with the content being rendered,
+    so say that instead of a bare status code. The response body is the
+    Function URL's own error text, never our request, so it cannot carry
+    the bearer token.
+    """
+    status = response.status_code
+    message = f'banner-generator returned HTTP {status}'
+    if status >= 500:
+        message += (
+            ': the banner-generator Lambda failed to run the render '
+            '(service unavailable, not a problem with this content); '
+            'check its CloudWatch logs and image'
+        )
+    body = response.text if isinstance(getattr(response, 'text', None), str) else ''
+    body = ' '.join(body.split())[:200]
+    if body:
+        message += f' [{body}]'
+    return message
+
+
 def is_enabled():
     """Return True iff both the URL and the bearer token are configured.
 
@@ -173,13 +198,16 @@ def render_to_s3(
         # render task can retry exactly the cold-start class and nothing
         # else (issue #900).
         raise BannerGeneratorError(
-            f'banner-generator request failed: {type(exc).__name__}',
+            f'banner-generator request failed: {type(exc).__name__} '
+            f'(no response within {timeout}s)'
+            if isinstance(exc, requests.Timeout)
+            else f'banner-generator request failed: {type(exc).__name__}',
             is_timeout=isinstance(exc, requests.Timeout),
         ) from None
 
     if response.status_code < 200 or response.status_code >= 300:
         raise BannerGeneratorError(
-            f'banner-generator returned HTTP {response.status_code}',
+            _http_failure_message(response),
             status_code=response.status_code,
         )
 

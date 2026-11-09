@@ -74,7 +74,7 @@ jobs:
   playwright-dev:
     name: Playwright Dev Suite (${{ matrix.shard_name }})
     needs: [dev-readiness]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false

@@ -140,8 +140,27 @@ def _make_event_payload(event_id, event_type, data_object):
 
 
 @tag('core')
+@override_settings(STRIPE_WEBHOOK_SECRET=TEST_WEBHOOK_SECRET)
 class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
     """Tests that the webhook endpoint validates Stripe signatures."""
+
+    @patch("payments.services.get_config", return_value="")
+    @patch("payments.services.stripe.Webhook.construct_event")
+    def test_blank_secret_rejects_signature_signed_with_empty_secret(
+        self, construct_event, _get_config,
+    ):
+        payload = json.dumps({"id": "evt_empty_secret", "type": "unknown"}).encode()
+        sig = _build_stripe_signature(payload, secret="")
+
+        response = self.client.post(
+            WEBHOOK_URL,
+            data=payload,
+            content_type="application/json",
+            HTTP_STRIPE_SIGNATURE=sig,
+        )
+
+        self.assertEqual(response.status_code, 503)
+        construct_event.assert_not_called()
 
     def test_missing_signature_returns_400(self):
         """Request without Stripe-Signature header returns 400."""

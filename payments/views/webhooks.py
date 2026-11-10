@@ -15,6 +15,7 @@ from django.views.decorators.http import require_POST
 
 from payments.models import StripeWebhookDeliveryAttempt
 from payments.services import verify_webhook_signature
+from payments.services.signatures import WebhookSecretNotConfigured
 from payments.services.webhook_dispatch import is_handled_event_type, process_event
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,11 @@ def stripe_webhook(request):
 
     try:
         event = verify_webhook_signature(payload, sig_header)
+    except WebhookSecretNotConfigured as e:
+        logger.error("Webhook verification unavailable: %s", e)
+        return JsonResponse(
+            {"error": "Webhook verification is unavailable"}, status=503
+        )
     except (stripe.SignatureVerificationError, ValueError) as e:
         logger.warning("Webhook signature verification failed: %s", e)
         return JsonResponse({"error": "Invalid signature"}, status=400)

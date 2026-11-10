@@ -139,6 +139,7 @@ ALLOWED_RUNTIME_LINES = {
     },
     "website/middleware.py": {
         "'/admin/',",
+        "EXEMPT_PREFIXES = ('/studio/', '/admin/', '/api/webhooks/')",
     },
     "website/urls.py": {
         "path('admin/', admin.site.urls),",
@@ -184,6 +185,9 @@ ALLOWED_TEST_SNAPSHOTS = {
     ),
     "website/tests/test_public_cache_policy.py": _TestSnapshot(
         1, "67158e835836bc8515bf82b6b727d3ab4232ce2afcc8d6c6505198c07fcfee7f"
+    ),
+    "website/tests/test_anonymous_load_shed.py": _TestSnapshot(
+        1, "3a7ecf1b0a390cfa60979e1d08bd23486329ff228cd9bfd7b6d42fde5e840223"
     ),
     "content/tests/test_blog.py": _TestSnapshot(5, "73827bdca2964420abe8b341fe14cfb22128bda48cb7fd96f168d5a6a11d8114"),
     "content/tests/test_cohorts.py": _TestSnapshot(

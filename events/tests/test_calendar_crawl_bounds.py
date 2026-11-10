@@ -29,7 +29,7 @@ class CalendarCrawlBoundsTest(TestCase):
         for year in (current_year - 3, current_year + 2):
             with self.subTest(year=year):
                 response = self.client.get(f'/events/calendar/{year}/6')
-                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, f'Events Calendar - June {year}')
 
     def test_year_zero_and_out_of_window_years_return_404(self):
         current_year = date.today().year

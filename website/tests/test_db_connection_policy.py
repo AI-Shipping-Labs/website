@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.conf import settings
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.test import SimpleTestCase
 
@@ -75,4 +76,4 @@ class DatabaseConnectionPolicyTests(SimpleTestCase):
         ):
             response = self.client.get('/ping')
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, str(settings.VERSION).encode())

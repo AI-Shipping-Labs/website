@@ -19,8 +19,11 @@ PRODUCTION_BODY = (
     'Disallow: /accounts/\n'
     'Disallow: /register\n'
     'Disallow: /api/\n'
+    'Disallow: /events/calendar/\n'
     'Disallow: /blog?*tag=\n'
     'Disallow: /blog?*topic=\n'
+    'Disallow: /courses?*page=\n'
+    'Disallow: /courses?*tag=\n'
     'Disallow: /projects?*difficulty=\n'
     'Disallow: /projects?*tag=\n'
     'Disallow: /resources?*tag=\n'
@@ -67,7 +70,7 @@ class ProductionRobotsResponseTest(RobotsConfigMixin, TestCase):
         self.assertEqual(response.content.decode().count('User-agent:'), 1)
         self.assertEqual(response.content.decode().count('Allow:'), 1)
         self.assertEqual(response.content.decode().count('Sitemap:'), 1)
-        self.assertEqual(response.content.decode().count('Disallow:'), 13)
+        self.assertEqual(response.content.decode().count('Disallow:'), 16)
         self.assertNotIn('X-Robots-Tag', response)
         self.assertEqual(response['Cache-Control'], 'no-store, max-age=0')
         self.assertEqual(response['Pragma'], 'no-cache')

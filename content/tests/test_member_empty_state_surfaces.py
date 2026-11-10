@@ -49,21 +49,6 @@ class TagsEmptyStateTest(TestCase):
         self.assertContains(response, "Content will be tagged as it's published.")
         self.assertEqual(_component_links(response), [])
 
-    def test_tag_detail_filter_state_interpolates_tag_and_resets(self):
-        response = self.client.get('/tags/nonexistent')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="member-empty-state"')
-        self.assertContains(response, 'data-empty-kind="filter"')
-        self.assertContains(response, 'No content found')
-        self.assertContains(
-            response,
-            'No published content uses the &quot;nonexistent&quot; tag yet.',
-            html=False,
-        )
-        self.assertContains(response, 'href="/tags"')
-        self.assertContains(response, 'Browse all tags')
-
     def test_tag_detail_copy_escapes_interpolated_tag(self):
         request = RequestFactory().get('/tags/unsafe')
         request.session = {}

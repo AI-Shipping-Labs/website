@@ -151,6 +151,7 @@ class ComposeCommandContractTest(SimpleTestCase):
         self.assertIn('ENTRYPOINT ["/app/entrypoint.sh"]', self.dockerfile)
         self.assertIn("USER app:app", self.dockerfile)
         self.assertIn('ENV PATH="/app/.venv/bin:${PATH}"', self.dockerfile)
+        self.assertIn("UV_NO_SYNC=1", self.dockerfile)
         self.assertIn("FROM node:24-slim@sha256:", self.dockerfile)
         self.assertIn("FROM python:3.13-slim@sha256:", self.dockerfile)
         self.assertIn("ghcr.io/astral-sh/uv:latest@sha256:", self.dockerfile)

@@ -36,7 +36,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest@sha256:96f40d3904aad8d0bd010539001d36c8e
 # Install Python deps (cached layer)
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen
-RUN chown -R app:app /app/.venv
+ENV UV_NO_SYNC=1
 
 # Copy application code
 COPY . .

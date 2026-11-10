@@ -122,21 +122,16 @@ def test_visitor_understands_empty_tag_library(django_server, page):
     expect(empty.get_by_role('link')).to_have_count(0)
 
 
-def test_visitor_recovers_from_unmatched_tag_url(django_server, page):
+def test_visitor_gets_not_found_for_unmatched_tag_url(django_server, page):
     _reset_surfaces()
     _create_article(tags=['agents'])
 
-    _goto(page, f'{django_server}/tags/nonexistent')
-
-    empty = page.get_by_test_id('member-empty-state')
-    expect(empty).to_have_attribute('data-empty-kind', 'filter')
-    expect(empty).to_contain_text('No content found')
-    expect(empty).to_contain_text(
-        'No published content uses the "nonexistent" tag yet.',
+    response = page.goto(
+        f'{django_server}/tags/nonexistent', wait_until='domcontentloaded',
     )
-    empty.get_by_role('link', name='Browse all tags').click()
-    page.wait_for_url(f'{django_server}/tags')
-    expect(page.get_by_role('link', name='agents 1')).to_be_visible()
+    assert response is not None
+    assert response.status == 404
+    expect(page.get_by_test_id('page-not-found')).to_be_visible()
 
 
 def test_visitor_sees_fresh_resources_state(django_server, page):

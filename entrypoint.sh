@@ -19,4 +19,4 @@ if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
 
-exec uv run python -m scripts.entrypoint_init
+exec python -m scripts.entrypoint_init

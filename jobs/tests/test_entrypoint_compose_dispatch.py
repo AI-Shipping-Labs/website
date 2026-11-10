@@ -97,18 +97,18 @@ class EntrypointArgvDispatchTest(SimpleTestCase):
             self.assertEqual(marker.read_text(encoding="utf-8"), "ok")
             self.assertFalse(record.exists())
 
-    def test_empty_argv_invokes_entrypoint_init_via_uv(self):
+    def test_empty_argv_invokes_entrypoint_init_without_uv(self):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            record = tmp_path / "uv-args"
-            uv = tmp_path / "uv"
-            uv.write_text(
+            record = tmp_path / "python-args"
+            python = tmp_path / "python"
+            python.write_text(
                 "#!/bin/sh\n"
                 f"printf '%s\\n' \"$@\" > '{record}'\n"
                 "exit 0\n",
                 encoding="utf-8",
             )
-            uv.chmod(uv.stat().st_mode | stat.S_IEXEC)
+            python.chmod(python.stat().st_mode | stat.S_IEXEC)
             env = {**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}"}
 
             completed = self._run_entrypoint([], env=env)
@@ -116,7 +116,7 @@ class EntrypointArgvDispatchTest(SimpleTestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(
                 record.read_text(encoding="utf-8").split(),
-                ["run", "python", "-m", "scripts.entrypoint_init"],
+                ["-m", "scripts.entrypoint_init"],
             )
 
 
@@ -149,6 +149,11 @@ class ComposeCommandContractTest(SimpleTestCase):
 
     def test_dockerfile_entrypoint_has_no_cmd(self):
         self.assertIn('ENTRYPOINT ["/app/entrypoint.sh"]', self.dockerfile)
+        self.assertIn("USER app:app", self.dockerfile)
+        self.assertIn('ENV PATH="/app/.venv/bin:${PATH}"', self.dockerfile)
+        self.assertIn("FROM node:24-slim@sha256:", self.dockerfile)
+        self.assertIn("FROM python:3.13-slim@sha256:", self.dockerfile)
+        self.assertIn("ghcr.io/astral-sh/uv:latest@sha256:", self.dockerfile)
         cmd_lines = [
             line
             for line in self.dockerfile.splitlines()

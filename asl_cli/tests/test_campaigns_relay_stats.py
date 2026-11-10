@@ -1,10 +1,8 @@
 import json
 from unittest.mock import Mock, patch
 
-from click.testing import CliRunner
-
 from asl_cli.cli import cli
-
+from click.testing import CliRunner
 
 RELAY_STATS = {
     "sent_count": 200,

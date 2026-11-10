@@ -4,8 +4,8 @@ import logging
 import uuid
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q
@@ -32,8 +32,8 @@ from email_app.services.relay_campaigns import (
     alert_relay_campaign_failure,
     queue_native_campaign,
     retry_native_campaign_delivery,
-    validate_native_campaign_recipient_counts,
     send_campaign_delivery_to_relay,
+    validate_native_campaign_recipient_counts,
 )
 from integrations.config import get_config
 

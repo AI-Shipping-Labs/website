@@ -942,7 +942,8 @@ class BrowserJourneyCollectionTests(SimpleTestCase):
         ):
             self.assertIn(
                 f"Declared browser journey `{original}` changed node ID after completed collection "
-                f"to `{spoofed}`. Runtime policy state is bound to the stable pytest item identity",
+                f"to `{spoofed}`. Runtime policy state is bound to the stable pytest item identity "
+                "and the collected node ID must not drift.",
                 output,
             )
         self.assertNotIn("passed without a successful real synchronous Playwright Page journey", output)

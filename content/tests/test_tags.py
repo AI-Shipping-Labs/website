@@ -14,6 +14,7 @@ import re
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import connection
 from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
@@ -292,6 +293,9 @@ class TagsDetailViewTest(TestCase):
             description='AI project description',
         )
 
+    def setUp(self):
+        cache.clear()
+
     def test_tags_detail_returns_200(self):
         response = self.client.get('/tags/python')
         self.assertEqual(response.status_code, 200)
@@ -326,11 +330,9 @@ class TagsDetailViewTest(TestCase):
         response = self.client.get('/tags/python')
         self.assertEqual(response.context['result_count'], 2)
 
-    def test_nonexistent_tag_shows_empty(self):
+    def test_nonexistent_tag_returns_not_found(self):
         response = self.client.get('/tags/nonexistent')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['result_count'], 0)
-        self.assertContains(response, 'No content found')
+        self.assertEqual(response.status_code, 404)
 
     def test_tag_page_title(self):
         response = self.client.get('/tags/python')
@@ -378,7 +380,7 @@ class PublicTagQueryPerformanceTest(TestCase):
         Event.objects.create(
             title='Projected event', slug='projected-event',
             tags=common_tag, published=True,
-            description='Event description',
+            description='Event description', status='completed',
             start_datetime=timezone.now(),
         )
         Tutorial.objects.create(
@@ -392,6 +394,9 @@ class PublicTagQueryPerformanceTest(TestCase):
                 date=date(2026, 6, index + 1), tags=['volume'],
                 published=True,
             )
+
+    def setUp(self):
+        cache.clear()
 
     @staticmethod
     def _selected_columns(sql):
@@ -921,6 +926,9 @@ class TagIndexPageTest(TestCase):
     and the empty state — no JS required.
     """
 
+    def setUp(self):
+        cache.clear()
+
     def test_tag_cloud_shows_tags_with_counts_and_orders_by_count(self):
         # Replaces playwright_tests/test_seo_tags.py::TestScenario1TagCloudExploration::test_tags_page_shows_tags_with_counts_sorted_by_count
         Article.objects.create(
@@ -945,6 +953,7 @@ class TagIndexPageTest(TestCase):
         self.assertContains(response, 'href="/tags/ai"')
         self.assertContains(response, 'href="/tags/python"')
         self.assertContains(response, 'href="/tags/workshop"')
+        self.assertContains(response, 'href="/tags/ai" rel="nofollow"')
 
         # Counts are reflected in the context: ai=3, python=2, workshop=1.
         tag_dict = dict(response.context['tag_counts'])
@@ -1011,6 +1020,9 @@ class TagDetailPageTest(TestCase):
     and the "All Tags" back-link.
     """
 
+    def setUp(self):
+        cache.clear()
+
     def test_tag_detail_shows_both_items_sorted_newest_first(self):
         # Replaces playwright_tests/test_seo_tags.py::TestScenario2DrillIntoTagAndNavigate::test_tag_detail_shows_both_items_sorted_by_date
         Article.objects.create(
@@ -1031,6 +1043,10 @@ class TagDetailPageTest(TestCase):
 
         response = self.client.get('/tags/ai-engineering')
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'href="/tags/ai-engineering" rel="nofollow"',
+        )
 
         # Both items present, badges visible.
         self.assertContains(response, 'Intro to AI Engineering')

@@ -10,6 +10,7 @@ from django.http import Http404
 from django.template.response import TemplateResponse
 from django.utils.http import http_date
 
+from content.caching import cache_anonymous_page
 from integrations.config import site_base_url
 from website.search_indexing import DEV_SITE_HOST, request_targets_dev_host
 
@@ -34,6 +35,7 @@ def _canonical_site(request):
     return parsed.scheme, SimpleNamespace(domain=parsed.netloc)
 
 
+@cache_anonymous_page(timeout=3600)
 @x_robots_tag
 def sitemap(
     request,

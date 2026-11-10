@@ -24,11 +24,20 @@ the merge engine repoints its allauth ``SocialAccount`` rows to canonical, so
 
 import logging
 
+from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
 from accounts.services.email_resolution import resolve_user_by_email
+from website.request_ip import client_ip_from_request
 
 logger = logging.getLogger(__name__)
+
+
+class AccountAdapter(DefaultAccountAdapter):
+    """Use the site's trusted-proxy policy for allauth rate-limit keys."""
+
+    def get_client_ip(self, request):
+        return client_ip_from_request(request) or super().get_client_ip(request)
 
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):

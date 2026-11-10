@@ -25,6 +25,7 @@ NOINDEX_ROBOTS_META_CONTENT = 'noindex,nofollow,noarchive'
 # in the other.
 FACETED_LISTING_QUERY_PARAMS = {
     '/blog': frozenset({'tag', 'topic'}),
+    '/courses': frozenset({'page', 'tag'}),
     '/projects': frozenset({'difficulty', 'tag'}),
     '/resources': frozenset({'tag'}),
     '/downloads': frozenset({'tag'}),

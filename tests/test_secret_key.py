@@ -18,6 +18,7 @@ from website import settings as website_settings
 from website.settings import (
     DEV_FALLBACK_SECRET_KEY,
     _bool_env,
+    _debug_mode,
     _resolve_secret_key,
 )
 
@@ -158,15 +159,17 @@ class BoolEnvTest(SimpleTestCase):
             _bool_env('DEBUG', default=True, env={'DEBUG': '  false  '}),
         )
 
+    def test_debug_defaults_off_and_explicit_local_value_is_honored(self):
+        self.assertFalse(_debug_mode({}))
+        self.assertTrue(_debug_mode({'DEBUG': 'true'}))
+
 
 class SettingsModuleSmokeTest(SimpleTestCase):
     """The settings module loaded successfully under the test runner.
 
-    The test suite runs with ``DEBUG=True`` (default) and typically with
-    no ``SECRET_KEY`` env var set, so the dev-fallback path is exercised
-    on every CI run. If the contract regresses (e.g. someone tightens
-    the dev path to also raise), this test fails before any other test
-    even gets a chance to run.
+    The test suite can opt into local development mode with ``DEBUG=true``.
+    If the contract regresses (e.g. someone tightens the dev path to also
+    raise), this test fails before any other test gets a chance to run.
     """
 
     def test_secret_key_is_a_non_empty_string(self):

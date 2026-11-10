@@ -3,6 +3,7 @@ from django.db.models.signals import post_delete, post_migrate, post_save
 from django.dispatch import receiver
 
 from content.caching import invalidate_anonymous_page_cache
+from content.marketing_cache import invalidate_published_marketing_page_paths
 from content.models import Download, MarketingPage, Project
 from content.models.cohort import Cohort
 from content.nav_availability import (
@@ -58,6 +59,7 @@ def refresh_downloads_nav_availability(**kwargs):
 )
 def refresh_marketing_pages_nav(**kwargs):
     refresh_marketing_pages_nav_cache()
+    invalidate_published_marketing_page_paths()
 
 
 @receiver(

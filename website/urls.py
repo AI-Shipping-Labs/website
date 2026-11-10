@@ -45,7 +45,7 @@ handler404 = 'website.error_views.handler404'
 
 urlpatterns = [
     # /ping is served by website.middleware.HealthCheckMiddleware so the
-    # ALB's IP-based health checks don't trip ALLOWED_HOSTS.
+    # Internal proxy/container health checks don't trip ALLOWED_HOSTS.
     path('', include('integrations.urls')),
     path('', include('analytics.urls')),
     path('admin/', admin.site.urls),

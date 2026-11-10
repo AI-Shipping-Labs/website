@@ -91,7 +91,12 @@ def _resolve_secret_key(*, debug, env=None):
     return value
 
 
-DEBUG = _bool_env('DEBUG', default=True)
+def _debug_mode(environ=None):
+    """Default to safe production behavior unless development opts in."""
+    return _bool_env('DEBUG', default=False, env=environ)
+
+
+DEBUG = _debug_mode()
 def _is_test_command(argv=None, environ=None):
     """Return True for Django's test runner and pytest entrypoints.
 
@@ -131,13 +136,14 @@ def _security_setting_values(*, debug):
     return {
         'SESSION_COOKIE_SECURE': not debug,
         'CSRF_COOKIE_SECURE': not debug,
-        'SECURE_HSTS_SECONDS': 3600 if not debug else 0,
+        'SECURE_HSTS_SECONDS': 31536000 if not debug else 0,
+        'SECURE_HSTS_INCLUDE_SUBDOMAINS': False,
+        'SECURE_HSTS_PRELOAD': False,
     }
 
-# AWS ALB terminates TLS and forwards X-Forwarded-Proto. Trust it
-# unconditionally: local dev never receives this header from an external
-# attacker (it's localhost) so the gate isn't worth losing dev DEBUG=True
-# coverage. Without this, the host-mismatch banner false-fires on dev.
+# Traefik terminates TLS and forwards X-Forwarded-Proto. Trust this one
+# deployment proxy hop; local development does not receive the header from an
+# external client. Without it, the host-mismatch banner false-fires on dev.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 globals().update(_security_setting_values(debug=DEBUG))
@@ -165,6 +171,9 @@ INSTALLED_APPS = [
     'django.contrib.sites',
     'django.contrib.sitemaps',
     'django.forms',
+    # Routes django-allauth rate-limit counters through the shared database
+    # cache while the page cache remains process-local.
+    'website.apps.WebsiteConfig',
     # Third-party
     'allauth',
     'allauth.account',
@@ -263,8 +272,8 @@ MIDDLEWARE = [
     # including early responses, redirects, and errors, can receive the
     # applicable robots header.
     'website.middleware.SearchIndexingPolicyMiddleware',
-    # Must run before SecurityMiddleware/CommonMiddleware so that ALB
-    # health checks (which use the container's VPC IP as Host) don't trip
+    # Must run before SecurityMiddleware/CommonMiddleware so that internal
+    # health checks (which use the container IP as Host) don't trip
     # ALLOWED_HOSTS validation. See website/middleware.py.
     'website.middleware.HealthCheckMiddleware',
     # Canonicalize production apex HTTP and www traffic before middleware
@@ -272,6 +281,7 @@ MIDDLEWARE = [
     # the exact host-validation bypass above this middleware.
     'website.middleware.CanonicalHostRedirectMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'website.security_headers.ContentSecurityPolicyReportOnlyMiddleware',
     # Serves /static/* from STATIC_ROOT in production (DEBUG=False).
     # Must come right after SecurityMiddleware so static responses still
     # get security headers but skip session / auth / CSRF processing.
@@ -284,6 +294,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # AuthenticationMiddleware must run first so only real signed-in users
+    # bypass the anonymous cap; HealthCheckMiddleware short-circuits /ping.
+    'website.middleware.AnonymousRequestLoadShedMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',
@@ -346,6 +359,44 @@ DATABASES = {
         conn_max_age=600,
     ),
 }
+
+
+def _configure_aisl_database_name(database, environ=None):
+    """Allow the isolated dev web runtime to target only ``aisl_dev``."""
+    environ = os.environ if environ is None else environ
+    database_name = environ.get('AISL_DATABASE_NAME', '').strip()
+    if not database_name:
+        return database
+    if database_name != 'aisl_dev':
+        raise ImproperlyConfigured(
+            'AISL_DATABASE_NAME may only select the isolated aisl_dev database.'
+        )
+    if database.get('ENGINE') != 'django.db.backends.postgresql':
+        raise ImproperlyConfigured(
+            'AISL_DATABASE_NAME=aisl_dev requires a PostgreSQL DATABASE_URL.'
+        )
+    database['NAME'] = database_name
+    return database
+
+
+_configure_aisl_database_name(DATABASES['default'])
+
+
+def _configure_postgresql_connection_safety(database):
+    """Bound PostgreSQL connection setup and check persistent sockets."""
+    if database.get('ENGINE') != 'django.db.backends.postgresql':
+        return database
+    database['CONN_HEALTH_CHECKS'] = True
+    database.setdefault('OPTIONS', {}).update({
+        'connect_timeout': 3,
+        'keepalives': 1,
+        'keepalives_idle': 30,
+    })
+    return database
+
+
+_configure_postgresql_connection_safety(DATABASES['default'])
+
 # SQLite concurrency tuning. Without these PRAGMAs, two writers racing the
 # same db.sqlite3 file (e.g. Q_WORKERS>1 syncing 6 sources in parallel)
 # surface as "database is locked". The Postgres branch is left untouched.
@@ -615,6 +666,8 @@ AUTHENTICATION_BACKENDS = [
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_SIGNUP_FIELDS = ['email*']
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
+ACCOUNT_ADAPTER = 'accounts.adapters.AccountAdapter'
+ALLAUTH_TRUSTED_PROXY_COUNT = 1
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # OAuth providers already verify email
 ACCOUNT_SIGNUP_REDIRECT_URL = '/'
 LOGIN_REDIRECT_URL = '/'
@@ -748,6 +801,10 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # `Q_CLUSTER['cache'] = 'django_q'` (below) tells django-q to use this
 # named cache rather than `default`, so the application's own cache usage
 # (if any) doesn't share a namespace with cluster heartbeats.
+_SHARED_DATABASE_CACHE_OPTIONS = {
+    'MAX_ENTRIES': 100000,
+    'CULL_FREQUENCY': 10,
+}
 if TESTING:
     _django_q_cache = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
@@ -757,16 +814,70 @@ else:
     _django_q_cache = {
         'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
         'LOCATION': 'django_q_cache',
+        'OPTIONS': _SHARED_DATABASE_CACHE_OPTIONS.copy(),
     }
+# allauth imports Django's default cache proxy in its rate-limit module. Its
+# cache is redirected to this shared alias by WebsiteConfig.ready(); a
+# database-backed alias is needed because the page cache above stays local to
+# each Gunicorn worker. The table is created by the existing django_q migration.
+_allauth_rate_limits_cache = {
+    'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+    'LOCATION': 'django_q_cache',
+    'OPTIONS': _SHARED_DATABASE_CACHE_OPTIONS.copy(),
+}
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'OPTIONS': {
-            'MAX_ENTRIES': 4096,
+            'MAX_ENTRIES': 500,
             'CULL_FREQUENCY': 4,
         },
     },
     'django_q': _django_q_cache,
+    'allauth_rate_limits': _allauth_rate_limits_cache,
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_context': {
+            '()': 'website.logging_config.RequestContextFilter',
+        },
+    },
+    'formatters': {
+        'production': {
+            'format': (
+                '%(asctime)s %(levelname)s %(name)s '
+                'request_id=%(request_id)s '
+                'correlation_id=%(correlation_id)s %(message)s'
+            ),
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'filters': ['request_context'],
+            'formatter': 'production',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
 }
 
 # Django-Q2 task queue configuration

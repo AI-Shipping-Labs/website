@@ -118,7 +118,7 @@ class DownloadDelivery1264Test(TestCase):
         self.assertEqual(response.json(), {'error': 'Invalid request.'})
         self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
 
-    def test_rate_limit_uses_alb_observed_rightmost_forwarded_hop(self):
+    def test_rate_limit_uses_proxy_observed_rightmost_forwarded_hop(self):
         from django.test import RequestFactory
 
         from website.request_ip import client_ip_from_request

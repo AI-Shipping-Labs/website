@@ -137,7 +137,7 @@ class TailwindSourceContractTest(SimpleTestCase):
         for target in ("test-playwright: css-build", "test-playwright-core: css-build"):
             self.assertIn(target, makefile)
         self.assertIn("css: npm run css:watch", procfile)
-        self.assertIn("FROM node:24-slim AS css-builder", dockerfile)
+        self.assertRegex(dockerfile, r"FROM node:24-slim@sha256:[0-9a-f]{64} AS css-builder")
         self.assertIn("COPY --from=css-builder /app/static/css/tailwind.css", dockerfile)
         self.assertEqual(dockerfile.count("FROM node:"), 1)
 

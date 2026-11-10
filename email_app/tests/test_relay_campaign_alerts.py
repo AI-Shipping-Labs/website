@@ -78,7 +78,7 @@ class RelayCampaignAlertTest(TestCase):
             ) as mock_mail,
         ):
             self.assertTrue(self._alert(operation="stats refresh"))
-        mock_post.assert_called_once()
+        self.assertEqual(mock_post.call_count, 1)
         mock_mail.assert_not_called()
 
     def test_email_is_the_fallback_when_slack_is_disabled(self):
@@ -106,7 +106,7 @@ class RelayCampaignAlertTest(TestCase):
             patch("email_app.services.relay_campaign_alerts.send_mail", return_value=1) as mock_mail,
         ):
             self.assertTrue(self._alert())
-        mock_mail.assert_called_once()
+        self.assertEqual(mock_mail.call_count, 1)
 
     def test_email_is_attempted_when_slack_rejects_the_post(self):
         with (
@@ -125,7 +125,7 @@ class RelayCampaignAlertTest(TestCase):
             patch("email_app.services.relay_campaign_alerts.send_mail", return_value=1) as mock_mail,
         ):
             self.assertTrue(self._alert())
-        mock_mail.assert_called_once()
+        self.assertEqual(mock_mail.call_count, 1)
 
     def test_every_route_failing_returns_false_without_raising(self):
         with (
@@ -227,4 +227,4 @@ class RelayCampaignAlertTest(TestCase):
         ):
             mock_caches.__getitem__.side_effect = RuntimeError("cache down")
             self.assertTrue(self._alert())
-        mock_post.assert_called_once()
+        self.assertEqual(mock_post.call_count, 1)

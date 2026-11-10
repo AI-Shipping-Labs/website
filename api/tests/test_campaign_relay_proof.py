@@ -409,7 +409,7 @@ class RelayProofStatsTest(RelayProofApiTestBase):
             response = self._stats(key)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["sent_count"], 40)
-        mock_stats.assert_called_once()
+        self.assertEqual(mock_stats.call_count, 1)
 
     def test_stats_maps_missing_and_failing_relay_reads(self):
         key = self._dry_run_key()

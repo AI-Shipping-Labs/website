@@ -55,13 +55,13 @@ from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
     build_recording_available_prefill,
 )
-from email_app.services.relay_templates import (
-    RelayTemplateError,
-    configured_template_client,
-)
 from email_app.services.relay_campaigns import (
     RelayCampaignError,
     refresh_campaign_relay_stats_loud,
+)
+from email_app.services.relay_templates import (
+    RelayTemplateError,
+    configured_template_client,
 )
 from events.models import Event
 from integrations.config import get_config

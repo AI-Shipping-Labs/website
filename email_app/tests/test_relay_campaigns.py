@@ -2,8 +2,8 @@
 
 import json
 import re
-from io import StringIO
 import uuid
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -14,14 +14,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from email_app.tasks.send_campaign import (
-    send_campaign_batch,
-)
 from email_app.services.relay_campaigns import (
     RelayCampaignApiError,
     alert_relay_campaign_failure,
     preview_native_test_campaign,
     queue_native_test_campaign,
+)
+from email_app.tasks.send_campaign import (
+    send_campaign_batch,
 )
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 

@@ -11,10 +11,10 @@ test-send, duplicate, or delete them from this module. Dispatch actions
 import inspect
 import json
 import re
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
-from unittest.mock import patch
 
 from accounts.models import Token
 from api.views import campaigns as campaigns_view

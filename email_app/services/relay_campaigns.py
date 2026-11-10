@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import hashlib
 import hmac
+import logging
 import re
 import uuid
 from dataclasses import replace
@@ -13,8 +13,8 @@ from typing import Any
 
 import requests
 from django.conf import settings
-from django.core.mail import send_mail
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from django.core.validators import validate_email
 
 from email_app.services.email_classification import get_sender_for_email_type
@@ -362,12 +362,11 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
     Per-recipient verification links travel as private Relay list metadata and
     are copied into Relay's immutable campaign-recipient context at queue time.
     """
-    from email_app.models import CampaignDelivery
     from email_app.services.campaign_message import prepare_campaign_message
     from email_app.services.campaign_repermission import (
         REPERMISSION_COPY,
-        VERIFY_DEADLINE_CTA,
         REPERMISSION_EMAIL_TYPE,
+        VERIFY_DEADLINE_CTA,
         VERIFY_DEADLINE_EMAIL_TYPE,
         confirmation_url_for_user,
         verify_deadline_url_for_user,

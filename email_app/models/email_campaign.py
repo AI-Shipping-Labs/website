@@ -18,6 +18,16 @@ class EmailCampaign(models.Model):
         ('sent', 'Sent'),
     ]
 
+    RELAY_ATTENTION_STATES = frozenset({'timed_out', 'relay_failed'})
+    RELAY_STATE_LABELS = {
+        'pending': 'Pending',
+        'queued': 'Queued',
+        'failed': 'Failed',
+        'timed_out': 'Timed out',
+        'relay_failed': 'Relay failed',
+        'sent': 'Sent',
+    }
+
     TARGET_LEVEL_CHOICES = [
         (0, 'Everyone (including free)'),
         (10, 'Basic and above'),
@@ -156,6 +166,12 @@ class EmailCampaign(models.Model):
     relay_campaign_error = models.TextField(blank=True, default='', db_default='')
     relay_campaign_stats = models.JSONField(null=True, blank=True)
     relay_campaign_stats_synced_at = models.DateTimeField(null=True, blank=True)
+    # Stall watchdog: the last advance, stalled-key alerts already accepted,
+    # and the Relay sent total when attention was raised (a higher total clears it).
+    relay_campaign_progress_at = models.DateTimeField(null=True, blank=True)
+    relay_campaign_attention_alerted_at = models.DateTimeField(null=True, blank=True)
+    relay_campaign_attention_alerted_keys = models.JSONField(default=list, blank=True, db_default=[])
+    relay_campaign_attention_sent_count = models.IntegerField(null=True, blank=True)
     sent_count = models.IntegerField(
         default=0,
         help_text='Number of recipients.',
@@ -206,6 +222,35 @@ class EmailCampaign(models.Model):
 
     def __str__(self):
         return f'{self.subject} ({self.status})'
+
+    @property
+    def in_relay_attention(self):
+        return self.relay_campaign_state in self.RELAY_ATTENTION_STATES
+
+    @property
+    def relay_state_label(self):
+        return self.RELAY_STATE_LABELS.get(
+            self.relay_campaign_state, self.relay_campaign_state,
+        )
+
+    def apply_derived_status(self, target_status, now):
+        """Set the delivery-derived status unless Relay attention owns it.
+
+        Returns the changed field names so the caller can save them.
+        """
+        if self.in_relay_attention:
+            return []
+        changed = []
+        if self.status != target_status:
+            self.status = target_status
+            changed.append('status')
+        if target_status == 'sent' and self.sent_at is None:
+            self.sent_at = now
+            changed.append('sent_at')
+        elif target_status != 'sent' and self.sent_at is not None:
+            self.sent_at = None
+            changed.append('sent_at')
+        return changed
 
     def get_eligible_recipients(self):
         """Query users eligible to receive this campaign.

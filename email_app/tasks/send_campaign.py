@@ -24,6 +24,11 @@ from email_app.services.campaign_pacing import (
 from email_app.services.campaign_repermission import (
     monitored_message_parts,
 )
+from email_app.services.relay_campaign_progress import (
+    begin_native_queue,
+    mark_native_queue_accepted,
+    record_native_queue_failure,
+)
 from email_app.services.relay_campaigns import (
     RelayCampaignApiError,
     RelayCampaignDeliveryAmbiguous,
@@ -158,16 +163,7 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
         wave.relay_campaign_key = external_key
         wave.save(update_fields=["relay_campaign_key"])
 
-    campaign.relay_campaign_state = "pending"
-    campaign.relay_campaign_key = campaign.relay_campaign_key or external_key
-    campaign.relay_campaign_keys = list(dict.fromkeys(
-        [*(campaign.relay_campaign_keys or []), external_key]
-    ))
-    campaign.relay_campaign_error = ""
-    campaign.save(update_fields=[
-        "relay_campaign_state", "relay_campaign_key", "relay_campaign_keys",
-        "relay_campaign_error",
-    ])
+    begin_native_queue(campaign, external_key)
 
     try:
         result = queue_native_campaign(
@@ -186,12 +182,7 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
             for delivery in deliveries.filter(resolution=CampaignDelivery.Resolution.RETRY):
                 retry_native_campaign_delivery(external_key, delivery.pk)
     except Exception as exc:
-        campaign.status = "needs_attention"
-        campaign.relay_campaign_state = "failed"
-        campaign.relay_campaign_error = f"{type(exc).__name__}: {exc}"[:2000]
-        campaign.save(update_fields=[
-            "status", "relay_campaign_state", "relay_campaign_error",
-        ])
+        record_native_queue_failure(campaign, exc)
         alert_relay_campaign_failure(campaign, "queue", exc)
         raise
 
@@ -223,9 +214,7 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
             "state", "email_log", "resolution", "resolved_at", "completed_at", "updated_at",
         ])
 
-    campaign.relay_campaign_state = "queued"
-    campaign.relay_campaign_error = ""
-    campaign.save(update_fields=["relay_campaign_state", "relay_campaign_error"])
+    mark_native_queue_accepted(campaign, already_queued=bool(result.get("already_queued")))
     refresh_campaign_status(campaign.pk)
     return {
         "campaign_id": campaign.pk,
@@ -308,10 +297,12 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
             # duplicate parent tasks that predate that contract.
             campaign.status = 'sending'
             campaign.relay_campaign_state = 'pending'
+            campaign.relay_campaign_progress_at = timezone.now()
             campaign.sent_count = 0
             campaign.sent_at = None
             campaign.save(update_fields=[
                 'status', 'sent_count', 'sent_at', 'relay_campaign_state',
+                'relay_campaign_progress_at',
             ])
         elif campaign.status != 'sending':
             raise ValueError(
@@ -319,7 +310,8 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
             )
         if not campaign.relay_campaign_state:
             campaign.relay_campaign_state = 'pending'
-            campaign.save(update_fields=['relay_campaign_state'])
+            campaign.relay_campaign_progress_at = timezone.now()
+            campaign.save(update_fields=['relay_campaign_state', 'relay_campaign_progress_at'])
 
         is_monitored = (
             campaign.audience_verification
@@ -1069,15 +1061,7 @@ def refresh_campaign_status(campaign_id):
             target_status = 'needs_attention'
         else:
             target_status = 'sent'
-        if campaign.status != target_status:
-            campaign.status = target_status
-            updates.append('status')
-        if target_status == 'sent' and campaign.sent_at is None:
-            campaign.sent_at = timezone.now()
-            updates.append('sent_at')
-        elif target_status != 'sent' and campaign.sent_at is not None:
-            campaign.sent_at = None
-            updates.append('sent_at')
+        updates.extend(campaign.apply_derived_status(target_status, now))
         if updates:
             campaign.save(update_fields=updates)
         return counts

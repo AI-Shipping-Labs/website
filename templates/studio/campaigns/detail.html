@@ -63,6 +63,12 @@
         <p class="text-sm text-muted-foreground">Relay sent count</p>
         <p class="text-sm text-foreground mt-1">{% if relay_stats_available %}{{ relay_stats.sent_count }}{% else %}—{% endif %}</p>
       </div>
+      {% if campaign.relay_campaign_state %}
+      <div data-testid="campaign-relay-state">
+        <p class="text-sm text-muted-foreground">Relay state</p>
+        <p class="text-sm text-foreground mt-1">{% studio_status_badge campaign.relay_campaign_state campaign.relay_state_label %}</p>
+      </div>
+      {% endif %}
       {% if campaign.audience_snapshotted_at %}
       <div class="col-span-2" data-testid="campaign-delivery-counts">
         <p class="text-sm text-muted-foreground">Delivery state</p>

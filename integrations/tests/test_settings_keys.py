@@ -98,6 +98,27 @@ def _project_relay_group(group):
         "docs_url": "_docs/integrations/relay.md#relay_calendar_from_email",
         "optional": True,
     })
+    after_test_recipients = next(
+        (
+            index + 1
+            for index, key_def in enumerate(group["keys"])
+            if key_def["key"] == "CAMPAIGN_TEST_RECIPIENTS"
+        ),
+        None,
+    )
+    if after_test_recipients is not None:
+        group["keys"].insert(after_test_recipients, {
+            "key": "RELAY_CAMPAIGN_STALL_TIMEOUT_MINUTES",
+            "is_secret": False,
+            "description": (
+                "Minutes a native Relay campaign may go without progress before the watchdog marks it "
+                "Needs attention and alerts operators. Default 30; invalid, zero, or negative overrides "
+                "fall back to 30."
+            ),
+            "docs_url": "_docs/integrations/relay.md#relay_campaign_stall_timeout_minutes",
+            "optional": True,
+            "default": "30",
+        })
 
 
 def _project_email_descriptions(group):
@@ -109,10 +130,11 @@ def _project_email_descriptions(group):
             "disable pacing. Batch i is scheduled at now + i * the effective interval."
         ),
         "CAMPAIGN_TEST_RECIPIENTS": (
-            "Common addresses suggested in Studio test-send chips. The explicit Relay bulk tracking proof command "
-            "also reads this list, but requires a reviewed dry-run key and 200–500 unique addresses at internal "
-            "AI Shipping Labs/DataTalksClub domains or their subdomains, or reserved test domains; it never resolves "
-            "the campaign audience. Leave blank to disable the bulk proof path."
+            "Common addresses suggested in Studio test-send chips. The Relay bulk tracking proof (management "
+            "command, or the staff API and `asl campaigns relay-proof`) also reads this list, but requires a "
+            "reviewed dry-run key and 200–500 unique addresses at internal AI Shipping Labs/DataTalksClub domains "
+            "or their subdomains, or reserved test domains; it never resolves the campaign audience. Leave blank "
+            "to disable the bulk proof path."
         ),
         "SES_WEBHOOK_SHARED_SECRET": (
             "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. "
@@ -162,7 +184,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 21)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 177)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 178)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

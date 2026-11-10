@@ -174,15 +174,7 @@ def _refresh_locked(campaign, *, now):
     else:
         target_status = "sending"
 
-    if campaign.status != target_status:
-        campaign.status = target_status
-        campaign_updates.append("status")
-    if target_status == "sent" and campaign.sent_at is None:
-        campaign.sent_at = now
-        campaign_updates.append("sent_at")
-    elif target_status != "sent" and campaign.sent_at is not None:
-        campaign.sent_at = None
-        campaign_updates.append("sent_at")
+    campaign_updates.extend(campaign.apply_derived_status(target_status, now))
     if campaign_updates:
         campaign.save(update_fields=campaign_updates)
 
@@ -198,10 +190,11 @@ def refresh_campaign_waves(campaign_id, *, now=None):
             wave.relay_stats_synced_at = now
             wave.save(update_fields=["relay_campaign_stats", "relay_stats_synced_at"])
         except Exception as exc:
-            campaign_snapshot.relay_campaign_error = (
-                f"Relay wave stats refresh failed: {type(exc).__name__}: {exc}"
-            )[:2000]
-            campaign_snapshot.save(update_fields=["relay_campaign_error"])
+            if not campaign_snapshot.in_relay_attention:
+                campaign_snapshot.relay_campaign_error = (
+                    f"Relay wave stats refresh failed: {type(exc).__name__}: {exc}"
+                )[:2000]
+                campaign_snapshot.save(update_fields=["relay_campaign_error"])
             from email_app.services.relay_campaigns import alert_relay_campaign_failure
 
             alert_relay_campaign_failure(campaign_snapshot, "wave stats refresh", exc)

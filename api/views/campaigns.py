@@ -226,6 +226,8 @@ def _serialize_campaign(campaign):
         "sent_count": campaign.sent_count,
         "relay_campaign_state": campaign.relay_campaign_state or "not_queued",
         "relay_campaign_error": campaign.relay_campaign_error,
+        "relay_campaign_progress_at": isoformat_or_none(campaign.relay_campaign_progress_at),
+        "relay_campaign_attention_alerted_at": isoformat_or_none(campaign.relay_campaign_attention_alerted_at),
         "relay_stats_available": isinstance(relay_stats, dict),
         "relay_stats_status": (
             "available" if isinstance(relay_stats, dict)
@@ -506,12 +508,7 @@ def campaigns_collection(request):
                 try:
                     refresh_campaign_relay_stats_loud(campaign)
                 except RelayCampaignError as exc:
-                    return error_response(
-                        "Relay campaign stats are unavailable.",
-                        "relay_campaign_stats_unavailable",
-                        status=502,
-                        details={"campaign_id": campaign.pk, "error": str(exc)},
-                    )
+                    return _relay_stats_unavailable(campaign, exc)
         return JsonResponse({"campaigns": [_serialize_campaign(c) for c in campaigns]}, status=200)
 
     # POST: create a draft. ``status`` in the body is silently overwritten to
@@ -639,12 +636,7 @@ def campaign_detail(request, campaign_id):
             try:
                 refresh_campaign_relay_stats_loud(campaign)
             except RelayCampaignError as exc:
-                return error_response(
-                    "Relay campaign stats are unavailable.",
-                    "relay_campaign_stats_unavailable",
-                    status=502,
-                    details={"error": str(exc)},
-                )
+                return _relay_stats_unavailable(campaign, exc)
             campaign.refresh_from_db()
         return JsonResponse(_serialize_campaign(campaign), status=200)
 
@@ -656,6 +648,14 @@ def campaign_detail(request, campaign_id):
         return body_must_be_object_response()
 
     return _patch_campaign_detail(campaign_id, data)
+
+
+def _relay_stats_unavailable(campaign, exc, message="Relay campaign stats are unavailable."):
+    """502 that keeps the persisted attention state readable during an outage."""
+    details = {"campaign_id": campaign.pk, "error": str(exc), "status": campaign.status}
+    details["relay_campaign_state"] = campaign.relay_campaign_state or "not_queued"
+    details["relay_campaign_error"] = campaign.relay_campaign_error
+    return error_response(message, "relay_campaign_stats_unavailable", status=502, details=details)
 
 
 def _campaign_not_found():
@@ -882,12 +882,7 @@ def campaign_waves(request, campaign_id):
         try:
             refresh_campaign_waves(campaign.pk)
         except Exception as exc:
-            return error_response(
-                "Relay campaign wave stats are unavailable.",
-                "relay_campaign_stats_unavailable",
-                status=502,
-                details={"error": str(exc)},
-            )
+            return _relay_stats_unavailable(campaign, exc, "Relay campaign wave stats are unavailable.")
         campaign.refresh_from_db()
     return JsonResponse(
         _serialize_wave_summary(campaign_wave_summary(campaign, refresh=False)),

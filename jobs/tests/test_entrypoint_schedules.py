@@ -84,6 +84,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'coursework-form-pooled-batches',
             'coursework-expire-pooled-reviews',
             'reconcile-schedules',
+            'relay-campaign-watchdog',
         }
         self.assertEqual(names, expected)
 

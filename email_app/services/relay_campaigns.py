@@ -14,10 +14,14 @@ from typing import Any
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
 from django.core.validators import validate_email
 
 from email_app.services.email_classification import get_sender_for_email_type
+from email_app.services.relay_campaign_alerts import alert_relay_campaign_failure
+from email_app.services.relay_campaign_progress import (  # noqa: F401 - stable import path
+    refresh_campaign_relay_stats,
+    refresh_campaign_relay_stats_loud,
+)
 from email_app.services.relay_payload import build_campaign_payload
 from integrations.config import get_config
 
@@ -78,6 +82,14 @@ class RelayCampaignConfigError(RelayCampaignError):
 
 class RelayCampaignApiError(RelayCampaignError):
     """Relay campaign API failed or returned an invalid response."""
+
+
+class RelayProofRejected(RelayCampaignApiError):
+    """A guard refused the internal bulk proof before any Relay write."""
+
+
+class RelayProofKeyUsed(RelayCampaignApiError):
+    """Relay already holds a campaign for this proof key."""
 
 
 def get_relay_base_url() -> str:
@@ -535,7 +547,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
 def _configured_test_campaign_recipients():
     raw = get_config("CAMPAIGN_TEST_RECIPIENTS", "")
     if not isinstance(raw, str):
-        raise RelayCampaignApiError("CAMPAIGN_TEST_RECIPIENTS must be a delimited address list.")
+        raise RelayProofRejected("CAMPAIGN_TEST_RECIPIENTS must be a delimited address list.")
     recipients = []
     seen = set()
     for item in re.split(r"[,;\s]+", raw.strip()):
@@ -545,7 +557,7 @@ def _configured_test_campaign_recipients():
         try:
             validate_email(address)
         except ValidationError as exc:
-            raise RelayCampaignApiError(
+            raise RelayProofRejected(
                 "CAMPAIGN_TEST_RECIPIENTS contains an invalid address; no addresses were sent."
             ) from exc
         if address in seen:
@@ -560,16 +572,24 @@ def _configured_test_campaign_recipients():
             for allowed_domain in RELAY_TEST_CAMPAIGN_ALLOWED_DOMAINS
         )
         if not is_internal_domain and not is_reserved_test_domain:
-            raise RelayCampaignApiError(
+            raise RelayProofRejected(
                 "CAMPAIGN_TEST_RECIPIENTS contains a domain outside the internal/test allowlist."
             )
         recipients.append(address)
         seen.add(address)
     if not RELAY_TEST_CAMPAIGN_MIN_RECIPIENTS <= len(recipients) <= RELAY_TEST_CAMPAIGN_MAX_RECIPIENTS:
-        raise RelayCampaignApiError(
+        raise RelayProofRejected(
             "Native Relay test campaigns require 200–500 unique addresses from the internal/test allowlist."
         )
     return recipients
+
+
+def native_test_campaign_key_match(campaign_id, campaign_key):
+    """Match the exact proof key shape for one campaign, or return None."""
+    return re.fullmatch(
+        rf"aishl-test-{campaign_id}-([0-9a-f]{{32}})-([0-9a-f]{{32}})",
+        campaign_key,
+    )
 
 
 def preview_native_test_campaign(campaign, *, campaign_key=None):
@@ -585,19 +605,16 @@ def preview_native_test_campaign(campaign, *, campaign_key=None):
     if campaign_key is None:
         key = expected_key
     else:
-        match = re.fullmatch(
-            rf"aishl-test-{campaign.pk}-([0-9a-f]{{32}})-([0-9a-f]{{32}})",
-            campaign_key,
-        )
+        match = native_test_campaign_key_match(campaign.pk, campaign_key)
         if match is None:
-            raise RelayCampaignApiError("Test campaign key is invalid or belongs to another campaign.")
+            raise RelayProofRejected("Test campaign key is invalid or belongs to another campaign.")
         nonce = match.group(1)
         signature_payload = f"{campaign.pk}:{len(recipients)}:{digest}:{nonce}"
         expected_signature = hmac.new(
             str(settings.SECRET_KEY).encode(), signature_payload.encode(), hashlib.sha256,
         ).hexdigest()[:32]
         if not hmac.compare_digest(match.group(2), expected_signature):
-            raise RelayCampaignApiError(
+            raise RelayProofRejected(
                 "Configured test recipients changed after preflight; run dry-run again."
             )
         key = campaign_key
@@ -619,7 +636,9 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
 
     This deliberately does not call the website campaign audience resolver or
     create local CampaignDelivery rows. It is reachable only through the
-    explicit management command and cannot fall back to an audience/list key.
+    explicit management command and the staff API
+    ``POST /api/campaigns/<id>/relay-proof/confirm``, both of which need a
+    reviewed dry-run key, and it cannot fall back to an audience/list key.
     """
     plan = preview_native_test_campaign(campaign, campaign_key=campaign_key)
     recipients = plan["_recipients"]
@@ -636,7 +655,7 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
             allow_not_found=True,
         )
         if existing:
-            raise RelayCampaignApiError(
+            raise RelayProofKeyUsed(
                 "This preflight key has already been used; run dry-run to create a new key."
             )
         _campaign_api_request(
@@ -703,6 +722,7 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
             "campaign_key": key,
             "recipient_list_key": list_key,
             "recipient_count": len(recipients),
+            "domain_counts": plan["domain_counts"],
             "queued": True,
         }
     except Exception as exc:
@@ -710,8 +730,11 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
         raise
 
 
-def get_native_campaign_stats(external_key, *, session=None):
-    """Read aggregate campaign metrics from Relay, failing on any API error."""
+def get_native_campaign_stats(external_key, *, session=None, allow_not_found=False):
+    """Read aggregate campaign metrics from Relay, failing on any API error.
+
+    With ``allow_not_found`` a Relay 404 returns ``None`` instead of raising.
+    """
     from urllib.parse import urlencode
 
     query = urlencode({"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT})
@@ -719,7 +742,10 @@ def get_native_campaign_stats(external_key, *, session=None):
         "GET",
         f"/api/campaigns/{external_key}?{query}",
         session=session,
+        allow_not_found=allow_not_found,
     )
+    if response is None:
+        return None
     campaign = response.get("campaign")
     if not isinstance(campaign, dict):
         raise RelayCampaignApiError("Relay campaign stats response did not contain a campaign")
@@ -761,72 +787,3 @@ def retry_native_campaign_delivery(external_key, delivery_id, *, session=None):
         payload=scope,
         session=session,
     )
-
-
-def refresh_campaign_relay_stats(campaign, *, session=None):
-    """Read and persist aggregate metrics from all native Relay campaign waves."""
-    from django.utils import timezone
-
-    keys = list(campaign.relay_campaign_keys or [])
-    if not keys and campaign.relay_campaign_key:
-        keys = [campaign.relay_campaign_key]
-    if not keys:
-        return None
-    fields = (
-        "sent_count", "delivered_count", "unique_open_count", "open_count",
-        "unique_click_count", "click_count", "unsubscribe_count", "bounce_count",
-        "complaint_count",
-    )
-    totals = {field: 0 for field in fields}
-    native_statuses = []
-    for key in keys:
-        native = get_native_campaign_stats(key, session=session)
-        native_statuses.append(native.get("status", "unknown"))
-        for field in fields:
-            totals[field] += native[field]
-    totals["status"] = "sent" if native_statuses and all(s == "sent" for s in native_statuses) else "sending"
-    campaign.relay_campaign_stats = totals
-    campaign.relay_campaign_stats_synced_at = timezone.now()
-    campaign.sent_count = totals["sent_count"]
-    campaign.save(update_fields=[
-        "relay_campaign_stats", "relay_campaign_stats_synced_at", "sent_count",
-    ])
-    return totals
-
-
-def refresh_campaign_relay_stats_loud(campaign, *, session=None):
-    """Refresh stats and persist/alert any failure before propagating it."""
-    try:
-        result = refresh_campaign_relay_stats(campaign, session=session)
-    except Exception as exc:
-        campaign.relay_campaign_error = f"Relay stats refresh failed: {type(exc).__name__}: {exc}"[:2000]
-        campaign.save(update_fields=["relay_campaign_error"])
-        alert_relay_campaign_failure(campaign, "stats refresh", exc)
-        raise
-    if result is not None and campaign.relay_campaign_error:
-        campaign.relay_campaign_error = ""
-        campaign.save(update_fields=["relay_campaign_error"])
-    return result
-
-
-def alert_relay_campaign_failure(campaign, operation, error):
-    """Alert the mail operators through the configured Relay email backend."""
-    message = (
-        f"AISHL campaign {campaign.pk} Relay {operation} failed.\n"
-        f"Relay key: {campaign.relay_campaign_key or '(not assigned)'}\n"
-        f"Error: {type(error).__name__}: {error}"
-    )
-    try:
-        send_mail(
-            subject=f"AISHL campaign {operation} failed: {campaign.pk}",
-            message=message,
-            from_email=None,
-            recipient_list=["dev@dtcdev.click"],
-            fail_silently=False,
-        )
-    except Exception:
-        logger.exception(
-            "Could not send dev alert for AISHL campaign Relay %s failure campaign=%s",
-            operation,
-            campaign.pk,
-        )

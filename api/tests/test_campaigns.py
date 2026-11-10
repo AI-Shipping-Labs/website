@@ -158,6 +158,8 @@ class CampaignsListTest(CampaignsApiTestBase):
                 "sent_count",
                 "relay_campaign_state",
                 "relay_campaign_error",
+                "relay_campaign_progress_at",
+                "relay_campaign_attention_alerted_at",
                 "relay_stats_available",
                 "relay_stats_status",
                 "relay_stats",

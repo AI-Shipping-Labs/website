@@ -44,6 +44,12 @@ SCHEDULE_DEFINITIONS = (
         description="every 5 min",
     ),
     ScheduleDefinition(
+        "relay-campaign-watchdog",
+        "email_app.tasks.relay_campaign_watchdog.run_relay_campaign_watchdog",
+        "*/5 * * * *",
+        description="every 5 min",
+    ),
+    ScheduleDefinition(
         "campaign-scheduled-dispatch",
         "email_app.tasks.campaign_schedule.dispatch_due_scheduled_campaigns",
         "* * * * *",

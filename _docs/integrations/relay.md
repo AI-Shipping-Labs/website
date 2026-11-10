@@ -134,6 +134,48 @@ and recipient-list key, never resolves the campaign's normal audience, and
 prints no recipient addresses. Relay's preflight and queue counts must exactly
 match the configured list. Leave blank to disable the bulk proof path.
 
+The same proof is available to staff tokens through the API, and through
+`asl campaigns relay-proof` and `asl campaigns relay-proof-stats`:
+
+| Route | Purpose |
+|-------|---------|
+| `POST /api/campaigns/<id>/relay-proof/dry-run` | Validate the list and return the signed key. No Relay call. |
+| `POST /api/campaigns/<id>/relay-proof/confirm` | Queue the proof with `{"campaign_key": "..."}`. |
+| `GET /api/campaigns/<id>/relay-proof/<campaign_key>` | Read an allowlist of Relay's counters and timing fields. |
+
+The stats route accepts only `aishl-test-<id>-...` keys for that campaign. It
+does not recheck the signature, because a list change after sending must not
+make a sent proof unreadable. Test sends have no local row, so the stall
+watchdog does not cover them; watch them through the stats route.
+
+Relay has no start timestamp, so msg/s is computed by the reader:
+
+- `created_at` is set by the `PUT`, after the recipient list upload and before
+  recount and queue.
+- `sent_at` is set once when no recipient is unfinished, and only when
+  `sent_count > 0`. It is null while sending.
+- Finished rate: `sent_count / (sent_at - created_at)`. This is a lower bound,
+  because it includes time before the first send.
+- In-progress rate: `sent_count / (updated_at - created_at)`, valid only while
+  `status` is `sending`.
+
+## RELAY_CAMPAIGN_STALL_TIMEOUT_MINUTES
+
+Minutes a native Relay campaign may go without progress before the
+`relay-campaign-watchdog` job (every 5 minutes) marks it `Needs attention`.
+Default 30; invalid, zero, or negative overrides use 30. Any increase in Relay's
+total `sent_count` restarts the clock, and retries of the same Relay key do not.
+A send paused at Relay never times out, and a Relay-reported `failed` or
+`cancelled` is raised immediately. Attention clears by itself when Relay reports
+all keys `sent` or `sent_count` rises.
+
+The watchdog sends one attention alert per stalled Relay key and retries on the
+next run if no route accepted it. Relay failure alerts post to the staff Slack
+channel first, so they still arrive while Relay itself is failing; the email to
+`dev@dtcdev.click` is the fallback for when Slack is disabled, unconfigured, or
+rejects the post. Other Relay failure alerts have a 60-minute cooldown per
+campaign and operation.
+
 ## RECORDING_AVAILABLE_SUBJECT_TEMPLATE
 
 Subject prefilled into an operator-reviewed recording campaign draft.

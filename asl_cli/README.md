@@ -450,6 +450,9 @@ uv run asl campaigns get 42                     # scheduled_at (UTC) + scheduled
 uv run asl campaigns unschedule 42              # cancel a scheduled send (draft only)
 uv run asl campaigns send 42 --yes              # immediate send; --yes skips the prompt
 uv run asl campaigns test-send 42 --recipient you@example.com
+uv run asl campaigns relay-proof 42 --dry-run    # validate CAMPAIGN_TEST_RECIPIENTS, print a signed key
+uv run asl campaigns relay-proof 42 --confirm aishl-test-42-...   # queue to the internal list only
+uv run asl campaigns relay-proof-stats 42 aishl-test-42-...       # Relay counters and timing fields
 ```
 
 `recipient-count` accepts the same audience filter flags as campaign creation;

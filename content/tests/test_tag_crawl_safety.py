@@ -40,7 +40,6 @@ class TagPageBoundsTest(TestCase):
         ):
             response = self.client.get('/tags/agents')
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Agents article')
         self.assertNotContains(response, 'Other article')
         self.assertEqual(response.context['result_count'], 1)
@@ -51,13 +50,19 @@ class TagPageBoundsTest(TestCase):
         with patch(
             'content.views.tags.known_public_tags', return_value={'agents'},
         ):
-            self.assertEqual(self.client.get('/tags').status_code, 200)
-            self.assertEqual(self.client.get('/tags/agents').status_code, 200)
+            index = self.client.get('/tags')
+            detail = self.client.get('/tags/agents')
+
+        self.assertContains(index, 'agents')
+        self.assertContains(detail, 'Agents article')
 
         with (
             patch('content.views.tags._collect_all_tags', side_effect=AssertionError),
             patch('content.views.tags.known_public_tags', side_effect=AssertionError),
             patch('content.views.tags._tagged_queryset', side_effect=AssertionError),
         ):
-            self.assertEqual(self.client.get('/tags').status_code, 200)
-            self.assertEqual(self.client.get('/tags/agents').status_code, 200)
+            cached_index = self.client.get('/tags')
+            cached_detail = self.client.get('/tags/agents')
+
+        self.assertEqual(cached_index.content, index.content)
+        self.assertEqual(cached_detail.content, detail.content)

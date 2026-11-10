@@ -22,6 +22,10 @@ jobs:
     env:
       DEBUG: "0"
       SECRET_KEY: ci-django-only-not-a-real-secret
+      # `migrate` performs system checks before creating the integration
+      # settings table, so provide synthetic Relay values for the checker.
+      RELAY_BASE_URL: "https://relay.datatalks.club"
+      RELAY_API_KEY: "ci-dummy-relay-api-key"
     concurrency:
       group: deploy-dev-validation-${{ github.ref }}-checks
       cancel-in-progress: true
@@ -134,12 +138,8 @@ jobs:
         # enforcement happens in entrypoint.sh against real env vars.
         # SECRET_KEY is a synthetic CI value; settings.py rejects an
         # unset SECRET_KEY when DEBUG=False so the check would never get
-        # to run without one; the value is not used to sign anything real.
-        env:
-          DEBUG: "False"
-          RELAY_BASE_URL: "https://relay.datatalks.club"
-          RELAY_API_KEY: "ci-dummy-relay-api-key"
-          SECRET_KEY: "ci-system-check-only-not-a-real-secret"
+        # to run without one; job-level key and Relay values are synthetic,
+        # letting both migrate and this check run without production config.
         run: |
           start=$(date +%s)
           uv run python manage.py check --fail-level ERROR

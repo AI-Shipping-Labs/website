@@ -17,6 +17,8 @@ WORKFLOW_JOBS = {
     "scheduled-playwright-dev.yml": ("playwright-dev",),
 }
 TEST_SECRET = "ci-django-only-not-a-real-secret"
+TEST_RELAY_BASE_URL = "https://relay.datatalks.club"
+TEST_RELAY_API_KEY = "ci-dummy-relay-api-key"
 PRODUCTION_CHECK_JOBS = {("ci.yml", "checks"), ("deploy-dev.yml", "checks")}
 
 
@@ -33,3 +35,16 @@ class CiSecretKeyContractTests(SimpleTestCase):
                         expected_debug = "0"
                     self.assertEqual(environment.get("DEBUG"), expected_debug)
                     self.assertEqual(environment.get("SECRET_KEY"), TEST_SECRET)
+
+    def test_pre_migration_checks_have_synthetic_relay_configuration(self):
+        for workflow_name in ("ci.yml", "deploy-dev.yml"):
+            path = ROOT / ".github" / "workflows" / workflow_name
+            workflow = yaml.safe_load(path.read_text())
+            environment = workflow["jobs"]["checks"].get("env", {})
+            with self.subTest(workflow=workflow_name):
+                self.assertEqual(
+                    environment.get("RELAY_BASE_URL"), TEST_RELAY_BASE_URL,
+                )
+                self.assertEqual(
+                    environment.get("RELAY_API_KEY"), TEST_RELAY_API_KEY,
+                )

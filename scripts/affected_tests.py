@@ -132,6 +132,7 @@ APP_LABELS: tuple[str, ...] = (
     "topics",
     "triggers",
     "voting",
+    "website",
 )
 
 TESTS_PACKAGE = "tests"

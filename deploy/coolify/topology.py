@@ -71,7 +71,11 @@ WEB_APPLICATION_CONTRACT = {
     "docker_registry_image_name": "ghcr.io/ai-shipping-labs/website",
     "health_check_enabled": True,
     "health_check_type": "cmd",
-    "health_check_command": "python /opt/coolify-healthcheck.py http://127.0.0.1:8099/ready",
+    # The docker healthcheck stays cheap: one local probe, no 8099 follower
+    # request on the 2-second interval. The Traefik active health check on
+    # port 8099 keeps gating the public route (custom_labels below), and the
+    # rolling follower reconciler enforces exactly this short form.
+    "health_check_command": "python /opt/coolify-healthcheck.py",
     "health_check_path": "/ping",
     "health_check_port": "8000",
     "health_check_host": "localhost",

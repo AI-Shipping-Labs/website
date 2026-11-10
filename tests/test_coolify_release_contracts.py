@@ -15,6 +15,7 @@ from deploy.coolify.contracts import (
     reject_version_override,
     service_runtime_ready,
     validate_web_application,
+    without_release_identity,
 )
 from deploy.coolify.errors import ReleaseError
 from deploy.coolify.topology import (
@@ -251,6 +252,17 @@ class ComposePinningTest(SimpleTestCase):
             service["docker_compose_raw"] = yaml.safe_dump(compose)
             with self.subTest(mutation=mutation), self.assertRaises(ReleaseError):
                 pin_runtime_images(service, IMAGE)
+
+    def test_without_release_identity_drops_only_the_version_env(self):
+        envs = [
+            {"key": "BOOT_MODE", "value": "web"},
+            {"key": "VERSION", "value": "7635acfc", "uuid": "env-1"},
+            "not-a-dict",
+        ]
+        kept = without_release_identity(envs)
+        self.assertEqual([item["key"] for item in kept], ["BOOT_MODE"])
+        self.assertEqual(kept[0]["value"], "web")
+        self.assertEqual(without_release_identity(None), None)
 
     def test_rejects_runtime_version_overrides(self):
         service = source_service()

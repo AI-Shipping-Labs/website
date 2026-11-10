@@ -17,6 +17,9 @@ jobs:
     name: Lint & Static Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DEBUG: "0"
+      SECRET_KEY: ci-django-only-not-a-real-secret
 
     steps:
       - name: Start CI timing profile
@@ -132,6 +135,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
       TEST_SHARD_COUNT: "4"
       TEST_SHARD_INDEX: ${{ matrix.shard }}
     # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite, so 20m
@@ -334,7 +339,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_postgres_test
-      SECRET_KEY: ci-postgres-verification-only
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -359,6 +365,9 @@ jobs:
     # #888: gate on every test shard plus the checks job. A `needs` entry for a
     # matrix job only succeeds when all its shards succeed.
     needs: [checks, unit-tests]
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
 
     steps:
       - name: Checkout code

@@ -10,11 +10,13 @@ import yaml
 from .errors import ReleaseError
 from .topology import (
     SOURCE_ENVIRONMENT,
+    SOURCE_ROLE_RESOURCE_LIMITS,
     WEB_APPLICATION_CONTRACT,
     WEB_ENVIRONMENT,
     WEB_HEALTHCHECK,
     WEB_RUNTIME_FIELDS,
     WORKER_HEALTHCHECK,
+    WORKER_STOP_GRACE_PERIOD,
 )
 
 EXPECTED_COOLIFY_URL = "https://coolify.169.58.119.163.sslip.io"
@@ -29,6 +31,7 @@ EXPECTED_WEB_FQDN = (
 )
 IMAGE_REPOSITORY = "ghcr.io/ai-shipping-labs/website"
 REQUIRED_ROLES = {"web", "worker"}
+SOURCE_RUNTIME_ROLES = REQUIRED_ROLES | {"dev-web"}
 REQUIRED_NETWORKS = {"coolify", EXPECTED_SERVICE_UUID}
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -151,25 +154,47 @@ def load_compose(raw):
 def pin_runtime_images(service, image):
     compose = load_compose(service["docker_compose_raw"])
     names = _runtime_service_names(service, compose)
-    _validate_source_contract(compose)
-    _validate_networks(compose, names)
+    if names == REQUIRED_ROLES:
+        _add_isolated_dev_web(compose)
+        names = SOURCE_RUNTIME_ROLES
     updated = copy.deepcopy(compose)
     for name in names:
         _reject_compose_version(updated["services"][name], name)
         updated["services"][name]["image"] = image
+    _apply_source_runtime_limits(updated, names)
+    _validate_source_contract(updated)
+    _validate_networks(updated, names)
     return yaml.safe_dump(updated, sort_keys=False), names
 
 
 def _runtime_service_names(service, compose):
     compose_names = _aisl_compose_names(compose)
     application_names = _aisl_application_names(service)
-    if compose_names != REQUIRED_ROLES:
+    if compose_names not in (REQUIRED_ROLES, SOURCE_RUNTIME_ROLES):
         raise ReleaseError("unexpected-compose-runtime-inventory")
-    if application_names != REQUIRED_ROLES:
+    if application_names not in (REQUIRED_ROLES, SOURCE_RUNTIME_ROLES):
         raise ReleaseError("unexpected-runtime-application-inventory")
     if compose_names != application_names:
         raise ReleaseError("runtime-application-inventory-mismatch")
     return compose_names
+
+
+def _add_isolated_dev_web(compose):
+    """Add the separately configured dev server when upgrading a legacy pair."""
+    services = compose["services"]
+    web = services["web"]
+    dev_web = {
+        "image": web.get("image"),
+        "pull_policy": web.get("pull_policy", "always"),
+        "restart": web.get("restart", "unless-stopped"),
+        "environment": dict(SOURCE_ENVIRONMENT["dev-web"]),
+        "healthcheck": copy.deepcopy(WEB_HEALTHCHECK),
+        "expose": ["8000"],
+    }
+    for key in ("networks", "logging", "deploy"):
+        if key in web:
+            dev_web[key] = copy.deepcopy(web[key])
+    services["dev-web"] = dev_web
 
 
 def _aisl_compose_names(compose):
@@ -177,7 +202,7 @@ def _aisl_compose_names(compose):
     for name, item in compose["services"].items():
         if not isinstance(item, dict):
             continue
-        if _is_aisl_image(item.get("image")) or name in REQUIRED_ROLES:
+        if _is_aisl_image(item.get("image")) or name in SOURCE_RUNTIME_ROLES:
             if not _is_aisl_image(item.get("image")):
                 raise ReleaseError(f"unexpected-runtime-image role={name}")
             names.add(name)
@@ -194,7 +219,7 @@ def _aisl_application_names(service):
         if not isinstance(app, dict):
             raise ReleaseError("invalid-runtime-application-inventory")
         name = app.get("name")
-        if _is_aisl_image(app.get("image")) or name in REQUIRED_ROLES:
+        if _is_aisl_image(app.get("image")) or name in SOURCE_RUNTIME_ROLES:
             matches += 1
             if not _is_aisl_image(app.get("image")):
                 raise ReleaseError(f"unexpected-runtime-app-image role={name}")
@@ -211,14 +236,32 @@ def _is_aisl_image(image):
 
 
 def _validate_source_contract(compose):
-    healthchecks = {"web": WEB_HEALTHCHECK, "worker": WORKER_HEALTHCHECK}
-    for role in REQUIRED_ROLES:
+    healthchecks = {
+        "web": WEB_HEALTHCHECK,
+        "worker": WORKER_HEALTHCHECK,
+        "dev-web": WEB_HEALTHCHECK,
+    }
+    for role in SOURCE_RUNTIME_ROLES:
         service = compose["services"][role]
         if service.get("command") is not None or service.get("entrypoint") is not None:
             raise ReleaseError(f"source-runtime-command-mismatch role={role}")
         if service.get("healthcheck") != healthchecks[role]:
             raise ReleaseError(f"source-runtime-healthcheck-mismatch role={role}")
         _validate_source_environment(role, service.get("environment"))
+        for field, expected in SOURCE_ROLE_RESOURCE_LIMITS[role].items():
+            if service.get(field) != expected:
+                raise ReleaseError(
+                    f"source-runtime-resource-limit-mismatch role={role} key={field}"
+                )
+        if role == "worker" and service.get("stop_grace_period") != WORKER_STOP_GRACE_PERIOD:
+            raise ReleaseError("source-runtime-stop-grace-period-mismatch role=worker")
+
+
+def _apply_source_runtime_limits(compose, names):
+    """Pin bounded CPU, memory, PID, and worker-stop settings for each role."""
+    for role in names:
+        compose["services"][role].update(SOURCE_ROLE_RESOURCE_LIMITS[role])
+    compose["services"]["worker"]["stop_grace_period"] = WORKER_STOP_GRACE_PERIOD
 
 
 def _validate_source_environment(role, environment):
@@ -227,6 +270,13 @@ def _validate_source_environment(role, environment):
     for key, expected in SOURCE_ENVIRONMENT[role].items():
         if environment.get(key) != expected:
             raise ReleaseError(f"source-runtime-environment-mismatch role={role} key={key}")
+    if role == "dev-web":
+        if "BOOT_MODE" in environment:
+            raise ReleaseError("source-runtime-environment-mismatch role=dev-web key=BOOT_MODE")
+    elif "AISL_DATABASE_NAME" in environment:
+        raise ReleaseError(
+            f"source-runtime-environment-mismatch role={role} key=AISL_DATABASE_NAME"
+        )
 
 
 def _validate_networks(compose, names):

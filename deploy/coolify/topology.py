@@ -44,7 +44,22 @@ SOURCE_ENVIRONMENT = {
         "BOOT_MODE": "worker",
         "Q_WORKERS": "2",
     },
+    "dev-web": {
+        "DEBUG": "0",
+        "AISL_DATABASE_NAME": "aisl_dev",
+        "DATABASE_URL": "${DATABASE_URL}",
+        "RUN_MIGRATIONS": "true",
+        "SERVING_BOOT_SMOKE_CHECK_ENABLED": "false",
+        "GUNICORN_WORKERS": "1",
+        "GUNICORN_THREADS": "2",
+    },
 }
+SOURCE_ROLE_RESOURCE_LIMITS = {
+    "web": {"cpus": 2, "mem_limit": "2g", "pids_limit": 256},
+    "worker": {"cpus": 2, "mem_limit": "2g", "pids_limit": 256},
+    "dev-web": {"cpus": 1, "mem_limit": "2g", "pids_limit": 128},
+}
+WORKER_STOP_GRACE_PERIOD = "330s"
 WEB_APPLICATION_CONTRACT = {
     "base_directory": "/",
     "fqdn": (
@@ -68,15 +83,22 @@ WEB_APPLICATION_CONTRACT = {
     "health_check_timeout": 3,
     "health_check_retries": 60,
     "health_check_start_period": 45,
-    "custom_docker_run_options": '--entrypoint "python /opt/rolling-launch.py"',
+    "custom_docker_run_options": (
+        '--pids-limit 512 --entrypoint "python /opt/rolling-launch.py"'
+    ),
+    "limits_cpus": "4",
+    "limits_memory": "3g",
     "ports_mappings": None,
     "ports_exposes": "8000",
     "redirect": "both",
 }
 WEB_ENVIRONMENT = {
     "BOOT_MODE": "web",
+    "DEBUG": "0",
     "RUN_MIGRATIONS": "false",
     "ROLLING_APP_URL": "http://127.0.0.1:8000/ping",
+    "GUNICORN_WORKERS": "2",
+    "GUNICORN_THREADS": "4",
 }
 
 WEB_RUNTIME_FIELDS = (

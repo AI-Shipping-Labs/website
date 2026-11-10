@@ -17,6 +17,7 @@ concurrency:
 
 env:
   PLAYWRIGHT_BASE_URL: https://dev.aishippinglabs.com
+  AISL_DEV_SITE_USERNAME: aisl-scheduled
   PLAYWRIGHT_DEFAULT_MARKERS: >-
     not manual_visual and not slow_platform
     and not visual_regression and not local_only and not creates_data
@@ -30,6 +31,16 @@ jobs:
       contents: read
 
     steps:
+      - name: Require dev-site access secret
+        env:
+          AISL_DEV_SITE_PASSWORD: ${{ secrets.AISL_DEV_SITE_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "${AISL_DEV_SITE_PASSWORD}" ]; then
+            echo "::error::Missing required GitHub Actions secret AISL_DEV_SITE_PASSWORD."
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v5
 
@@ -49,6 +60,9 @@ jobs:
 
       - name: Warm dev application endpoints
         timeout-minutes: 5
+        env:
+          AISL_DEV_SITE_USERNAME: aisl-scheduled
+          AISL_DEV_SITE_PASSWORD: ${{ secrets.AISL_DEV_SITE_PASSWORD }}
         shell: bash
         run: |
           echo "Warming dev endpoints after readiness succeeded..."
@@ -65,7 +79,7 @@ jobs:
           for endpoint in "${endpoints[@]}"; do
             url="${PLAYWRIGHT_BASE_URL%/}${endpoint}"
             echo "Warming ${url}..."
-            curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused --max-time 30 "${url}" > /dev/null || {
+            curl -fsSL --user "${AISL_DEV_SITE_USERNAME}:${AISL_DEV_SITE_PASSWORD}" --retry 3 --retry-delay 2 --retry-connrefused --max-time 30 "${url}" > /dev/null || {
               echo "Warning: warming ${url} returned non-zero status"
             }
           done
@@ -76,6 +90,9 @@ jobs:
     needs: [dev-readiness]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -139,6 +156,8 @@ jobs:
 
       - name: Run Playwright dev shard
         shell: bash
+        env:
+          AISL_DEV_SITE_PASSWORD: ${{ secrets.AISL_DEV_SITE_PASSWORD }}
         run: |
           mapfile -t files < .playwright-shard-files
           if [ "${#files[@]}" -eq 0 ]; then

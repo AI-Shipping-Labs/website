@@ -21,6 +21,10 @@ NOW = datetime(2026, 10, 23, 14, 40, tzinfo=UTC)
 
 def container(role):
     environment = {"RUN_MIGRATIONS": "true"}
+    database_name = "aisl"
+    if role == "dev-web":
+        environment["AISL_DATABASE_NAME"] = "aisl_dev"
+        database_name = "aisl_dev"
     if role == "worker":
         environment = {"BOOT_MODE": "worker", "RUN_MIGRATIONS": "false"}
     return {
@@ -29,13 +33,17 @@ def container(role):
         "running": True, "status": "running", "health": "healthy",
         "started_at": (NOW - timedelta(minutes=10)).isoformat(),
         "last_healthcheck": {"exit_code": 0, "end": (NOW - timedelta(seconds=3)).isoformat()},
-        "environment": environment, "networks": [verifier.SOURCE_UUID, "coolify"],
+        "environment": environment, "database_name": database_name,
+        "networks": [verifier.SOURCE_UUID, "coolify"],
         "worker_heartbeat_probe": role == "worker",
     }
 
 
 def snapshot():
-    return {"generated_at": NOW.isoformat(), "containers": [container("web"), container("worker")]}
+    return {
+        "generated_at": NOW.isoformat(),
+        "containers": [container("web"), container("worker"), container("dev-web")],
+    }
 
 
 class RuntimeInventoryTest(SimpleTestCase):
@@ -51,11 +59,16 @@ class RuntimeInventoryTest(SimpleTestCase):
         result = verifier.verify_snapshot(snapshot(), IMAGE)
         self.assertEqual(result["image"], IMAGE)
         self.assertEqual(result["image_id"], "sha256:" + "b" * 64)
-        self.assertEqual(set(result["roles"]), {"web", "worker"})
+        self.assertEqual(set(result["roles"]), {"web", "worker", "dev-web"})
+        self.assertEqual(result["roles"]["dev-web"]["database_name"], "aisl_dev")
         self.assertEqual(result["roles"]["worker"]["started_at"], container("worker")["started_at"])
 
     def test_missing_duplicate_and_stopped_orphan_inventory_is_rejected(self):
-        inventories = [[], [container("web")], [container("web"), container("web")]]
+        inventories = [
+            [],
+            [container("web")],
+            [container("web"), container("worker"), container("worker")],
+        ]
         orphan = container("worker")
         orphan.update(name=f"old-worker-{verifier.SOURCE_UUID}", running=False, status="exited")
         inventories.append([container("web"), container("worker"), orphan])
@@ -103,6 +116,8 @@ class RuntimeInventoryTest(SimpleTestCase):
             (0, "environment", {"BOOT_MODE": "web", "RUN_MIGRATIONS": "false"}),
             (1, "environment", {"RUN_MIGRATIONS": "false"}),
             (1, "environment", {"BOOT_MODE": "worker", "RUN_MIGRATIONS": "true"}),
+            (2, "environment", {"RUN_MIGRATIONS": "false", "AISL_DATABASE_NAME": "aisl_dev"}),
+            (2, "database_name", "aisl"),
             (0, "networks", [verifier.SOURCE_UUID]), (1, "networks", ["coolify"]),
         ]
         for index, key, value in changes:
@@ -150,7 +165,10 @@ class RemoteCollectionTest(SimpleTestCase):
     def test_collector_omits_secret_environment_and_healthcheck_output(self):
         raw = {
             "Id": "container", "Name": "/worker-source", "Image": "sha256:config",
-            "Config": {"Image": IMAGE, "Env": ["SECRET_KEY=private-secret", "BOOT_MODE=worker"],
+            "Config": {"Image": IMAGE, "Env": [
+                           "SECRET_KEY=private-secret", "BOOT_MODE=worker",
+                           "DATABASE_URL=postgres://user:private-secret@db/aisl",
+                       ],
                        "Healthcheck": {"Test": ["CMD", "/app/.venv/bin/python", "-c", collector.WORKER_PROBE]}},
             "State": {"Health": {"Status": "healthy", "Log": [{"End": NOW.isoformat(), "ExitCode": 0,
                                                                         "Output": "private-secret"}]}},
@@ -158,6 +176,7 @@ class RemoteCollectionTest(SimpleTestCase):
         }
         result = collector.sanitized_container(raw)
         self.assertEqual(result["environment"], {"BOOT_MODE": "worker"})
+        self.assertEqual(result["database_name"], "aisl")
         self.assertEqual(result["last_healthcheck"], {"end": NOW.isoformat(), "exit_code": 0})
         self.assertTrue(result["worker_heartbeat_probe"])
         self.assertNotIn("private-secret", json.dumps(result))

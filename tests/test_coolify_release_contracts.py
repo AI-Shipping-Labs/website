@@ -10,15 +10,20 @@ from deploy.coolify.contracts import (
     EXPECTED_SERVICE_UUID,
     EXPECTED_WEB_APP_UUID,
     ReleaseConfig,
+    _validate_source_contract,
     pin_runtime_images,
     reject_version_override,
     service_runtime_ready,
+    validate_web_application,
 )
 from deploy.coolify.errors import ReleaseError
 from deploy.coolify.topology import (
     SOURCE_ENVIRONMENT,
+    SOURCE_ROLE_RESOURCE_LIMITS,
+    WEB_APPLICATION_CONTRACT,
     WEB_HEALTHCHECK,
     WORKER_HEALTHCHECK,
+    WORKER_STOP_GRACE_PERIOD,
 )
 
 SHA = "a" * 40
@@ -54,12 +59,15 @@ def _source_runtime(role):
         "healthcheck": healthcheck,
         "networks": [EXPECTED_SERVICE_UUID, "coolify"],
     }
+    service.update(SOURCE_ROLE_RESOURCE_LIMITS[role])
+    if role == "worker":
+        service["stop_grace_period"] = WORKER_STOP_GRACE_PERIOD
     if role == "web":
         service["labels"] = {"owner": "source"}
     return service
 
 
-def source_service(include_worker=True):
+def source_service(include_worker=True, include_dev_web=True):
     services = {
         "web": _source_runtime("web"),
         "redis": {"image": "redis:7", "volumes": ["redis:/data"]},
@@ -68,6 +76,9 @@ def source_service(include_worker=True):
     if include_worker:
         services["worker"] = _source_runtime("worker")
         applications.append({"name": "worker", "image": services["worker"]["image"]})
+    if include_dev_web:
+        services["dev-web"] = _source_runtime("dev-web")
+        applications.append({"name": "dev-web", "image": services["dev-web"]["image"]})
     compose = {
         "services": services,
         "networks": {
@@ -122,14 +133,14 @@ class ReleaseIdentityTest(SimpleTestCase):
 
 @tag("core")
 class ComposePinningTest(SimpleTestCase):
-    def test_pins_web_and_worker_and_preserves_unrelated_compose_data(self):
+    def test_pins_source_roles_and_preserves_unrelated_compose_data(self):
         service = source_service()
         original = yaml.safe_load(service["docker_compose_raw"])
 
         updated_raw, names = pin_runtime_images(service, IMAGE)
         updated = yaml.safe_load(updated_raw)
 
-        self.assertEqual(names, {"web", "worker"})
+        self.assertEqual(names, {"web", "worker", "dev-web"})
         for name in names:
             self.assertEqual(updated["services"][name]["image"], IMAGE)
         self.assertEqual(updated["services"]["web"]["environment"], original["services"]["web"]["environment"])
@@ -141,6 +152,72 @@ class ComposePinningTest(SimpleTestCase):
     def test_rejects_partial_web_only_inventory(self):
         with self.assertRaisesMessage(ReleaseError, "runtime-inventory"):
             pin_runtime_images(source_service(include_worker=False), IMAGE)
+
+    def test_upgrades_legacy_pair_with_an_isolated_dev_web_runtime(self):
+        legacy = source_service(include_dev_web=False)
+
+        updated_raw, names = pin_runtime_images(legacy, IMAGE)
+
+        updated = yaml.safe_load(updated_raw)
+        self.assertEqual(names, {"web", "worker", "dev-web"})
+        self.assertEqual(updated["services"]["dev-web"]["image"], IMAGE)
+        self.assertEqual(
+            updated["services"]["dev-web"]["environment"]["AISL_DATABASE_NAME"],
+            "aisl_dev",
+        )
+        self.assertEqual(
+            updated["services"]["dev-web"]["environment"]["DATABASE_URL"],
+            "${DATABASE_URL}",
+        )
+        self.assertNotIn("AISL_DATABASE_NAME", updated["services"]["web"]["environment"])
+
+    def test_pins_bounded_resources_and_worker_stop_grace_for_every_role(self):
+        updated_raw, names = pin_runtime_images(source_service(), IMAGE)
+        updated = yaml.safe_load(updated_raw)
+
+        self.assertEqual(names, {"web", "worker", "dev-web"})
+        for role in names:
+            for field, value in SOURCE_ROLE_RESOURCE_LIMITS[role].items():
+                with self.subTest(role=role, field=field):
+                    self.assertEqual(updated["services"][role][field], value)
+        self.assertEqual(
+            updated["services"]["worker"]["stop_grace_period"],
+            WORKER_STOP_GRACE_PERIOD,
+        )
+
+    def test_source_contract_rejects_missing_or_zero_role_limits(self):
+        cases = (
+            ("web", "cpus", None),
+            ("web", "mem_limit", None),
+            ("worker", "pids_limit", 0),
+            ("dev-web", "cpus", 0),
+        )
+        for role, field, invalid_value in cases:
+            with self.subTest(role=role, field=field):
+                compose = yaml.safe_load(source_service()["docker_compose_raw"])
+                if invalid_value is None:
+                    compose["services"][role].pop(field)
+                else:
+                    compose["services"][role][field] = invalid_value
+                with self.assertRaisesMessage(
+                    ReleaseError,
+                    f"source-runtime-resource-limit-mismatch role={role} key={field}",
+                ):
+                    _validate_source_contract(compose)
+
+    def test_public_application_contract_has_nonzero_cpu_memory_and_pid_limits(self):
+        app = dict(WEB_APPLICATION_CONTRACT)
+        app.update({"uuid": EXPECTED_WEB_APP_UUID, "name": "aishl-production-rolling-web"})
+
+        validate_web_application(app, EXPECTED_WEB_APP_UUID)
+        for field, invalid in (("limits_cpus", "0"), ("limits_memory", "0")):
+            app[field] = invalid
+            with self.subTest(field=field), self.assertRaisesMessage(
+                ReleaseError,
+                f"web-application-contract-mismatch field={field}",
+            ):
+                validate_web_application(app, EXPECTED_WEB_APP_UUID)
+            app[field] = WEB_APPLICATION_CONTRACT[field]
 
     def test_rejects_extra_aisl_runtime_in_compose_or_api(self):
         for owner in ("compose", "api"):
@@ -199,9 +276,10 @@ class ComposePinningTest(SimpleTestCase):
         service = source_service()
         for app in service["applications"]:
             app.update(image=IMAGE, status="running:healthy")
-        self.assertTrue(service_runtime_ready(service, IMAGE, {"web", "worker"}))
+        expected_roles = {"web", "worker", "dev-web"}
+        self.assertTrue(service_runtime_ready(service, IMAGE, expected_roles))
 
         service["applications"][1]["image"] = "ghcr.io/ai-shipping-labs/website:wrong"
-        self.assertFalse(service_runtime_ready(service, IMAGE, {"web", "worker"}))
+        self.assertFalse(service_runtime_ready(service, IMAGE, expected_roles))
         service["applications"][1].update(image=IMAGE, status="running:unhealthy")
-        self.assertFalse(service_runtime_ready(service, IMAGE, {"web", "worker"}))
+        self.assertFalse(service_runtime_ready(service, IMAGE, expected_roles))

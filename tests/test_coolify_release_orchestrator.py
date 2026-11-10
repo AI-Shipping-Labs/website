@@ -3,6 +3,7 @@
 import base64
 import copy
 
+import yaml
 from django.test import SimpleTestCase, tag
 
 from deploy.coolify.contracts import (
@@ -10,6 +11,7 @@ from deploy.coolify.contracts import (
     EXPECTED_SERVICE_UUID,
     EXPECTED_WEB_APP_NAME,
     EXPECTED_WEB_APP_UUID,
+    validate_web_environment,
 )
 from deploy.coolify.errors import ReleaseError
 from deploy.coolify.orchestrator import ReleaseDeployer
@@ -130,9 +132,16 @@ class FakeCoolify:
         if method == "PATCH":
             raw = base64.b64decode(payload["docker_compose_raw"]).decode()
             self.service["docker_compose_raw"] = raw
-            for item in self.service["applications"]:
-                item["image"] = IMAGE
-                item["status"] = "running:healthy"
+            compose = yaml.safe_load(raw)
+            self.service["applications"] = [
+                {
+                    "name": name,
+                    "image": service["image"],
+                    "status": "running:healthy",
+                }
+                for name, service in compose["services"].items()
+                if name in {"web", "worker", "dev-web"}
+            ]
         result = copy.deepcopy(self.service)
         if method == "GET":
             self.service_gets += 1
@@ -212,6 +221,7 @@ class ReleaseOrchestrationTest(SimpleTestCase):
         self.assertGreaterEqual(diagnostic_client.calls, 2)
         self.assertEqual(coolify.app["docker_registry_image_tag"], IMAGE.rsplit(":", 1)[1])
 
+
     def test_concurrent_source_compose_edit_blocks_first_mutation(self):
         coolify = FakeCoolify()
         original_call = coolify.call
@@ -290,3 +300,40 @@ class ReleaseOrchestrationTest(SimpleTestCase):
                 clock=lambda: next(clock_values),
                 sleeper=lambda _seconds: None,
             )
+
+
+class WebEnvironmentContractTest(SimpleTestCase):
+    def test_web_contract_requires_debug_to_be_zero(self):
+        envs = fake_web_environment()
+
+        validate_web_environment(envs)
+
+        missing_debug = [item for item in envs if item['key'] != 'DEBUG']
+        with self.assertRaisesRegex(ReleaseError, 'key=DEBUG'):
+            validate_web_environment(missing_debug)
+
+        nonzero_debug = [item.copy() for item in envs]
+        next(item for item in nonzero_debug if item['key'] == 'DEBUG')['value'] = '1'
+        with self.assertRaisesRegex(ReleaseError, 'key=DEBUG'):
+            validate_web_environment(nonzero_debug)
+
+    def test_web_contract_requires_the_current_safe_public_capacity(self):
+        envs = fake_web_environment()
+
+        validate_web_environment(envs)
+
+        missing_threads = [
+            item for item in envs if item['key'] != 'GUNICORN_THREADS'
+        ]
+        with self.assertRaisesRegex(ReleaseError, 'key=GUNICORN_THREADS'):
+            validate_web_environment(missing_threads)
+
+        wrong_workers = [item.copy() for item in envs]
+        next(item for item in wrong_workers if item['key'] == 'GUNICORN_WORKERS')['value'] = '6'
+        with self.assertRaisesRegex(ReleaseError, 'key=GUNICORN_WORKERS'):
+            validate_web_environment(wrong_workers)
+
+        wrong_threads = [item.copy() for item in envs]
+        next(item for item in wrong_threads if item['key'] == 'GUNICORN_THREADS')['value'] = '8'
+        with self.assertRaisesRegex(ReleaseError, 'key=GUNICORN_THREADS'):
+            validate_web_environment(wrong_threads)

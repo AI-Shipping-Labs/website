@@ -1,7 +1,9 @@
 # Coolify service template for AISHL staging (Contabo).
 # Secrets (SECRET_KEY, DATABASE_URL, etc.) live in Coolify UI / API
 # environment variables — never inline them here.
-# Image tag: exact ECR format YYYYMMDD-HHMMSS-<7> (never :latest, never sha-<…>).
+# Historical staging template; production is updated through the Coolify API
+# release contract in deploy/coolify/topology.py and contracts.py.
+# Image tag: exact GHCR deploy tag (never :latest or a short SHA).
 # CD path: GitHub Actions builds → GHCR → Coolify deploy webhook (no git clone on Contabo).
 #
 # Boot path: empty argv → entrypoint.sh hands off to
@@ -15,6 +17,9 @@ services:
     image: ghcr.io/ai-shipping-labs/website:20261021-094333-f922dc4
     pull_policy: always
     restart: unless-stopped
+    cpus: 2
+    mem_limit: 2g
+    pids_limit: 256
     environment:
       DEBUG: "0"
       # No SITE_BASE_URL pin here. This single service answers for both
@@ -32,6 +37,33 @@ services:
       SERVING_BOOT_SMOKE_CHECK_ENABLED: "false"
       GUNICORN_WORKERS: "2"
       GUNICORN_THREADS: "4"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/ping", timeout=2).read()
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    expose:
+      - "8000"
+  dev-web:
+    image: ghcr.io/ai-shipping-labs/website:20261021-094333-f922dc4
+    pull_policy: always
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 2g
+    pids_limit: 128
+    environment:
+      DEBUG: "0"
+      AISL_DATABASE_NAME: aisl_dev
+      DATABASE_URL: ${DATABASE_URL}
+      RUN_MIGRATIONS: "true"
+      SERVING_BOOT_SMOKE_CHECK_ENABLED: "false"
+      GUNICORN_WORKERS: "1"
+      GUNICORN_THREADS: "2"
     healthcheck:
       test:
         - CMD

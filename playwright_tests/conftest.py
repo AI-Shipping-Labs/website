@@ -90,6 +90,9 @@ PLAYWRIGHT_TEST_DB_STEM = "test_playwright_db"
 _AMBIENT_WORKER = object()
 
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
+_DEV_SITE_AUTH_HOST = "dev.aishippinglabs.com"
+_DEV_SITE_AUTH_USERNAME = "aisl-scheduled"
+_DEV_SITE_AUTH_PASSWORD_ENV = "AISL_DEV_SITE_PASSWORD"
 
 # Cached, session-scoped local-server port. Resolved lazily on the
 # local-server path only (never allocated when running against a remote
@@ -586,6 +589,11 @@ def browser(request):
     """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
+        try:
+            _add_remote_dev_auth(browser)
+        except RuntimeError:
+            browser.close()
+            raise
         request.config._playwright_browser = browser
         try:
             yield browser
@@ -597,6 +605,52 @@ def browser(request):
             )
             browser.close()
             delattr(request.config, "_playwright_browser")
+
+
+def _remote_dev_auth_credentials(base_url):
+    """Build origin-scoped credentials from the scheduled workflow secret."""
+    password = os.environ.get(_DEV_SITE_AUTH_PASSWORD_ENV, "")
+    if not password:
+        raise RuntimeError(
+            f"Remote Playwright requires {_DEV_SITE_AUTH_PASSWORD_ENV}."
+        )
+    parsed = urlparse(base_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError("Remote Playwright base URL must include an origin.")
+    return {
+        "username": _DEV_SITE_AUTH_USERNAME,
+        "password": password,
+        "origin": f"{parsed.scheme}://{parsed.netloc}",
+        "send": "always",
+    }
+
+
+def _wrap_remote_auth_contexts(browser, credentials):
+    """Attach credentials to browser-created contexts and pages by default."""
+    original_new_context = browser.new_context
+
+    def new_context_with_dev_auth(*args, **kwargs):
+        kwargs["http_credentials"] = credentials
+        return original_new_context(*args, **kwargs)
+
+    def new_page_with_dev_auth(*args, **kwargs):
+        kwargs["http_credentials"] = credentials
+        return original_new_context(*args, **kwargs).new_page()
+
+    browser.new_context = new_context_with_dev_auth
+    browser.new_page = new_page_with_dev_auth
+    return browser
+
+
+def _add_remote_dev_auth(browser):
+    """Add dev-site BasicAuth to every remote context, keeping context options."""
+    base_url = _resolved_base_url()
+    if _base_url_is_local(base_url):
+        return browser
+    if (urlparse(base_url).hostname or "").lower().rstrip(".") != _DEV_SITE_AUTH_HOST:
+        return browser
+    credentials = _remote_dev_auth_credentials(base_url)
+    return _wrap_remote_auth_contexts(browser, credentials)
 
 
 def _browser_resource_snapshot(browser):

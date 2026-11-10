@@ -52,7 +52,8 @@ def write_summary(config, run_id, attempt):
         f"- Revision: `{config.sha}`\n"
         f"- Image: `{config.image}`\n"
         f"- Digest matching green deployment receipt: `{config.digest}`\n"
-        "- Healthy exact-release source web/worker and public web verified\n"
+        "- Healthy exact-release source web/worker/dev-web and public web verified\n"
+        "- Source dev-web configuration targets isolated `aisl_dev`\n"
         "- DEV and production `/ping`: three exact-revision samples\n"
         "- Canonical Deploy Dev already deployed production; no duplicate restart\n"
     )

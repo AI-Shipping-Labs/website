@@ -98,7 +98,10 @@ jobs:
       - name: Check migration safety
         run: |
           start=$(date +%s)
-          uv run python manage.py makemigrations --check --dry-run
+          # Migration autodetection does not need template/system checks.
+          # Those run below after collectstatic builds the manifest required
+          # by the Studio template check.
+          uv run python manage.py makemigrations --check --dry-run --skip-checks
           migration_check_end=$(date +%s)
           echo "CI_TIMING phase=makemigrations_check seconds=$((migration_check_end - start))"
           uv run python scripts/check_migration_safety.py

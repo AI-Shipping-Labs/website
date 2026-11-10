@@ -48,6 +48,7 @@ from email_app.services.campaign_test_send import (
 )
 from email_app.services.campaign_waves import (
     campaign_wave_summary,
+    refresh_campaign_waves,
     release_next_wave,
 )
 from email_app.services.recording_available_prefill import (
@@ -57,6 +58,10 @@ from email_app.services.recording_available_prefill import (
 from email_app.services.relay_templates import (
     RelayTemplateError,
     configured_template_client,
+)
+from email_app.services.relay_campaigns import (
+    RelayCampaignError,
+    refresh_campaign_relay_stats_loud,
 )
 from events.models import Event
 from integrations.config import get_config
@@ -174,16 +179,30 @@ def _remember_recent_test_recipients(request, recipients):
     session.modified = True
 
 
-def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipient_suggestions=None):
+def _build_campaign_detail_context(
+    campaign,
+    *,
+    test_recipients="",
+    test_recipient_suggestions=None,
+    refresh_wave_stats=True,
+):
     """Build the shared context for the campaign detail page."""
-    engagement = campaign.email_logs.aggregate(
-        sent=Count("id"),
-        opened=Count("id", filter=Q(opened_at__isnull=False)),
-        clicked=Count("id", filter=Q(clicked_at__isnull=False)),
-    )
-    sent = engagement["sent"] or 0
-    opened = engagement["opened"] or 0
-    clicked = engagement["clicked"] or 0
+    relay_stats = campaign.relay_campaign_stats
+    if isinstance(relay_stats, dict):
+        sent = relay_stats["sent_count"]
+        opened = relay_stats["unique_open_count"]
+        clicked = relay_stats["unique_click_count"]
+        delivered = relay_stats["delivered_count"]
+    else:
+        engagement = campaign.email_logs.aggregate(
+            sent=Count("id"),
+            opened=Count("id", filter=Q(opened_at__isnull=False)),
+            clicked=Count("id", filter=Q(clicked_at__isnull=False)),
+        )
+        sent = engagement["sent"] or 0
+        opened = engagement["opened"] or 0
+        clicked = engagement["clicked"] or 0
+        delivered = None
     opened_rate = (opened / sent * 100) if sent else 0
     clicked_rate = (clicked / sent * 100) if sent else 0
 
@@ -196,7 +215,7 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         campaign.audience_verification
         == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
     ):
-        wave_summary = campaign_wave_summary(campaign)
+        wave_summary = campaign_wave_summary(campaign, refresh=refresh_wave_stats)
         campaign.refresh_from_db()
     return {
         "campaign": campaign,
@@ -212,11 +231,15 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         ),
         "engagement": {
             "sent": sent,
+            "delivered": delivered,
             "opened": opened,
             "clicked": clicked,
             "opened_rate": opened_rate,
             "clicked_rate": clicked_rate,
         },
+        "relay_stats": relay_stats,
+        "relay_stats_available": isinstance(relay_stats, dict),
+        "relay_stats_legacy": not campaign.relay_campaign_keys and not campaign.relay_campaign_key and campaign.status == "sent",
         "delivery_counts": delivery_counts,
         "attention_count": (
             delivery_counts[CampaignDelivery.State.FAILED]
@@ -311,6 +334,16 @@ def campaign_list(request):
     if status_filter:
         campaigns = campaigns.filter(status=status_filter)
     pager = studio_pagination_context(request, campaigns)
+    for campaign in pager["page"].object_list:
+        if campaign.relay_campaign_keys or campaign.relay_campaign_key:
+            try:
+                refresh_campaign_relay_stats_loud(campaign)
+                campaign.refresh_from_db()
+            except RelayCampaignError as error:
+                messages.error(
+                    request,
+                    f"Relay stats unavailable for campaign {campaign.pk}: {error}",
+                )
 
     return render(
         request,
@@ -636,6 +669,18 @@ def campaign_delete(request, campaign_id):
 def campaign_detail(request, campaign_id):
     """View campaign details with preview and send controls."""
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
+    if campaign.relay_campaign_keys or campaign.relay_campaign_key:
+        try:
+            refresh_campaign_relay_stats_loud(campaign)
+            campaign.refresh_from_db()
+        except RelayCampaignError as error:
+            messages.error(request, f"Relay campaign stats unavailable: {error}")
+    if campaign.audience_verification == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY:
+        try:
+            refresh_campaign_waves(campaign.pk)
+            campaign.refresh_from_db()
+        except Exception as error:
+            messages.error(request, f"Relay campaign wave stats unavailable: {error}")
 
     preview_body = (
         monitored_message_parts(campaign, preview=True)[0]
@@ -663,6 +708,7 @@ def campaign_detail(request, campaign_id):
     context = _build_campaign_detail_context(
         campaign,
         test_recipient_suggestions=_test_recipient_suggestions(request),
+        refresh_wave_stats=False,
     )
     context["preview_html"] = preview_html
     return render(request, "studio/campaigns/detail.html", context)

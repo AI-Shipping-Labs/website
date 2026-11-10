@@ -122,8 +122,17 @@ that minimum. The initial fan-out and automatic recovery use the same spacing.
 
 ## CAMPAIGN_TEST_RECIPIENTS
 
-Optional addresses suggested in the campaign test-send form. Test sends still
-use the same pinned Relay template and rendering contract as campaign sends.
+Optional exact addresses suggested in the campaign test-send form. The explicit
+`queue_relay_test_campaign <campaign_id> --dry-run` command can also use this
+setting for a native Relay bulk tracking proof. Review its campaign key, count,
+and domain counts, then pass that exact key to `--confirm`. The command refuses
+an empty or invalid list, fewer than 200 or more than 500 unique addresses,
+and any address outside
+`aishippinglabs.com`, `datatalks.club`, `dtcdev.click` or their subdomains, or
+reserved test domains (`.test`, `.example`, `.invalid`, `.localhost`). It uses a fresh Relay campaign
+and recipient-list key, never resolves the campaign's normal audience, and
+prints no recipient addresses. Relay's preflight and queue counts must exactly
+match the configured list. Leave blank to disable the bulk proof path.
 
 ## RECORDING_AVAILABLE_SUBJECT_TEMPLATE
 

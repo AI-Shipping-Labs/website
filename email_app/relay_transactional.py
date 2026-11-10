@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import requests
 from community_base.kernel.context import is_safe_external_context_id
 from django.core.cache import cache
+from django.core.mail import send_mail
 from django.db import transaction
 from django.utils import timezone
 
@@ -324,8 +325,29 @@ def _record_failure(idempotency_key, status, code):
 
 
 def _alert_operators(template_key, idempotency_key, safe_correlation, code):
-    _create_staff_notifications(template_key, idempotency_key, safe_correlation, code)
-    _post_staff_slack_alert(template_key, idempotency_key, safe_correlation, code)
+    for notifier, name in (
+        (_create_staff_notifications, "staff notifications"),
+        (_post_staff_slack_alert, "Slack"),
+        (_email_dev_alert, "dev email"),
+    ):
+        try:
+            notifier(template_key, idempotency_key, safe_correlation, code)
+        except Exception:
+            logger.exception("Could not send Relay failure alert through %s", name)
+
+
+def _email_dev_alert(template_key, idempotency_key, safe_correlation, code):
+    send_mail(
+        subject=f"Relay email delivery failed: {template_key}",
+        message=(
+            f"Relay email delivery failed.\nTemplate: {template_key}\n"
+            f"Idempotency key: {idempotency_key}\n"
+            f"Correlation: {safe_correlation}\nError code: {code}\n"
+        ),
+        from_email=None,
+        recipient_list=["dev@dtcdev.click"],
+        fail_silently=False,
+    )
 
 
 def _create_staff_notifications(template_key, idempotency_key, safe_correlation, code):

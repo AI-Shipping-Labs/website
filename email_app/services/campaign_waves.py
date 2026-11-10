@@ -34,7 +34,7 @@ def bounce_threshold_breached(bounces, confirmed_sent):
     return confirmed_sent > 0 and bounces * 100 >= confirmed_sent * BOUNCE_STOP_PERCENT
 
 
-def _counts_for_deliveries(deliveries, *, now):
+def _counts_for_deliveries(deliveries, *, now, relay_stats=None):
     states = {row["state"]: row["count"] for row in deliveries.values("state").annotate(count=Count("id"))}
     confirmed = deliveries.filter(
         state=CampaignDelivery.State.SENT,
@@ -43,6 +43,10 @@ def _counts_for_deliveries(deliveries, *, now):
     sent = confirmed.count()
     bounces = confirmed.filter(email_log__bounced_at__isnull=False).count()
     complaints = confirmed.filter(email_log__complained_at__isnull=False).count()
+    if isinstance(relay_stats, dict):
+        sent = relay_stats.get("sent_count", sent)
+        bounces = relay_stats.get("bounce_count", bounces)
+        complaints = relay_stats.get("complaint_count", complaints)
     expired_dispatching = deliveries.filter(
         state=CampaignDelivery.State.DISPATCHING,
         claim_expires_at__lte=now,
@@ -54,6 +58,8 @@ def _counts_for_deliveries(deliveries, *, now):
         Q(state=CampaignDelivery.State.DISPATCHING),
         Q(claim_expires_at__isnull=True) | Q(claim_expires_at__gt=now),
     ).count()
+    if isinstance(relay_stats, dict) and relay_stats.get("status") != "sent":
+        live = max(live, 1)
     return {
         "recipient_count": sum(states.values()),
         "confirmed_sent": sent,
@@ -76,11 +82,30 @@ def _current_wave(campaign):
     return campaign.waves.filter(released_at__isnull=False).order_by("-number").first()
 
 
+def _cumulative_relay_stats(campaign):
+    stats = [
+        wave.relay_campaign_stats
+        for wave in campaign.waves.filter(released_at__isnull=False)
+        if isinstance(wave.relay_campaign_stats, dict)
+    ]
+    if not stats:
+        return None
+    return {
+        field: sum(item.get(field, 0) for item in stats)
+        for field in ("sent_count", "bounce_count", "complaint_count")
+    }
+
+
 def _gate(campaign, wave, *, now):
     if wave is None:
         return False, "no_released_wave", None, None
-    metrics = _counts_for_deliveries(wave.deliveries.all(), now=now)
-    cumulative = _counts_for_deliveries(_released_deliveries(campaign), now=now)
+    metrics = _counts_for_deliveries(
+        wave.deliveries.all(), now=now, relay_stats=wave.relay_campaign_stats,
+    )
+    cumulative = _counts_for_deliveries(
+        _released_deliveries(campaign), now=now,
+        relay_stats=_cumulative_relay_stats(campaign),
+    )
     if metrics["complaints"] >= COMPLAINT_STOP_COUNT or cumulative["complaints"] >= COMPLAINT_STOP_COUNT:
         return False, "complaint_threshold", metrics, cumulative
     if bounce_threshold_breached(
@@ -111,7 +136,9 @@ def _refresh_locked(campaign, *, now):
     current = _current_wave(campaign)
     if current is None:
         return
-    metrics = _counts_for_deliveries(current.deliveries.all(), now=now)
+    metrics = _counts_for_deliveries(
+        current.deliveries.all(), now=now, relay_stats=current.relay_campaign_stats,
+    )
     updates = []
     if metrics["live"] and current.state != CampaignWave.State.SENDING:
         current.state = CampaignWave.State.SENDING
@@ -162,6 +189,23 @@ def _refresh_locked(campaign, *, now):
 
 def refresh_campaign_waves(campaign_id, *, now=None):
     now = now or timezone.now()
+    campaign_snapshot = EmailCampaign.objects.get(pk=campaign_id)
+    for wave in campaign_snapshot.waves.filter(released_at__isnull=False).exclude(relay_campaign_key=""):
+        from email_app.services.relay_campaigns import get_native_campaign_stats
+
+        try:
+            wave.relay_campaign_stats = get_native_campaign_stats(wave.relay_campaign_key)
+            wave.relay_stats_synced_at = now
+            wave.save(update_fields=["relay_campaign_stats", "relay_stats_synced_at"])
+        except Exception as exc:
+            campaign_snapshot.relay_campaign_error = (
+                f"Relay wave stats refresh failed: {type(exc).__name__}: {exc}"
+            )[:2000]
+            campaign_snapshot.save(update_fields=["relay_campaign_error"])
+            from email_app.services.relay_campaigns import alert_relay_campaign_failure
+
+            alert_relay_campaign_failure(campaign_snapshot, "wave stats refresh", exc)
+            raise
     with transaction.atomic():
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
         if campaign.audience_verification != "unverified_only":
@@ -200,6 +244,7 @@ def _schedule_wave(wave, *, source, now):
         kwargs={
             "campaign_id": wave.campaign_id,
             "delivery_ids": delivery_ids,
+            "wave_id": wave.pk,
             "q_options": {"task_name": task_name},
         },
     )
@@ -217,6 +262,7 @@ def release_initial_wave(wave, *, actor_id=None, source, now=None):
 
 def release_next_wave(campaign_id, *, actor, source, now=None):
     now = now or timezone.now()
+    refresh_campaign_waves(campaign_id, now=now)
     with transaction.atomic():
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
         if campaign.audience_verification != "unverified_only":
@@ -266,7 +312,9 @@ def campaign_wave_summary(campaign, *, now=None, refresh=True):
     can_release, reason, _metrics, cumulative = _gate(campaign, current, now=now)
     rows = []
     for wave in waves:
-        metrics = _counts_for_deliveries(wave.deliveries.all(), now=now)
+        metrics = _counts_for_deliveries(
+            wave.deliveries.all(), now=now, relay_stats=wave.relay_campaign_stats,
+        )
         rows.append(
             {
                 "id": wave.pk,
@@ -296,6 +344,7 @@ def campaign_wave_summary(campaign, *, now=None, refresh=True):
     cumulative = cumulative or _counts_for_deliveries(
         _released_deliveries(campaign),
         now=now,
+        relay_stats=_cumulative_relay_stats(campaign),
     )
     blocking_messages = {
         "no_released_wave": "No wave has been released.",

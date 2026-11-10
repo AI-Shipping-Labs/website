@@ -81,11 +81,24 @@
       </div>
       {% endif %}
       <div class="col-span-2">
-        <p class="text-sm text-muted-foreground">Engagement</p>
+        {% if campaign.relay_campaign_error %}
+        <p class="mt-1 text-sm text-red-400" data-testid="relay-campaign-error">Relay error: {{ campaign.relay_campaign_error }}</p>
+        {% endif %}
+        <p class="text-sm text-muted-foreground">Relay campaign stats</p>
         <p class="text-sm text-foreground mt-1" data-testid="campaign-engagement">
-          Sent: {{ engagement.sent }} /
-          Opened: {{ engagement.opened }} ({{ engagement.opened_rate|floatformat:1 }}%) /
-          Clicked: {{ engagement.clicked }} ({{ engagement.clicked_rate|floatformat:1 }}%)
+          {% if relay_stats_available %}
+          Sent: {{ relay_stats.sent_count }} /
+          Delivered: {{ relay_stats.delivered_count }} /
+          Opens: {{ relay_stats.unique_open_count }} unique, {{ relay_stats.open_count }} total /
+          Clicks: {{ relay_stats.unique_click_count }} unique, {{ relay_stats.click_count }} total /
+          Unsubscribes: {{ relay_stats.unsubscribe_count }} /
+          Bounces: {{ relay_stats.bounce_count }} /
+          Complaints: {{ relay_stats.complaint_count }}
+          {% elif relay_stats_legacy %}
+          Relay tracking unavailable for this legacy campaign.
+          {% else %}
+          Relay stats are not available yet.
+          {% endif %}
           &middot;
           <a href="{{ recipients_url }}" class="text-accent hover:underline">Recipients</a>
           &middot;

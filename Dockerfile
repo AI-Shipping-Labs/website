@@ -50,6 +50,7 @@ RUN chown -R app:app /app/staticfiles
 RUN chmod +x entrypoint.sh
 
 ENV PATH="/app/.venv/bin:${PATH}" \
+    GUNICORN_CMD_ARGS="--no-control-socket" \
     PYTHONDONTWRITEBYTECODE=1
 USER app:app
 

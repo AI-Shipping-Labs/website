@@ -406,7 +406,7 @@ def _create_snapshotted_delivery(email, *, state, subject, unsubscribed=False):
 
 def _reject_campaign_batch(campaign):
     from email_app.models import CampaignDelivery
-    from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
+    from email_app.services.relay_campaigns import RelayCampaignApiError
     from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
 
     send_campaign(campaign.pk)
@@ -415,39 +415,35 @@ def _reject_campaign_batch(campaign):
         .values_list("pk", flat=True)
     )
     with mock.patch(
-        "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
-        side_effect=RelayCampaignDeliveryRejected("rejected"),
-    ):
-        send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
+        "email_app.tasks.send_campaign.queue_native_campaign",
+        side_effect=RelayCampaignApiError("Relay request timed out after 30s"),
+    ), mock.patch("email_app.tasks.send_campaign.alert_relay_campaign_failure"):
+        with pytest.raises(RelayCampaignApiError, match="timed out after 30s"):
+            send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
     connection.close()
 
 
-def _assert_failed_recipient_ui(page, django_server, campaign):
+def _assert_relay_queue_failure_ui(page, django_server, campaign):
     page.goto(
         f"{django_server}/studio/campaigns/{campaign.pk}/",
         wait_until="domcontentloaded",
     )
     assert page.get_by_text("Needs attention", exact=True).is_visible()
     assert page.get_by_text("Sending", exact=True).count() == 0
+    error = page.get_by_test_id("relay-campaign-error")
+    assert error.is_visible()
+    assert "Relay request timed out after 30s" in error.inner_text()
     counts = page.get_by_test_id("campaign-delivery-counts")
-    assert counts.get_by_text("Failed: 1", exact=True).is_visible()
-    attention = page.get_by_test_id("campaign-attention-link")
-    assert attention.get_by_text(
-        "Review 1 recipient needing attention", exact=True,
-    ).is_visible()
-    attention.click()
-    page.wait_for_load_state("domcontentloaded")
-    assert page.get_by_text("hard-fail@test.com", exact=True).is_visible()
-    state = page.get_by_test_id("campaign-delivery-state")
-    assert state.get_by_text("Failed", exact=True).is_visible()
-    assert page.get_by_test_id("campaign-delivery-retry").is_visible()
+    assert counts.get_by_text("Pending: 1", exact=True).is_visible()
+    assert counts.get_by_text("Failed: 0", exact=True).is_visible()
+    assert page.get_by_test_id("campaign-attention-link").count() == 0
 
 
 @pytest.mark.django_db(transaction=True)
-class TestStaffSeesNeedsAttentionAfterHardRejection:
+class TestStaffSeesNeedsAttentionAfterRelayQueueFailure:
     @pytest.mark.core
     @browser_journey
-    def test_hard_relay_rejection_leaves_needs_attention_not_sending(
+    def test_relay_queue_timeout_leaves_needs_attention_not_sending(
         self,
         django_server,
         browser,
@@ -473,7 +469,8 @@ class TestStaffSeesNeedsAttentionAfterHardRejection:
             page.wait_for_load_state("domcontentloaded")
 
         _reject_campaign_batch(campaign)
-        _assert_failed_recipient_ui(page, django_server, campaign)
+        with mock.patch("studio.views.campaigns.refresh_campaign_relay_stats_loud"):
+            _assert_relay_queue_failure_ui(page, django_server, campaign)
         context.close()
 
 

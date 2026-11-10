@@ -186,10 +186,11 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
             for delivery in deliveries.filter(resolution=CampaignDelivery.Resolution.RETRY):
                 retry_native_campaign_delivery(external_key, delivery.pk)
     except Exception as exc:
+        campaign.status = "needs_attention"
         campaign.relay_campaign_state = "failed"
         campaign.relay_campaign_error = f"{type(exc).__name__}: {exc}"[:2000]
         campaign.save(update_fields=[
-            "relay_campaign_state", "relay_campaign_error",
+            "status", "relay_campaign_state", "relay_campaign_error",
         ])
         alert_relay_campaign_failure(campaign, "queue", exc)
         raise

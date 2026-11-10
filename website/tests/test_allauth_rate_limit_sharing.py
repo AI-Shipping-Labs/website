@@ -54,6 +54,7 @@ class AllauthRateLimitSharingTests(TestCase):
 
         first_usage = ratelimit.consume(
             request_a,
+            app='allauth.account',
             action='login',
             config=config,
             raise_exception=True,
@@ -64,6 +65,7 @@ class AllauthRateLimitSharingTests(TestCase):
         with self.assertRaises(RateLimited):
             ratelimit.consume(
                 request_a,
+                app='allauth.account',
                 action='login',
                 config=config,
                 raise_exception=True,
@@ -71,6 +73,7 @@ class AllauthRateLimitSharingTests(TestCase):
         self.assertIsNotNone(
             ratelimit.consume(
                 request_b,
+                app='allauth.account',
                 action='login',
                 config=config,
                 raise_exception=True,

@@ -10,10 +10,10 @@ dependencies = [
     "community-base[django_q] @ git+https://github.com/DataTalksClub/community-base@v0.5.36",
                           # shared DataTalks.Club package (jobs/mail/accounts); pinned release, see make core-link
     "croniter>=6.0.0",            # django-q2 parses the cron= schedules in jobs/.../setup_schedules.py
-    "cryptography>=46.0.5",       # encrypts outbound trigger signing secrets at rest
+    "cryptography>=50.0.0",       # encrypts outbound trigger signing secrets at rest
     "dj-database-url>=3.1.2",     # parses DATABASE_URL into Django DATABASES config (website/settings.py)
-    "django>=6.0.2",              # the web framework
-    "django-allauth>=65.14.3",    # OAuth/social login + account management
+    "django>=6.0.8",              # the web framework
+    "django-allauth>=65.21.1",    # OAuth/social login + account management
     "django-q2>=1.9.0",           # async task queue / scheduled jobs (qcluster worker)
     "gunicorn>=25.1.0",           # production WSGI server (Dockerfile / entrypoint.sh)
     "icalendar>=7.0.3",           # generates .ics calendar invites/feeds (events/services/calendar_invite.py)
@@ -21,12 +21,13 @@ dependencies = [
     "markdown>=3.10.2",           # renders article/course/workshop markdown to HTML
     "markdown-it-py>=4.2.0",
     "nh3>=0.3.5",
-    "pillow>=12.1.1",             # image processing for banners/uploads (ImageField)
+    "pillow>=13.0.0",             # image processing for banners/uploads (ImageField)
     "psycopg2-binary>=2.9.11",    # PostgreSQL driver
-    "pygments>=2.19.2",           # syntax highlighting for fenced code blocks in markdown
+    "pygments>=2.20.0",           # syntax highlighting for fenced code blocks in markdown
     "pyjwt[crypto]>=2.11.0",      # JWT signing/verification — GitHub App auth + API tokens
-    "python-dotenv>=1.2.1",       # loads .env files for local/runtime configuration
+    "python-dotenv>=1.2.2",       # loads .env files for local/runtime configuration
     "python-frontmatter>=1.1.0",  # parses YAML frontmatter in synced content (github_sync/parsing.py)
+    "requests>=2.33.0",           # HTTP client used by integrations and background tasks
     "stripe>=14.3.0",             # payments — checkout, subscriptions, webhooks (payments/*)
     "watchdog>=6.0.0",            # filesystem watching — content watch command + dev autoreload
     "whitenoise[brotli]>=6.12.0",         # serves static files in production

@@ -963,7 +963,6 @@
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_clears_project_difficulty_with_no_matches",
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_clears_project_topic_with_no_matches",
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_clears_resources_topic_with_no_matches",
-    "playwright_tests/test_member_empty_states_1227.py::test_visitor_recovers_from_unmatched_tag_url",
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_sees_fresh_projects_state",
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_sees_fresh_resources_state",
     "playwright_tests/test_member_empty_states_1227.py::test_visitor_understands_empty_tag_library",

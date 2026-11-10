@@ -2156,6 +2156,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_phone_learner_reads_long_status_without_overflow",
     })
 
+    tag_crawl_safety_owners = frozenset({
+        "playwright_tests/test_member_empty_states_1227.py::"
+        "test_visitor_gets_not_found_for_unmatched_tag_url",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -2218,7 +2223,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2238)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2237)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 0)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -2384,6 +2389,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1833_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
+            | self.tag_crawl_safety_owners
             | self.device_login_owners,
         )
         self.assertNotIn(
@@ -2444,6 +2450,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1959_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
+            | self.tag_crawl_safety_owners
             | self.issue_1980_owners
             | self.device_login_owners
         ):

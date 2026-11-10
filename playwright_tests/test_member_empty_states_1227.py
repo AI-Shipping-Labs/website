@@ -13,6 +13,7 @@ import pytest
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context, create_user, ensure_tiers
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 
@@ -122,6 +123,7 @@ def test_visitor_understands_empty_tag_library(django_server, page):
     expect(empty.get_by_role('link')).to_have_count(0)
 
 
+@browser_journey
 def test_visitor_gets_not_found_for_unmatched_tag_url(django_server, page):
     _reset_surfaces()
     _create_article(tags=['agents'])

@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='campaignwave',
             name='relay_campaign_key',
-            field=models.CharField(blank=True, default='', max_length=180),
+            field=models.CharField(blank=True, db_default='', default='', max_length=180),
         ),
         migrations.AddField(
             model_name='campaignwave',

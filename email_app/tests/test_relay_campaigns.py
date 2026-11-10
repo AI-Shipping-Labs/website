@@ -176,7 +176,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        mock_alert.assert_called_once()
+        self.assertEqual(mock_alert.call_count, 1)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",
@@ -211,7 +211,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.relay_campaign_state, "failed")
         self.assertIn("preflight recipient count mismatch", self.campaign.relay_campaign_error)
-        mock_alert.assert_called_once()
+        self.assertEqual(mock_alert.call_count, 1)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",
@@ -448,7 +448,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         campaign.refresh_from_db()
         self.assertIn("pre-Relay send state cannot be reconstructed", campaign.relay_campaign_error)
         self.assertEqual(campaign.status, "needs_attention")
-        mock_alert.assert_called_once()
+        self.assertEqual(mock_alert.call_count, 1)
 
     @override_settings(TESTING=False)
     @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")

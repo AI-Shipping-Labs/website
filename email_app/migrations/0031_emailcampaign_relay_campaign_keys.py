@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='emailcampaign',
             name='relay_campaign_keys',
-            field=models.JSONField(blank=True, default=list),
+            field=models.JSONField(blank=True, db_default=[], default=list),
         ),
     ]

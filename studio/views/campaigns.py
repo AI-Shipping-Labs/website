@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -188,23 +187,6 @@ def _build_campaign_detail_context(
 ):
     """Build the shared context for the campaign detail page."""
     relay_stats = campaign.relay_campaign_stats
-    if isinstance(relay_stats, dict):
-        sent = relay_stats["sent_count"]
-        opened = relay_stats["unique_open_count"]
-        clicked = relay_stats["unique_click_count"]
-        delivered = relay_stats["delivered_count"]
-    else:
-        engagement = campaign.email_logs.aggregate(
-            sent=Count("id"),
-            opened=Count("id", filter=Q(opened_at__isnull=False)),
-            clicked=Count("id", filter=Q(clicked_at__isnull=False)),
-        )
-        sent = engagement["sent"] or 0
-        opened = engagement["opened"] or 0
-        clicked = engagement["clicked"] or 0
-        delivered = None
-    opened_rate = (opened / sent * 100) if sent else 0
-    clicked_rate = (clicked / sent * 100) if sent else 0
 
     delivery_counts = {
         state: campaign.deliveries.filter(state=state).count()
@@ -229,14 +211,6 @@ def _build_campaign_detail_context(
                 else campaign.email_logs.count()
             )
         ),
-        "engagement": {
-            "sent": sent,
-            "delivered": delivered,
-            "opened": opened,
-            "clicked": clicked,
-            "opened_rate": opened_rate,
-            "clicked_rate": clicked_rate,
-        },
         "relay_stats": relay_stats,
         "relay_stats_available": isinstance(relay_stats, dict),
         "relay_stats_legacy": not campaign.relay_campaign_keys and not campaign.relay_campaign_key and campaign.status == "sent",

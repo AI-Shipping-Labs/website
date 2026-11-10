@@ -179,57 +179,6 @@ class CampaignsListTest(CampaignsApiTestBase):
         self.assertEqual(ids, [self.draft.pk])
 
 
-class CampaignRelayStatsTest(CampaignsApiTestBase):
-    @patch("api.views.campaigns.refresh_campaign_relay_stats_loud")
-    def test_campaign_detail_returns_relay_aggregate_stats(self, mock_refresh):
-        stats = {
-            "sent_count": 40,
-            "delivered_count": 39,
-            "unique_open_count": 12,
-            "open_count": 16,
-            "unique_click_count": 3,
-            "click_count": 4,
-            "unsubscribe_count": 1,
-            "bounce_count": 1,
-            "complaint_count": 0,
-            "status": "sent",
-        }
-
-        def store_stats(campaign):
-            campaign.relay_campaign_stats = stats
-            campaign.save(update_fields=["relay_campaign_stats"])
-            return stats
-
-        mock_refresh.side_effect = store_stats
-        self.sent.relay_campaign_key = "aishl-campaign-2"
-        self.sent.relay_campaign_keys = ["aishl-campaign-2"]
-        self.sent.save(update_fields=["relay_campaign_key", "relay_campaign_keys"])
-
-        response = self.client.get(
-            f"/api/campaigns/{self.sent.pk}", **self._auth(),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["relay_stats"], stats)
-        self.assertTrue(response.json()["relay_stats_available"])
-        mock_refresh.assert_called_once()
-
-    @patch(
-        "api.views.campaigns.refresh_campaign_relay_stats_loud",
-        side_effect=RelayCampaignApiError("Relay request timed out"),
-    )
-    def test_campaign_detail_fails_loudly_when_relay_stats_timeout(self, _mock_refresh):
-        self.sent.relay_campaign_key = "aishl-campaign-2"
-        self.sent.relay_campaign_keys = ["aishl-campaign-2"]
-        self.sent.save(update_fields=["relay_campaign_key", "relay_campaign_keys"])
-
-        response = self.client.get(
-            f"/api/campaigns/{self.sent.pk}", **self._auth(),
-        )
-
-        self.assertEqual(response.status_code, 502)
-        self.assertEqual(response.json()["code"], "relay_campaign_stats_unavailable")
-
     def test_list_rejects_unknown_status_filter(self):
         response = self.client.get(
             "/api/campaigns?status=garbage", **self._auth()
@@ -292,6 +241,59 @@ class CampaignRelayStatsTest(CampaignsApiTestBase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["code"], "validation_error")
         self.assertIn("archived", response.json()["details"])
+
+
+class CampaignRelayStatsTest(CampaignsApiTestBase):
+    @patch("api.views.campaigns.refresh_campaign_relay_stats_loud")
+    def test_campaign_detail_returns_relay_aggregate_stats(self, mock_refresh):
+        stats = {
+            "sent_count": 40,
+            "delivered_count": 39,
+            "unique_open_count": 12,
+            "open_count": 16,
+            "unique_click_count": 3,
+            "click_count": 4,
+            "unsubscribe_count": 1,
+            "bounce_count": 1,
+            "complaint_count": 0,
+            "status": "sent",
+        }
+
+        def store_stats(campaign):
+            campaign.relay_campaign_stats = stats
+            campaign.save(update_fields=["relay_campaign_stats"])
+            return stats
+
+        mock_refresh.side_effect = store_stats
+        self.sent.relay_campaign_key = "aishl-campaign-2"
+        self.sent.relay_campaign_keys = ["aishl-campaign-2"]
+        self.sent.save(update_fields=["relay_campaign_key", "relay_campaign_keys"])
+
+        response = self.client.get(
+            f"/api/campaigns/{self.sent.pk}", **self._auth(),
+        )
+
+        self.assertIn('"relay_stats":', response.content.decode())
+        self.assertEqual(response.json()["relay_stats"], stats)
+        self.assertTrue(response.json()["relay_stats_available"])
+        self.assertEqual(mock_refresh.call_count, 1)
+        self.assertEqual(mock_refresh.call_args.args[0].pk, self.sent.pk)
+
+    @patch(
+        "api.views.campaigns.refresh_campaign_relay_stats_loud",
+        side_effect=RelayCampaignApiError("Relay request timed out"),
+    )
+    def test_campaign_detail_fails_loudly_when_relay_stats_timeout(self, _mock_refresh):
+        self.sent.relay_campaign_key = "aishl-campaign-2"
+        self.sent.relay_campaign_keys = ["aishl-campaign-2"]
+        self.sent.save(update_fields=["relay_campaign_key", "relay_campaign_keys"])
+
+        response = self.client.get(
+            f"/api/campaigns/{self.sent.pk}", **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()["code"], "relay_campaign_stats_unavailable")
 
 
 class CampaignsDetailTest(CampaignsApiTestBase):

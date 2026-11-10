@@ -84,10 +84,8 @@ from content.views.workshops import (
 project_detail = cache_anonymous_page()(project_detail)
 collection_list = cache_anonymous_page()(collection_list)
 tutorials_list = cache_anonymous_page()(tutorials_list)
+downloads_list = cache_anonymous_page()(downloads_list)
 interview_hub = cache_anonymous_page()(interview_hub)
-# `/downloads` keeps its request CSRF token for the page's inline form, so it
-# remains outside the shared anonymous page cache until the form uses a
-# private token-fetch flow.
 
 urlpatterns = [
     path('c/<uuid:content_id>', content_share_link, name='content_share_link'),

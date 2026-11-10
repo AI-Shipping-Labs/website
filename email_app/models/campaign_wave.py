@@ -34,7 +34,9 @@ class CampaignWave(models.Model):
     )
     monitoring_started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    relay_campaign_key = models.CharField(max_length=180, blank=True, default="")
+    relay_campaign_key = models.CharField(
+        max_length=180, blank=True, default="", db_default="",
+    )
     relay_campaign_stats = models.JSONField(null=True, blank=True)
     relay_stats_synced_at = models.DateTimeField(null=True, blank=True)
 

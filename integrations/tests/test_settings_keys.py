@@ -108,6 +108,12 @@ def _project_email_descriptions(group):
             "the 1.5-second per-send delay. Lower values, including 0, cannot "
             "disable pacing. Batch i is scheduled at now + i * the effective interval."
         ),
+        "CAMPAIGN_TEST_RECIPIENTS": (
+            "Common addresses suggested in Studio test-send chips. The explicit Relay bulk tracking proof command "
+            "also reads this list, but requires a reviewed dry-run key and 200–500 unique addresses at internal "
+            "AI Shipping Labs/DataTalksClub domains or their subdomains, or reserved test domains; it never resolves "
+            "the campaign audience. Leave blank to disable the bulk proof path."
+        ),
         "SES_WEBHOOK_SHARED_SECRET": (
             "Optional shared secret required in the X-SES-Webhook-Secret header on the SES webhook. "
             "In production, Relay's aisl-ses-ingress reads it from Secrets Manager. Leave blank locally to allow "

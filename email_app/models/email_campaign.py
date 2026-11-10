@@ -146,10 +146,14 @@ class EmailCampaign(models.Model):
         blank=True,
         help_text='When the campaign was sent.',
     )
-    relay_campaign_key = models.CharField(max_length=180, blank=True, default='')
-    relay_campaign_keys = models.JSONField(default=list, blank=True)
-    relay_campaign_state = models.CharField(max_length=20, blank=True, default='')
-    relay_campaign_error = models.TextField(blank=True, default='')
+    relay_campaign_key = models.CharField(
+        max_length=180, blank=True, default='', db_default='',
+    )
+    relay_campaign_keys = models.JSONField(default=list, blank=True, db_default=[])
+    relay_campaign_state = models.CharField(
+        max_length=20, blank=True, default='', db_default='',
+    )
+    relay_campaign_error = models.TextField(blank=True, default='', db_default='')
     relay_campaign_stats = models.JSONField(null=True, blank=True)
     relay_campaign_stats_synced_at = models.DateTimeField(null=True, blank=True)
     sent_count = models.IntegerField(

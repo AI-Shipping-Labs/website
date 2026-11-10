@@ -264,9 +264,14 @@ class DownloadsListViewTest(TestCase):
         response = self.client.get('/downloads')
         self.assertContains(response, '<title>Downloads | AI Shipping Labs</title>')
 
-    def test_downloads_page_sets_csrf_cookie_for_inline_form(self):
+    def test_cached_downloads_page_defers_consent_csrf_to_private_endpoint(self):
         response = self.client.get('/downloads')
-        self.assertIn('csrftoken', response.cookies)
+
+        self.assertNotIn('csrftoken', response.cookies)
+        self.assertEqual(
+            response['Cache-Control'], 'public, max-age=0, s-maxage=300',
+        )
+        self.assertEqual(response.context['analytics_consent_csrf_token'], '')
 
 
 class DownloadsListTagFilterTest(TestCase):

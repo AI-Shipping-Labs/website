@@ -85,6 +85,13 @@ class RemainingPublicPageCacheTest(TestCase):
     def test_tutorial_listing_reuses_anonymous_response(self):
         self._assert_repeat_request_is_cached('/tutorials')
 
+    def test_download_listing_reuses_anonymous_response(self):
+        first = self.client.get('/downloads')
+        self.assertContains(first, 'Cacheable download')
+        with self.assertNumQueries(0):
+            second = self.client.get('/downloads')
+        self.assertEqual(second.content, first.content)
+
     def test_interview_hub_reuses_anonymous_response(self):
         self._assert_repeat_request_is_cached('/interview')
 

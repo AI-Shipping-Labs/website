@@ -5,6 +5,7 @@ import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q
@@ -24,9 +25,14 @@ from email_app.services.campaign_repermission import (
     monitored_message_parts,
 )
 from email_app.services.relay_campaigns import (
+    RelayCampaignApiError,
     RelayCampaignDeliveryAmbiguous,
     RelayCampaignDeliveryRejected,
     RelayCampaignEdgeBlocked,
+    alert_relay_campaign_failure,
+    queue_native_campaign,
+    retry_native_campaign_delivery,
+    validate_native_campaign_recipient_counts,
     send_campaign_delivery_to_relay,
 )
 from integrations.config import get_config
@@ -137,6 +143,125 @@ def _chunk(items, size):
         yield items[index:index + size]
 
 
+def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
+    """Queue a frozen local snapshot through Relay's native campaign worker."""
+    deliveries = CampaignDelivery.objects.filter(
+        campaign=campaign,
+        pk__in=delivery_ids,
+        state=CampaignDelivery.State.PENDING,
+    )
+    external_key = f"aishl-campaign-{campaign.pk}"
+    wave = None
+    if wave_id:
+        wave = CampaignWave.objects.get(pk=wave_id, campaign=campaign)
+        external_key = f"{external_key}-wave-{wave.number}"
+        wave.relay_campaign_key = external_key
+        wave.save(update_fields=["relay_campaign_key"])
+
+    campaign.relay_campaign_state = "pending"
+    campaign.relay_campaign_key = campaign.relay_campaign_key or external_key
+    campaign.relay_campaign_keys = list(dict.fromkeys(
+        [*(campaign.relay_campaign_keys or []), external_key]
+    ))
+    campaign.relay_campaign_error = ""
+    campaign.save(update_fields=[
+        "relay_campaign_state", "relay_campaign_key", "relay_campaign_keys",
+        "relay_campaign_error",
+    ])
+
+    try:
+        result = queue_native_campaign(
+            campaign,
+            deliveries,
+            external_key=external_key,
+        )
+        if not result.get("already_queued"):
+            validate_native_campaign_recipient_counts(
+                len(result.get("included_delivery_ids", [])),
+                result.get("recipient_count"),
+                result.get("skipped_count"),
+                stage="queue",
+            )
+        if result.get("already_queued"):
+            for delivery in deliveries.filter(resolution=CampaignDelivery.Resolution.RETRY):
+                retry_native_campaign_delivery(external_key, delivery.pk)
+    except Exception as exc:
+        campaign.relay_campaign_state = "failed"
+        campaign.relay_campaign_error = f"{type(exc).__name__}: {exc}"[:2000]
+        campaign.save(update_fields=[
+            "relay_campaign_state", "relay_campaign_error",
+        ])
+        alert_relay_campaign_failure(campaign, "queue", exc)
+        raise
+
+    included_ids = set(result.get("included_delivery_ids", []))
+    now = timezone.now()
+    for delivery in deliveries.select_related("user"):
+        if delivery.pk not in included_ids:
+            delivery.state = CampaignDelivery.State.SKIPPED
+            delivery.skip_reason = "ineligible_at_relay_queue"
+            delivery.completed_at = now
+            delivery.save(update_fields=["state", "skip_reason", "completed_at", "updated_at"])
+            continue
+        log, _created = EmailLog.objects.get_or_create(
+            campaign=campaign,
+            user_id=delivery.recipient_user_pk,
+            defaults={
+                "recipient_email": delivery.recipient_email,
+                "email_type": "campaign",
+                "subject": campaign.subject,
+                "ses_message_id": "",
+            },
+        )
+        delivery.state = CampaignDelivery.State.SENT
+        delivery.email_log = log
+        delivery.resolution = ""
+        delivery.resolved_at = None
+        delivery.completed_at = now
+        delivery.save(update_fields=[
+            "state", "email_log", "resolution", "resolved_at", "completed_at", "updated_at",
+        ])
+
+    campaign.relay_campaign_state = "queued"
+    campaign.relay_campaign_error = ""
+    campaign.save(update_fields=["relay_campaign_state", "relay_campaign_error"])
+    refresh_campaign_status(campaign.pk)
+    return {
+        "campaign_id": campaign.pk,
+        "batch_size": len(delivery_ids),
+        "sent_count": len(included_ids),
+        "skipped_count": len(delivery_ids) - len(included_ids),
+        "relay_campaign_key": external_key,
+        "relay_queued": bool(result.get("queued", True)),
+    }
+
+
+def _alert_legacy_quarantined_campaign_once(campaign_id):
+    """Persist the quarantine error and alert once when a stale task sees it."""
+    message = (
+        "Legacy in-flight campaign was quarantined because its pre-Relay send "
+        "state cannot be reconstructed. No recipients were sent by this task."
+    )
+    should_alert = False
+    with transaction.atomic():
+        campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
+        if (
+            campaign.status == "needs_attention"
+            and not campaign.relay_campaign_state
+            and not campaign.relay_campaign_error
+        ):
+            campaign.relay_campaign_error = message
+            campaign.save(update_fields=["relay_campaign_error"])
+            should_alert = True
+    if should_alert:
+        alert_relay_campaign_failure(
+            campaign,
+            "legacy quarantine",
+            RelayCampaignApiError(message),
+        )
+    return campaign
+
+
 def send_campaign(campaign_id, batch_size=None, released_by_id=None):
     """Atomically freeze the audience and create all one-off batch schedules."""
     from django_q.models import Schedule
@@ -168,6 +293,7 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
         if campaign.status == 'needs_attention':
             # Migration quarantine: the external state of a legacy in-flight
             # campaign cannot be reconstructed, so never manufacture work.
+            _alert_legacy_quarantined_campaign_once(campaign_id)
             return {
                 'campaign_id': campaign_id,
                 'total': 0,
@@ -180,13 +306,19 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
             # points claim before enqueue; the row lock still serializes any
             # duplicate parent tasks that predate that contract.
             campaign.status = 'sending'
+            campaign.relay_campaign_state = 'pending'
             campaign.sent_count = 0
             campaign.sent_at = None
-            campaign.save(update_fields=['status', 'sent_count', 'sent_at'])
+            campaign.save(update_fields=[
+                'status', 'sent_count', 'sent_at', 'relay_campaign_state',
+            ])
         elif campaign.status != 'sending':
             raise ValueError(
                 f"Campaign {campaign_id} has status '{campaign.status}', expected 'sending'"
             )
+        if not campaign.relay_campaign_state:
+            campaign.relay_campaign_state = 'pending'
+            campaign.save(update_fields=['relay_campaign_state'])
 
         is_monitored = (
             campaign.audience_verification
@@ -286,7 +418,8 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
         if is_monitored:
             from email_app.services.campaign_waves import release_initial_wave
 
-            campaign.save(update_fields=['audience_snapshotted_at'])
+            campaign.relay_campaign_state = 'pending'
+            campaign.save(update_fields=['audience_snapshotted_at', 'relay_campaign_state'])
             release_initial_wave(
                 waves[0],
                 actor_id=released_by_id,
@@ -301,17 +434,11 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
                 'status': 'sending',
             }
 
-        chunks = list(_chunk(delivery_ids, batch_size))
-        interval = _get_batch_interval_seconds(batch_size)
+        chunks = [delivery_ids]
         for index, delivery_chunk in enumerate(chunks):
-            chunk_user_ids = list(
-                CampaignDelivery.objects.filter(pk__in=delivery_chunk)
-                .order_by('recipient_user_pk')
-                .values_list('recipient_user_pk', flat=True)
-            )
             task_name = build_task_name(
-                'Send campaign batch',
-                f'#{campaign_id} {campaign.subject} batch {index + 1}/{len(chunks)}',
+                'Queue Relay campaign',
+                f'#{campaign_id} {campaign.subject}',
                 'campaign fan-out',
             )
             Schedule.objects.create(
@@ -319,13 +446,10 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
                 func='email_app.tasks.send_campaign.send_campaign_batch',
                 schedule_type=Schedule.ONCE,
                 repeats=1,
-                next_run=snapshot_time + timedelta(seconds=index * interval),
+                next_run=snapshot_time,
                 kwargs={
                     'campaign_id': campaign_id,
                     'delivery_ids': delivery_chunk,
-                    # Retained for task-history readability and rolling-deploy
-                    # compatibility; delivery_ids is authoritative.
-                    'user_ids': chunk_user_ids,
                     'q_options': {'task_name': task_name},
                 },
             )
@@ -557,6 +681,7 @@ def send_campaign_batch(
     delivery_ids=None,
     user_ids=None,
     send_delay=None,
+    wave_id=None,
 ):
     """Process durable deliveries; legacy user-id schedules fail closed."""
     if send_delay is None:
@@ -565,6 +690,37 @@ def send_campaign_batch(
         campaign = EmailCampaign.objects.get(pk=campaign_id)
     except EmailCampaign.DoesNotExist as exc:
         raise ValueError(f'Campaign {campaign_id} not found') from exc
+
+    if campaign.relay_campaign_state:
+        return _queue_native_campaign_batch(
+            campaign,
+            delivery_ids or [],
+            wave_id=wave_id,
+        )
+    if campaign.status == "needs_attention":
+        _alert_legacy_quarantined_campaign_once(campaign_id)
+        logger.error(
+            "Refusing legacy campaign task without Relay campaign state campaign=%s",
+            campaign_id,
+        )
+        return {
+            "campaign_id": campaign_id,
+            "batch_size": 0,
+            "sent_count": 0,
+            "skipped_count": 0,
+            "failed_count": 0,
+            "ambiguous_count": 0,
+            "legacy_quarantined": True,
+        }
+    if not settings.TESTING:
+        error = RelayCampaignApiError(
+            "Campaign task has no native Relay campaign state; refusing transactional fallback."
+        )
+        campaign.relay_campaign_state = "failed"
+        campaign.relay_campaign_error = str(error)
+        campaign.save(update_fields=["relay_campaign_state", "relay_campaign_error"])
+        alert_relay_campaign_failure(campaign, "queue", error)
+        raise error
 
     if delivery_ids is None:
         delivery_ids = []
@@ -630,6 +786,7 @@ def send_campaign_batch(
     ):
         # A pre-deploy task may still be present in the ORM broker. Its SES
         # outcome is unknowable, so preserve the migration quarantine.
+        _alert_legacy_quarantined_campaign_once(campaign_id)
         return {
             'campaign_id': campaign_id,
             'batch_size': 0,

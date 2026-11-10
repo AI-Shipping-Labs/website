@@ -42,7 +42,11 @@ from email_app.services.campaign_recipients import (
     serialize_campaign_recipient,
     serialize_campaign_recipients,
 )
-from email_app.services.campaign_waves import campaign_wave_summary
+from email_app.services.campaign_waves import campaign_wave_summary, refresh_campaign_waves
+from email_app.services.relay_campaigns import (
+    RelayCampaignError,
+    refresh_campaign_relay_stats_loud,
+)
 from events.models import Event
 
 READ_ONLY_FIELDS = {
@@ -204,6 +208,7 @@ def campaign_recipient_count(request):
 
 
 def _serialize_campaign(campaign):
+    relay_stats = campaign.relay_campaign_stats
     return {
         "id": campaign.pk,
         "subject": campaign.subject,
@@ -219,6 +224,16 @@ def _serialize_campaign(campaign):
         "is_archived": campaign.is_archived,
         "sent_at": isoformat_or_none(campaign.sent_at),
         "sent_count": campaign.sent_count,
+        "relay_campaign_state": campaign.relay_campaign_state or "not_queued",
+        "relay_campaign_error": campaign.relay_campaign_error,
+        "relay_stats_available": isinstance(relay_stats, dict),
+        "relay_stats_status": (
+            "available" if isinstance(relay_stats, dict)
+            else "legacy_unavailable" if campaign.status == "sent"
+            else "not_available"
+        ),
+        "relay_stats": relay_stats,
+        "relay_stats_synced_at": isoformat_or_none(campaign.relay_campaign_stats_synced_at),
         "scheduled_at": isoformat_or_none(campaign.scheduled_at),
         "scheduled_timezone": campaign.scheduled_timezone,
         "audience_snapshotted_at": isoformat_or_none(campaign.audience_snapshotted_at),
@@ -485,10 +500,19 @@ def campaigns_collection(request):
                 return validation_response({"archived": "Must be a boolean."})
             qs = qs.filter(is_archived=archived)
 
-        return JsonResponse(
-            {"campaigns": [_serialize_campaign(c) for c in qs]},
-            status=200,
-        )
+        campaigns = list(qs)
+        for campaign in campaigns:
+            if campaign.relay_campaign_keys or campaign.relay_campaign_key:
+                try:
+                    refresh_campaign_relay_stats_loud(campaign)
+                except RelayCampaignError as exc:
+                    return error_response(
+                        "Relay campaign stats are unavailable.",
+                        "relay_campaign_stats_unavailable",
+                        status=502,
+                        details={"campaign_id": campaign.pk, "error": str(exc)},
+                    )
+        return JsonResponse({"campaigns": [_serialize_campaign(c) for c in campaigns]}, status=200)
 
     # POST: create a draft. ``status`` in the body is silently overwritten to
     # "draft" (NOT 422) so automation that round-trips the detail JSON keeps
@@ -611,6 +635,17 @@ def campaign_detail(request, campaign_id):
         campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
         if campaign is None:
             return _campaign_not_found()
+        if campaign.relay_campaign_keys or campaign.relay_campaign_key:
+            try:
+                refresh_campaign_relay_stats_loud(campaign)
+            except RelayCampaignError as exc:
+                return error_response(
+                    "Relay campaign stats are unavailable.",
+                    "relay_campaign_stats_unavailable",
+                    status=502,
+                    details={"error": str(exc)},
+                )
+            campaign.refresh_from_db()
         return JsonResponse(_serialize_campaign(campaign), status=200)
 
     # PATCH
@@ -843,8 +878,19 @@ def campaign_waves(request, campaign_id):
             "not_monitored_campaign",
             status=409,
         )
+    if campaign.relay_campaign_keys:
+        try:
+            refresh_campaign_waves(campaign.pk)
+        except Exception as exc:
+            return error_response(
+                "Relay campaign wave stats are unavailable.",
+                "relay_campaign_stats_unavailable",
+                status=502,
+                details={"error": str(exc)},
+            )
+        campaign.refresh_from_db()
     return JsonResponse(
-        _serialize_wave_summary(campaign_wave_summary(campaign)),
+        _serialize_wave_summary(campaign_wave_summary(campaign, refresh=False)),
         status=200,
     )
 

@@ -16,6 +16,10 @@ from payments import services as _services
 from payments.models import WebhookEvent
 
 
+class WebhookSecretNotConfigured(ValueError):
+    """Raised when Stripe signatures cannot be verified due to missing config."""
+
+
 def verify_webhook_signature(payload, sig_header):
     """Verify a Stripe webhook signature.
 
@@ -31,6 +35,10 @@ def verify_webhook_signature(payload, sig_header):
         ValueError: If the payload is invalid.
     """
     webhook_secret = _services.get_config("STRIPE_WEBHOOK_SECRET", "")
+    if not (webhook_secret or "").strip():
+        raise WebhookSecretNotConfigured(
+            "Stripe webhook signing secret is not configured."
+        )
     event = _services.stripe.Webhook.construct_event(
         payload, sig_header, webhook_secret,
     )

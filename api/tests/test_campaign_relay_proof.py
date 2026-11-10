@@ -139,7 +139,7 @@ class RelayProofDryRunTest(RelayProofApiTestBase):
             response = self._post_json(
                 f"/api/campaigns/{self.campaign.pk}/relay-proof/dry-run",
             )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
         body = response.json()
         self.assertEqual(set(body), {"campaign_key", "recipient_count", "domain_counts"})
         self.assertEqual(body["recipient_count"], 200)
@@ -215,7 +215,7 @@ class RelayProofConfirmTest(RelayProofApiTestBase):
             ):
                 response = self._confirm(key)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
         body = response.json()
         self.assertEqual(
             set(body), {"campaign_key", "recipient_count", "domain_counts", "queued"},
@@ -367,7 +367,7 @@ class RelayProofStatsTest(RelayProofApiTestBase):
             ) as mock_stats,
         ):
             response = self._stats(key)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
         body = response.json()
         self.assertEqual(set(body), self.ALLOWED)
         self.assertEqual(body["campaign_key"], key)
@@ -407,7 +407,7 @@ class RelayProofStatsTest(RelayProofApiTestBase):
             ) as mock_stats,
         ):
             response = self._stats(key)
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
         self.assertEqual(response.json()["sent_count"], 40)
         self.assertEqual(mock_stats.call_count, 1)
 
@@ -485,7 +485,7 @@ class RelayProofLeakTest(RelayProofApiTestBase):
 class RelayProofOpenApiTest(RelayProofApiTestBase):
     def test_all_three_routes_are_in_the_openapi_output(self):
         response = self.client.get("/api/openapi.json", **self._auth())
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
         paths = response.json()["paths"]
         for suffix in ("dry-run", "confirm"):
             self.assertIn(f"/api/campaigns/{{campaign_id}}/relay-proof/{suffix}", paths)

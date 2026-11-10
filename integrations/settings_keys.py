@@ -173,6 +173,7 @@ _KEY_ORDER = {
         "RELAY_UNSUBSCRIBE_EMAIL",
         "EMAIL_BATCH_SIZE", "CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
         "CAMPAIGN_BATCH_INTERVAL_SECONDS", "CAMPAIGN_TEST_RECIPIENTS",
+        "RELAY_CAMPAIGN_STALL_TIMEOUT_MINUTES",
         "RECORDING_AVAILABLE_SUBJECT_TEMPLATE", "RECORDING_AVAILABLE_BODY_TEMPLATE",
     ),
     "site": (
@@ -729,12 +730,23 @@ CAMPAIGN_TEST_RECIPIENTS = declare(
     key="CAMPAIGN_TEST_RECIPIENTS",
     group="relay",
     label="Campaign Test Recipients",
-    description="Common addresses suggested in Studio test-send chips. The explicit Relay bulk tracking proof command also reads this list, but requires a reviewed dry-run key and 200–500 unique addresses at internal AI Shipping Labs/DataTalksClub domains or their subdomains, or reserved test domains; it never resolves the campaign audience. Leave blank to disable the bulk proof path.",
+    description="Common addresses suggested in Studio test-send chips. The Relay bulk tracking proof (management command, or the staff API and `asl campaigns relay-proof`) also reads this list, but requires a reviewed dry-run key and 200–500 unique addresses at internal AI Shipping Labs/DataTalksClub domains or their subdomains, or reserved test domains; it never resolves the campaign audience. Leave blank to disable the bulk proof path.",
     value_type="str",
     default="",
     secret=False,
     optional=True,
     docs_url="_docs/integrations/relay.md#campaign_test_recipients",
+)
+RELAY_CAMPAIGN_STALL_TIMEOUT_MINUTES = declare(
+    key="RELAY_CAMPAIGN_STALL_TIMEOUT_MINUTES",
+    group="relay",
+    label="Relay Campaign Stall Timeout (minutes)",
+    description="Minutes a native Relay campaign may go without progress before the watchdog marks it Needs attention and alerts operators. Default 30; invalid, zero, or negative overrides fall back to 30.",
+    value_type="int",
+    default="30",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/relay.md#relay_campaign_stall_timeout_minutes",
 )
 RECORDING_AVAILABLE_SUBJECT_TEMPLATE = declare(
     key="RECORDING_AVAILABLE_SUBJECT_TEMPLATE",

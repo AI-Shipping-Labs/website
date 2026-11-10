@@ -1,8 +1,10 @@
 """Campaign dispatch API: schedule, unschedule, send, and test-send.
 
 Draft authoring lives in ``api/views/campaigns.py`` (which must never touch
-the send path — a sentinel test enforces that). This module is the one
-sanctioned API surface for crossing the send boundary:
+the send path — a sentinel test enforces that). This module is the
+sanctioned API surface for crossing the send boundary to a campaign audience
+(``api/views/campaign_relay_proof.py`` owns the guarded internal-list proof,
+which never reaches the audience):
 
 - ``POST /api/campaigns/<id>/schedule``   — set/replace the send time.
 - ``POST /api/campaigns/<id>/unschedule`` — clear it.

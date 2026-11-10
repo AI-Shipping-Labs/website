@@ -2474,6 +2474,174 @@
         ]
       }
     },
+    "/api/campaigns/{campaign_id}/relay-proof/confirm": {
+      "post": {
+        "description": "Queues the proof to the configured internal list only. The key must come from dry-run and the list must be unchanged.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "campaign_key": "aishl-test-17-<nonce>-<signature>"
+              },
+              "schema": {
+                "properties": {
+                  "campaign_key": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_key": "aishl-test-17-<nonce>-<signature>",
+                  "domain_counts": {
+                    "dtcdev.click": 200
+                  },
+                  "queued": true,
+                  "recipient_count": 200
+                }
+              }
+            },
+            "description": "The proof was queued."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "This key was already used at Relay."
+          },
+          "422": {
+            "description": "Missing key, or a proof guard refused it."
+          },
+          "502": {
+            "description": "Relay failed while queueing."
+          }
+        },
+        "summary": "Queue the Relay bulk proof with a reviewed dry-run key",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/relay-proof/dry-run": {
+      "post": {
+        "description": "Checks ``CAMPAIGN_TEST_RECIPIENTS`` (200-500 unique addresses on the internal allowlist) without calling Relay. Returns only the signed key, the count, and per-domain counts.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_key": "aishl-test-17-<nonce>-<signature>",
+                  "domain_counts": {
+                    "dtcdev.click": 200
+                  },
+                  "recipient_count": 200
+                }
+              }
+            },
+            "description": "The reviewed proof plan."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "422": {
+            "description": "A proof guard refused the request."
+          }
+        },
+        "summary": "Validate the Relay bulk proof list and issue a signed key",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/relay-proof/{campaign_key}": {
+      "get": {
+        "description": "Accepts only an ``aishl-test-<id>-...`` key for this campaign and returns an explicit field allowlist. Relay has no start timestamp, so compute msg/s from ``sent_count``, ``created_at``, ``updated_at``, and ``sent_at``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "campaign_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_key": "aishl-test-17-<nonce>-<signature>",
+                  "recipient_count": 200,
+                  "sent_at": null,
+                  "sent_count": 120,
+                  "status": "sending"
+                }
+              }
+            },
+            "description": "Allowlisted Relay campaign fields."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Unknown campaign, or no such Relay campaign."
+          },
+          "422": {
+            "description": "Key is not a proof key for this campaign."
+          },
+          "502": {
+            "description": "Relay failed while reading stats."
+          }
+        },
+        "summary": "Read Relay delivery stats for a bulk proof key",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/campaigns/{campaign_id}/schedule": {
       "post": {
         "description": "Sets the dispatch time on a draft campaign. The server claims and sends the campaign at that time via the every-minute scheduled dispatcher; the schedule is cleared when the send is claimed (by the dispatcher or a manual Studio send). ``scheduled_at`` accepts an ISO 8601 datetime; a naive value is interpreted in ``scheduled_timezone`` (required then), an aware value may carry ``scheduled_timezone`` for display when the offset matches. Rescheduling an already-scheduled draft simply overwrites the fields.",

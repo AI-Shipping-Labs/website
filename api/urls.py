@@ -42,6 +42,11 @@ from api.views.call_profiles import (
     call_profile_detail,
     call_profiles_collection,
 )
+from api.views.campaign_relay_proof import (
+    campaign_relay_proof_confirm,
+    campaign_relay_proof_dry_run,
+    campaign_relay_proof_stats,
+)
 from api.views.campaign_scheduling import (
     campaign_schedule,
     campaign_send,
@@ -529,6 +534,21 @@ urlpatterns = [
         name="api_campaign_waves",
     ),
     # ---- Campaign dispatch actions (schedule/unschedule/send/test-send) --
+    path(
+        "campaigns/<int:campaign_id>/relay-proof/dry-run",
+        campaign_relay_proof_dry_run,
+        name="api_campaign_relay_proof_dry_run",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/relay-proof/confirm",
+        campaign_relay_proof_confirm,
+        name="api_campaign_relay_proof_confirm",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/relay-proof/<str:campaign_key>",
+        campaign_relay_proof_stats,
+        name="api_campaign_relay_proof_stats",
+    ),
     path(
         "campaigns/<int:campaign_id>/schedule",
         campaign_schedule,

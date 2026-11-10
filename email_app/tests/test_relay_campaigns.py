@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 from django.contrib.auth import get_user_model
+from django.core.cache import caches
 from django.core.management import call_command
 from django.test import TestCase, override_settings, tag
 from django.urls import reverse
@@ -32,6 +33,10 @@ User = get_user_model()
 class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
+        # The 60-minute alert cooldown lives in the django_q cache; campaign
+        # pks repeat across rolled-back tests, so a stale entry would silence
+        # the delivery assertions below.
+        caches["django_q"].clear()
         self.user = create_user_with_membership(
             email=f"recipient-{uuid.uuid4().hex[:8]}@test.com",
             tier=self.free_tier,
@@ -401,7 +406,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         )
         self.assertEqual(mock_post.call_args.kwargs["json"]["email"], "dev@dtcdev.click")
 
-    @patch("email_app.services.relay_campaigns.send_mail", side_effect=RuntimeError("alert unavailable"))
+    @patch("email_app.services.relay_campaign_alerts.send_mail", side_effect=RuntimeError("alert unavailable"))
     def test_failure_alert_does_not_mask_original_error(self, _mock_send_mail):
         original = RelayCampaignApiError("Relay request timed out")
 
@@ -410,7 +415,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(str(original), "Relay request timed out")
 
     @patch(
-        "email_app.services.relay_campaigns.send_mail",
+        "email_app.services.relay_campaign_alerts.send_mail",
         side_effect=RuntimeError("alert unavailable"),
     )
     @patch(

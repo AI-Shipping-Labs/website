@@ -16,6 +16,10 @@ from asl_cli.commands._shared import (
     get_client,
 )
 from asl_cli.commands.campaigns_read import campaigns_recipients, campaigns_waves
+from asl_cli.commands.campaigns_relay_proof import (
+    campaigns_relay_proof,
+    campaigns_relay_proof_stats,
+)
 
 API = "/api"
 
@@ -283,5 +287,7 @@ def campaigns_test_send(campaign_id, recipient, fmt):
 
 campaigns.add_command(campaigns_recipients)
 campaigns.add_command(campaigns_waves)
+campaigns.add_command(campaigns_relay_proof)
+campaigns.add_command(campaigns_relay_proof_stats)
 
 groups = [campaigns]

@@ -1,4 +1,5 @@
-FROM node:24-slim AS css-builder
+# Multi-platform OCI digests verified on 2026-11-10.
+FROM node:24-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS css-builder
 
 WORKDIR /app
 
@@ -12,7 +13,7 @@ COPY . .
 RUN npm run css:build
 
 
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
 ARG VERSION=""
 ENV VERSION=${VERSION}
@@ -25,12 +26,17 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
 
+# The application only reads files under /app at runtime. Run it without root
+# privileges; writable runtime state belongs in /tmp or external services.
+RUN adduser --system --group --home /home/app app
+
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
 
 # Install Python deps (cached layer)
 COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --frozen
+RUN chown -R app:app /app/.venv
 
 # Copy application code
 COPY . .
@@ -39,8 +45,13 @@ COPY --from=css-builder /app/static/css/tailwind.css /app/static/css/tailwind.cs
 # Collect static files with the same storage backend used at runtime.
 RUN DEBUG=False SECRET_KEY=collectstatic-build-secret ALLOWED_HOSTS=localhost \
     uv run python manage.py collectstatic --noinput
+RUN chown -R app:app /app/staticfiles
 
 RUN chmod +x entrypoint.sh
+
+ENV PATH="/app/.venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1
+USER app:app
 
 EXPOSE 8000
 

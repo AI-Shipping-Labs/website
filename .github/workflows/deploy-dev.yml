@@ -10,10 +10,6 @@ on:
       - ".prod-versions"
       - "*.md"
 
-concurrency:
-  group: deploy-dev-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   # One-time deploy gates (#888): these are independent of the test suite and
   # must NOT be duplicated across every test shard. They run once here while the
@@ -23,6 +19,12 @@ jobs:
     name: Deploy Gates (migrations / OpenAPI / system check / static)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DEBUG: "0"
+      SECRET_KEY: ci-django-only-not-a-real-secret
+    concurrency:
+      group: deploy-dev-validation-${{ github.ref }}-checks
+      cancel-in-progress: true
 
     steps:
       - name: Start CI timing profile
@@ -184,6 +186,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
       TEST_SHARD_COUNT: "4"
       TEST_SHARD_INDEX: ${{ matrix.shard }}
     # Per-shard #269 hang safety net. Hash sharding is uneven: shard 2 ran
@@ -192,6 +196,9 @@ jobs:
     # django-q-hang blast radius far below the old ~1h40m worst case; the
     # imbalance itself is tracked separately.
     timeout-minutes: 30
+    concurrency:
+      group: deploy-dev-validation-${{ github.ref }}-test-${{ matrix.shard }}
+      cancel-in-progress: true
 
     steps:
       - name: Start CI timing profile
@@ -397,6 +404,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test]
     timeout-minutes: 10
+    concurrency:
+      group: deploy-dev-validation-${{ github.ref }}-coverage
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
@@ -430,6 +440,9 @@ jobs:
     name: PostgreSQL 16 Verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    concurrency:
+      group: deploy-dev-validation-${{ github.ref }}-postgres-verification
+      cancel-in-progress: true
     services:
       postgres:
         image: postgres:16
@@ -446,7 +459,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_r1_test
-      SECRET_KEY: ci-postgres-verification-only
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -477,6 +491,12 @@ jobs:
     # matrix entry, while the marker expression keeps the selected test
     # semantics identical to the former single job.
     timeout-minutes: 30
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
+    concurrency:
+      group: deploy-dev-validation-${{ github.ref }}-playwright-core-${{ matrix.shard_index }}
+      cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
@@ -551,6 +571,9 @@ jobs:
     name: Deploy to Dev
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     # #888/#1425/#1512: deploy gates on every Django and Playwright test shard
     # plus the one-time `checks`, PostgreSQL, and combined coverage jobs. A
     # `needs` array entry only succeeds when ALL of a matrix job's shards

@@ -71,6 +71,9 @@ jobs:
     if: needs.changes.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
     strategy:
       fail-fast: false
       matrix:
@@ -158,6 +161,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.include_excluded && needs.changes.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
 
     steps:
       - name: Checkout code
@@ -198,6 +204,9 @@ jobs:
     # generous safety margin. No Playwright browser install is needed — this
     # is a pure `manage.py test` Django leg.
     timeout-minutes: 15
+    env:
+      DEBUG: "1"
+      SECRET_KEY: ci-django-only-not-a-real-secret
 
     steps:
       - name: Checkout code

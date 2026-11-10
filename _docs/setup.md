@@ -53,15 +53,40 @@ The app runs on Contabo Coolify (`https://coolify.169.58.119.163.sslip.io`) behi
 | Coolify Rolling Web App | `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) — public production web routes |
 | Image Registry | `ghcr.io/ai-shipping-labs/website` (`deploy-<run_id>-<attempt>-<40-char-sha>`) |
 | Networks | `coolify` (PostgreSQL DNS/connectivity) and `mekt9kz74fvbixla6olinuma` (Service UUID / Traefik) |
-| Dev URL | https://dev.aishippinglabs.com (Traefik file-provider route to `web-mekt9kz74fvbixla6olinuma:8000`; see [`coolify-dev-route.md`](coolify-dev-route.md)) |
+| Dev URL | https://dev.aishippinglabs.com (authenticated Traefik file-provider route to `dev-web-mekt9kz74fvbixla6olinuma:8000`; see [`coolify-dev-route.md`](coolify-dev-route.md)) |
 | Prod URL | https://aishippinglabs.com |
 | AWS Region (S3 / SES / Secrets Manager) | `eu-west-1` |
 
-Three runtime containers run from the same GHCR Docker image (`scripts/entrypoint_init.py`):
+Four runtime containers run from the same GHCR Docker image (`scripts/entrypoint_init.py`):
 
 - `web-mekt9kz74fvbixla6olinuma` (`aisl-staging` Service `web`) — sole migrator (`RUN_MIGRATIONS=true`, `BOOT_MODE` unset), runs `manage.py migrate`, R1 reconciliation/schedule suppression, and `setup_schedules`, then starts Gunicorn
 - `worker-mekt9kz74fvbixla6olinuma` (`aisl-staging` Service `worker`) — background worker (`BOOT_MODE=worker`, `RUN_MIGRATIONS=false`), skips `migrate`, runs R1 reconciliation/schedule suppression and `setup_schedules`, then starts Django-Q2 `qcluster`
+- `dev-web-mekt9kz74fvbixla6olinuma` (`aisl-staging` Service `dev-web`) — isolated authenticated DEV server (`AISL_DATABASE_NAME=aisl_dev`, `RUN_MIGRATIONS=true`, `BOOT_MODE` unset), migrates only `aisl_dev`, and runs one Gunicorn worker with two threads
 - `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) — public rolling web (`BOOT_MODE=web`, `RUN_MIGRATIONS=false`), skips `migrate`, runs R1 reconciliation/schedule suppression and `setup_schedules`, then starts Gunicorn behind `/opt/rolling-launch.py`
+
+The shared PostgreSQL budget is 100 connections. The current public web
+baseline is 2 workers x 4 threads (8 slots); with 8 source-web slots, 2
+dev-web slots, 2 worker connections, and 5 operational connections, that is
+25 AISL connections. A 2026-11-10 14:46 UTC sample observed 24 connections
+across the other databases, leaving 51 of 100 slots unused at that sample.
+
+The audited public target is 6 workers x 8 threads (48 slots), which would
+raise the AISL budget to 65 and leave 11 slots after the same observed other
+database usage. Keep the current baseline until the shared PostgreSQL owner
+confirms the peak budget or expands it; the sample is not a peak guarantee.
+
+Coolify also pins per-container resource ceilings. A read-only sample at
+2026-11-10 14:46 UTC showed public web at 398 MiB RSS, source web at 486 MiB,
+worker at 299 MiB, and 51 GiB host memory available. The configured limits
+leave room for the proposed 48-slot public Gunicorn pool and shared host
+services, subject to the database budget above:
+
+| Role | CPU limit | Memory limit | PID limit |
+|------|-----------|--------------|-----------|
+| Public web | 4 | 3 GiB | 512 |
+| Source web | 2 | 2 GiB | 256 |
+| Worker | 2 | 2 GiB | 256 |
+| Isolated dev web | 1 | 2 GiB | 128 |
 
 The `email_app` migration `0013_create_django_q_cache_table` creates the `django_q_cache` `DatabaseCache` table as part of `migrate`, so it is applied automatically on every deployment without a separate `createcachetable` step on every container boot.
 
@@ -80,10 +105,11 @@ Set in the Coolify Service/Application environment or image build:
 | `ALLOWED_HOSTS` | `dev.aishippinglabs.com,aishippinglabs.com` | Comma-separated list of allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | `https://dev.aishippinglabs.com,https://aishippinglabs.com` | Required for POST requests (login, forms) to work over HTTPS |
 | `SITE_BASE_URL` | `https://aishippinglabs.com` | Process-start baseline for absolute URLs. Runtime URL generation can be overridden in Studio > Settings > Site. |
-| `BOOT_MODE` | unset on source `web`, `worker` on source `worker`, `web` on rolling `web` | Entrypoint role selector (`scripts/entrypoint_init.py`). `web` and `worker` skip `migrate` on boot; when unset, `RUN_MIGRATIONS` selects web-migrator vs worker. |
-| `RUN_MIGRATIONS` | `true` on source `web`, `false` on `worker` and rolling `web` | Entrypoint migration flag. Only the source `web` container runs `migrate`. Set by the Coolify topology (`deploy/coolify/topology.py`). |
+| `BOOT_MODE` | unset on source `web` and `dev-web`, `worker` on source `worker`, `web` on rolling `web` | Entrypoint role selector (`scripts/entrypoint_init.py`). `web` and `worker` skip `migrate` on boot; when unset, `RUN_MIGRATIONS` selects whether that container migrates. |
+| `RUN_MIGRATIONS` | `true` on source `web` and `dev-web`, `false` on `worker` and rolling `web` | Entrypoint migration flag. Source `web` migrates `aisl`; isolated `dev-web` migrates `aisl_dev`. Set by the Coolify topology (`deploy/coolify/topology.py`). |
+| `AISL_DATABASE_NAME` | `aisl_dev` on `dev-web`; unset elsewhere | Restricts the DEV runtime to the existing `aisl_dev` database. Django rejects other override values and SQLite. |
 | `SERVING_BOOT_SMOKE_CHECK_ENABLED` | `false` on source Service | Controls the pre-Django raw-env smoke check in `scripts/entrypoint_init.py` (defaults to `true` when unset). |
-| `GUNICORN_WORKERS` / `GUNICORN_THREADS` | `2` / `4` | Gunicorn worker and thread counts for `scripts/gunicorn_runtime.py`. |
+| `GUNICORN_WORKERS` / `GUNICORN_THREADS` | `2` / `4` on public web and source web; `1` / `2` on dev-web | Current safe Gunicorn sizing per role. Keep public web at 8 slots until the shared PostgreSQL owner approves or expands capacity; the audited target is 6 / 8. |
 | `RELAY_BASE_URL` / `RELAY_API_KEY` | configured in prod | Required so transactional/campaign email deliver through Relay. Missing values fail `manage.py check` when `DEBUG=False`. |
 | `S3_ENABLED` | `true` in prod | Uploads content-sync images to S3. Defaults true — a missing var resolves to true so uploads run; content sync only skips image upload when the flag is explicitly `false` (or under `TESTING`). Keep it `true` in prod so uploads never depend on the default drifting. |
 | `SLACK_ENABLED` | `true` where the Slack bot/imports should run | Startup gate. Studio also has Slack settings, but if this env var is false, Slack token/channel settings are blanked at import time. |
@@ -262,13 +288,15 @@ argv (or `/opt/rolling-launch.py` on the rolling web Application), and
 `BOOT_MODE` / `RUN_MIGRATIONS` dispatch stays in `scripts/entrypoint_init.py`.
 
 For the Coolify runtime, the same GHCR Docker image runs the source `web`
-migrator, the source `worker`, and the rolling public `web` container. A
+migrator, the source `worker`, the isolated `dev-web`, and the rolling public
+`web` container. A
 disposable Node build stage installs the npm lockfile and compiles minified
 CSS; only that bundle is copied into the Python image before `collectstatic`
 fingerprints and creates gzip/Brotli variants. Node, npm, `node_modules`, and
 Tailwind are absent from the runtime image. `scripts/entrypoint_init.py`
 imports Django once, applies migrations only when `RUN_MIGRATIONS=true` on the
-source `web` container, runs R1 reconciliation and schedule registration, then
+source `web` and `dev-web` containers (each targets its own database), runs R1
+reconciliation and schedule registration, then
 starts gunicorn for web containers or `qcluster` for the worker container.
 
 After a fresh setup or deploy, manually reconcile recurring jobs when needed:
@@ -296,7 +324,7 @@ The response body is the deployed `VERSION` tag.
 
 Two GitHub Actions workflows handle deployment and production release attestation:
 
-- `deploy-dev.yml` — runs all validation gates, then builds one exact-head GHCR image and deploys the split Coolify runtime (`aisl-staging` source web and worker followed by `aishl-production-rolling-web`). Triggers automatically on push to `main`; [`coolify-deployment.md`](coolify-deployment.md) owns its target and verification contract.
+- `deploy-dev.yml` — runs all validation gates, then builds one exact-head GHCR image and deploys the split Coolify runtime (`aisl-staging` source web, worker, and isolated dev-web followed by `aishl-production-rolling-web`). Triggers automatically on push to `main`; [`coolify-deployment.md`](coolify-deployment.md) owns its target and verification contract.
 - `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox (`confirmProdDeploy`). Runs `deploy.coolify.attest_production` to attest that the green `Deploy Dev` release is running and healthy across both Coolify resources without restarting containers, then verifies production sitemap and robots. Uses `concurrency.group` `production-coolify-attestation` with `cancel-in-progress: false`.
 
 Both workflows use the `coolify-staging` GitHub environment documented in [`coolify-deployment.md`](coolify-deployment.md).
@@ -329,10 +357,10 @@ Keep the expanded schema and follow [`expand-contract-releases.md`](expand-contr
 For read-only incident diagnostics against the Coolify runtime:
 
 1. Check `https://aishippinglabs.com/ping` and `https://dev.aishippinglabs.com/ping`.
-2. Run `uv run python deploy/coolify/verify_dual_runtime.py` to inspect `web-mekt9kz74fvbixla6olinuma` and `worker-mekt9kz74fvbixla6olinuma` container health, shared image identity, networks, and the worker's own-host heartbeat probe without exposing environment secrets.
+2. Run `uv run python deploy/coolify/verify_dual_runtime.py` to inspect source `web`, `worker`, and isolated `dev-web` health, shared image identity, networks, approved database names (`aisl` / `aisl_dev`), and the worker's own-host heartbeat probe without exposing environment secrets.
 3. Query `uv run asl raw GET /api/diagnostics/boot-timing`, `uv run asl raw GET /api/diagnostics/schedules`, and `uv run asl worker failed-tasks` for application boot and worker state.
 
-To roll back to a prior known-good immutable GHCR release (`ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<40-char-sha>`), either push a revert commit to `main` so `Deploy Dev` builds and rolls out the revert, or re-promote the prior image, digest, and 40-character SHA through `uv run python -m deploy.coolify.deploy_exact_release` as documented in [`coolify-deployment.md`](coolify-deployment.md#emergency-rollback). That helper updates both `web` and `worker` in Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, verifies fresh `boot-timing` evidence and `running:healthy` on both roles, and then updates Application `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) and requires three consecutive matching `/ping` probes on production and DEV. Do not treat `https://aishippinglabs.com/ping` alone as worker recovery proof; `/ping` only observes web.
+To roll back to a prior known-good immutable GHCR release (`ghcr.io/ai-shipping-labs/website:deploy-<run_id>-<attempt>-<40-char-sha>`), either push a revert commit to `main` so `Deploy Dev` builds and rolls out the revert, or re-promote the prior image, digest, and 40-character SHA through `uv run python -m deploy.coolify.deploy_exact_release` as documented in [`coolify-deployment.md`](coolify-deployment.md#emergency-rollback). That helper updates `web`, `worker`, and `dev-web` in Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, verifies fresh `boot-timing` evidence for `web`/`worker` and `running:healthy` for all three roles, and then updates Application `aishl-production-rolling-web` (`w3mxfr6wzjnpg3hqaw3y0obq`) and requires three consecutive matching `/ping` probes on production and DEV. Do not treat `https://aishippinglabs.com/ping` alone as worker recovery proof; `/ping` only observes web.
 
 ### Canonical-host redirect verification
 

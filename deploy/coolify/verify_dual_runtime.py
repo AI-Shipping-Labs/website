@@ -59,11 +59,21 @@ def verify_health(container, observed_at, max_age):
 
 def verify_role(container, role):
     environment = container.get("environment", {})
+    expected_database = "aisl_dev" if role == "dev-web" else "aisl"
+    if container.get("database_name") != expected_database:
+        raise VerificationError(f"{role} database target is not isolated as expected")
     if role == "worker":
         if environment.get("BOOT_MODE") != "worker" or environment.get("RUN_MIGRATIONS") != "false":
             raise VerificationError("Worker boot or migration mode changed")
         if container.get("worker_heartbeat_probe") is not True:
             raise VerificationError("Worker lacks the approved own-host heartbeat probe")
+    elif role == "dev-web":
+        if (
+            environment.get("BOOT_MODE")
+            or environment.get("RUN_MIGRATIONS") != "true"
+            or environment.get("AISL_DATABASE_NAME") != "aisl_dev"
+        ):
+            raise VerificationError("Dev web must migrate and serve only aisl_dev")
     elif environment.get("BOOT_MODE") or environment.get("RUN_MIGRATIONS") != "true":
         raise VerificationError("Source web must retain legacy Gunicorn migration ownership")
     if not {SOURCE_UUID, "coolify"}.issubset(container.get("networks", [])):
@@ -73,21 +83,31 @@ def verify_role(container, role):
 def verify_snapshot(snapshot, expected_image=None, max_age=90):
     observed = timestamp(snapshot.get("generated_at"))
     inventory = snapshot.get("containers", [])
-    expected_names = {f"web-{SOURCE_UUID}", f"worker-{SOURCE_UUID}"}
-    if len(inventory) != 2 or {c.get("name") for c in inventory} != expected_names:
-        raise VerificationError("Source inventory must contain exactly web and worker; orphan or missing container")
+    expected_names = {
+        f"web-{SOURCE_UUID}",
+        f"worker-{SOURCE_UUID}",
+        f"dev-web-{SOURCE_UUID}",
+    }
+    if len(inventory) != 3 or {c.get("name") for c in inventory} != expected_names:
+        raise VerificationError(
+            "Source inventory must contain exactly web, worker, and isolated dev-web"
+        )
     images = set()
     image_ids = set()
     summary = {}
     for container in inventory:
-        role = container["name"].split("-", 1)[0]
+        role = container["name"].removesuffix(f"-{SOURCE_UUID}")
         verify_health(container, observed, max_age)
         verify_role(container, role)
         images.add(immutable_image(container.get("image")))
         image_ids.add(container.get("image_id"))
-        summary[role] = {"id": container["id"][:12], "started_at": container["started_at"]}
+        summary[role] = {
+            "id": container["id"][:12],
+            "started_at": container["started_at"],
+            "database_name": container["database_name"],
+        }
     if len(images) != 1 or len(image_ids) != 1 or not next(iter(image_ids)):
-        raise VerificationError("Source web and worker do not share the exact image")
+        raise VerificationError("Source runtimes do not share the exact image")
     image = images.pop()
     if expected_image and image != expected_image:
         raise VerificationError("Source image differs from the expected release")

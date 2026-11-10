@@ -83,7 +83,8 @@ def write_summary(config, result):
         f"- Digest: `{config.digest}`\n",
         f"- Full revision: `{config.sha}`\n",
         f"- Application deployment: `{result.deployment_uuid}` (`finished`)\n",
-        "- Source Service: web and worker exact revision, `running:healthy`\n",
+        "- Source Service: web, worker, and isolated dev-web exact revision, `running:healthy`\n",
+        "- Database targets: source web/worker `aisl`, dev-web `aisl_dev`\n",
         "- Production and DEV `/ping`: three consecutive exact-revision responses each\n",
     ]
     lines.extend(source_receipt_lines(result.source_receipt))

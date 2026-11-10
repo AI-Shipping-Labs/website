@@ -93,6 +93,33 @@ and retain its private rollback copy. Never disable the shared poller.
 
 ## Emergency diagnostics
 
+### Runtime resource limits
+
+The release contract applies explicit CPU, memory, and PID limits to every
+AISL app container. The public application uses the Coolify resource fields;
+the source Service Compose uses per-role `cpus`, `mem_limit`, and `pids_limit`.
+The worker also has a 330-second stop grace to cover its task retry window.
+
+The configured values are public web 4 CPUs / 3 GiB / 512 PIDs, source web 2
+CPUs / 2 GiB / 256 PIDs, worker 2 CPUs / 2 GiB / 256 PIDs, and isolated dev
+web 1 CPU / 2 GiB / 128 PIDs. The 2026-11-10 14:46 UTC sample showed 398 MiB
+RSS for public web, 486 MiB for source web, 299 MiB for worker, and 51 GiB
+available host memory. Public Gunicorn remains at 2 workers x 4 threads (8
+slots). The proposed 6 x 8 target needs a shared PostgreSQL peak-budget
+confirmation: its 65 AISL connection budget plus 24 observed connections from
+other databases would leave 11 of 100 connections at that sample. Do not
+enable it until the shared database owner confirms or expands capacity.
+
+Inspect only the container resource fields after deployment; do not print the
+container environment because it contains secrets:
+
+```bash
+sudo docker inspect --format '{{.Name}} cpus={{.HostConfig.NanoCpus}} memory={{.HostConfig.Memory}} pids={{.HostConfig.PidsLimit}} stop={{.HostConfig.StopTimeout}}' <container-name>
+```
+
+`NanoCpus`, `Memory`, `PidsLimit`, and the worker `StopTimeout` must be
+nonzero and match the role table above.
+
 The retired AWS ECS emergency workflows (`prod-emergency-diagnostics.yml`,
 `prod-emergency-web-rollback.yml`, `prod-emergency-worker-rollback.yml`) were
 deleted because they targeted the retired `ai-shipping-labs` ECS cluster. Use
@@ -115,11 +142,14 @@ uv run python deploy/coolify/verify_dual_runtime.py
 
 Pass `--expected-image ghcr.io/ai-shipping-labs/website:<tag>` and
 `--expected-sha <40-char-sha>` when verifying a specific release. The helper
-confirms that `web-mekt9kz74fvbixla6olinuma` and
-`worker-mekt9kz74fvbixla6olinuma` are `running` and `healthy`, share one
+confirms that `web-mekt9kz74fvbixla6olinuma`,
+`worker-mekt9kz74fvbixla6olinuma`, and
+`dev-web-mekt9kz74fvbixla6olinuma` are `running` and `healthy`, share one
 immutable GHCR image, stay attached to `coolify` and `mekt9kz74fvbixla6olinuma`,
-and pass the worker's own-host Django-Q heartbeat probe within the last 90
-seconds.
+and target their approved databases: production `aisl` for `web`/`worker` and
+isolated `aisl_dev` for `dev-web`. The worker's own-host Django-Q heartbeat
+probe must pass within the last 90 seconds. The report includes only database
+names and never exposes `DATABASE_URL`.
 
 3. Inspect application-level boot timing, schedule reconciliation, and recent
    worker tasks through the authenticated production API (never print token
@@ -158,15 +188,15 @@ uv run python -m deploy.coolify.deploy_exact_release \
   --sha "<40-char-sha>"
 ```
 
-`deploy.coolify.deploy_exact_release` updates both `web` and `worker` in
-Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, waits for fresh
-`boot-timing` evidence and `running:healthy` on both source roles, and only then
-promotes Application `aishl-production-rolling-web`
+`deploy.coolify.deploy_exact_release` updates `web`, `worker`, and isolated
+`dev-web` in Service `aisl-staging` (`mekt9kz74fvbixla6olinuma`) first, waits
+for fresh `boot-timing` evidence from `web`/`worker` and `running:healthy` on
+all three source roles, and only then promotes Application `aishl-production-rolling-web`
 (`w3mxfr6wzjnpg3hqaw3y0obq`) and verifies three consecutive matching `/ping`
 responses on production and DEV.
 
-4. After the helper finishes, confirm both source containers and public `/ping`
-   match the restored release:
+4. After the helper finishes, confirm all three source containers and public
+   `/ping` match the restored release:
 
 ```bash
 uv run python deploy/coolify/verify_dual_runtime.py \

@@ -6,7 +6,21 @@ http:
       rule: Host(`dev.aishippinglabs.com`)
       entryPoints:
         - https
-      service: aisl-dev-source-web
+      priority: 10
+      middlewares:
+        - aisl-dev-noindex
+        - aisl-dev-auth
+      service: aisl-dev-web
+      tls:
+        certResolver: letsencrypt
+    aisl-dev-ping-https:
+      rule: Host(`dev.aishippinglabs.com`) && Path(`/ping`)
+      entryPoints:
+        - https
+      priority: 100
+      middlewares:
+        - aisl-dev-noindex
+      service: aisl-dev-web
       tls:
         certResolver: letsencrypt
     aisl-dev-http:
@@ -14,19 +28,31 @@ http:
       entryPoints:
         - http
       middlewares:
+        - aisl-dev-noindex
         - aisl-dev-redirect-https
-      service: aisl-dev-source-web
+      service: aisl-dev-web
   middlewares:
+    aisl-dev-noindex:
+      headers:
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow"
+    aisl-dev-auth:
+      basicAuth:
+        realm: "AISL dev"
+        users:
+          # Replace this externalized hash with the APR1 or bcrypt hash of
+          # the AISL_DEV_SITE_PASSWORD Actions secret before installing.
+          - "aisl-scheduled:__REPLACE_WITH_HASH_OF_AISL_DEV_SITE_PASSWORD__"
     aisl-dev-redirect-https:
       redirectScheme:
         scheme: https
         permanent: true
   services:
-    aisl-dev-source-web:
+    aisl-dev-web:
       loadBalancer:
         passHostHeader: true
         servers:
-          - url: http://web-mekt9kz74fvbixla6olinuma:8000
+          - url: http://dev-web-mekt9kz74fvbixla6olinuma:8000
         healthCheck:
           path: /ping
           hostname: dev.aishippinglabs.com

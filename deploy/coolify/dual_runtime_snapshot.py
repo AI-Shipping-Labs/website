@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 WORKER_PROBE = (
     'import os,socket; os.environ.setdefault("DJANGO_SETTINGS_MODULE","website.settings"); '
@@ -36,16 +37,24 @@ def sanitized_container(container):
     if logs:
         last = {"end": logs[-1].get("End"), "exit_code": logs[-1].get("ExitCode")}
     environment = {}
+    all_environment = {}
     for entry in config.get("Env", []):
         key, _, value = entry.partition("=")
-        if key in ("BOOT_MODE", "RUN_MIGRATIONS", "VERSION"):
+        all_environment[key] = value
+        if key in ("BOOT_MODE", "RUN_MIGRATIONS", "VERSION", "AISL_DATABASE_NAME"):
             environment[key] = value
+    override = all_environment.get("AISL_DATABASE_NAME")
+    url_database = urlsplit(all_environment.get("DATABASE_URL", "")).path.lstrip("/")
+    database_name = override or url_database
+    if database_name not in {"aisl", "aisl_dev"}:
+        database_name = "<unexpected>"
     return {
         "id": container["Id"], "name": container["Name"].lstrip("/"),
         "image": config["Image"], "image_id": container["Image"],
         "running": state.get("Running"), "status": state.get("Status"),
         "started_at": state.get("StartedAt"), "health": health.get("Status"),
         "last_healthcheck": last, "environment": environment,
+        "database_name": database_name,
         "networks": sorted(container["NetworkSettings"].get("Networks", {})),
         "worker_heartbeat_probe": config.get("Healthcheck", {}).get("Test") == [
             "CMD", "/app/.venv/bin/python", "-c", WORKER_PROBE,

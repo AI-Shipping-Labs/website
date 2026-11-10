@@ -882,13 +882,13 @@ class BrowserJourneyCollectionTests(SimpleTestCase):
 
 
             @browser_journey
-            def test_transient_nodeid_drift():
-                return None
+            def test_transient_nodeid_drift(page):
+                page.goto("drift-must-fail-before-proof")
 
 
             @browser_journey
-            def test_pyfunc_nodeid_drift():
-                return None
+            def test_pyfunc_nodeid_drift(page):
+                page.goto("pyfunc-drift-must-fail-before-proof")
             """,
             root_conftest="""
             import pytest
@@ -898,47 +898,56 @@ class BrowserJourneyCollectionTests(SimpleTestCase):
             def pytest_collection_finish(session):
                 yield
                 by_name = {item.name: item for item in session.items}
-                by_name["test_persistent_nodeid_drift"]._nodeid = "spoofed::persistent"
+                by_name["test_persistent_nodeid_drift"]._id = "spoofed::persistent"
 
 
             @pytest.hookimpl(hookwrapper=True, tryfirst=True)
             def pytest_runtest_call(item):
                 original_nodeid = item.nodeid
                 if item.name == "test_transient_nodeid_drift":
-                    item._nodeid = "spoofed::transient"
+                    item._id = "spoofed::transient"
                 try:
                     yield
                 finally:
-                    item._nodeid = original_nodeid
+                    item._id = original_nodeid
 
 
             @pytest.hookimpl(hookwrapper=True, trylast=True)
             def pytest_pyfunc_call(pyfuncitem):
                 original_nodeid = pyfuncitem.nodeid
                 if pyfuncitem.name == "test_pyfunc_nodeid_drift":
-                    pyfuncitem._nodeid = "spoofed::pyfunc"
+                    pyfuncitem._id = "spoofed::pyfunc"
                 try:
                     yield
                 finally:
-                    pyfuncitem._nodeid = original_nodeid
+                    pyfuncitem._id = original_nodeid
             """,
         )
 
         output = result.stdout + result.stderr
         self.assertNotEqual(result.returncode, 0, output)
-        original_nodeids = (
-            "playwright_tests/test_contract.py::test_persistent_nodeid_drift",
-            "playwright_tests/test_contract.py::test_transient_nodeid_drift",
-            "playwright_tests/test_contract.py::test_pyfunc_nodeid_drift",
-        )
-        for original in original_nodeids:
-            self.assertIn(original, output)
-        self.assertIn("3 failed", output)
-        self.assertTrue(
-            "policy state is bound to the stable pytest item identity" in output
-            or "passed without a successful real synchronous Playwright Page journey" in output,
-            output,
-        )
+        for original, spoofed in (
+            (
+                "playwright_tests/test_contract.py::test_persistent_nodeid_drift",
+                "spoofed::persistent",
+            ),
+            (
+                "playwright_tests/test_contract.py::test_transient_nodeid_drift",
+                "spoofed::transient",
+            ),
+            (
+                "playwright_tests/test_contract.py::test_pyfunc_nodeid_drift",
+                "spoofed::pyfunc",
+            ),
+        ):
+            self.assertIn(
+                f"Declared browser journey `{original}` changed node ID after completed collection "
+                f"to `{spoofed}`. Runtime policy state is bound to the stable pytest item identity",
+                output,
+            )
+        self.assertNotIn("passed without a successful real synchronous Playwright Page journey", output)
+        self.assertNotIn("drift-must-fail-before-proof", output)
+        self.assertNotIn("pyfunc-drift-must-fail-before-proof", output)
 
     def test_inactive_conditional_markers_execute_and_prove_the_local_lane(self):
         result = self.execute(

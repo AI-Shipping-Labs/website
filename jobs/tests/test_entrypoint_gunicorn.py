@@ -127,11 +127,12 @@ class StartGunicornTest(SimpleTestCase):
         )
         self.assertIn("%(D)s", log_format)
         self.assertIn("%(U)s", log_format)
+        self.assertIn("%(h)s", log_format)
+        self.assertIn("%(q)s", log_format)
+        self.assertIn("%(a)s", log_format)
         self.assertIn("x-request-id", log_format)
         self.assertIn("x-correlation-id", log_format)
-        self.assertNotIn("%(q)s", log_format)
         self.assertNotIn("%(r)s", log_format)
-        self.assertNotIn("%(h)s", log_format)
 
     def test_statement_timeout_is_applied_before_gunicorn_starts(self):
         order = self._start({"WEB_DB_STATEMENT_TIMEOUT_MS": "7000"})

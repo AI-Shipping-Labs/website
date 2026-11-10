@@ -431,6 +431,29 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertIn("Relay request timed out", self.campaign.relay_campaign_error)
 
     @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
+    @patch(
+        "email_app.tasks.send_campaign.queue_native_campaign",
+        side_effect=RelayCampaignApiError("Relay request timed out after 30s"),
+    )
+    def test_native_queue_failure_marks_campaign_needs_attention_and_alerts(
+        self, mock_queue, mock_alert,
+    ):
+        self.campaign.relay_campaign_state = "pending"
+        self.campaign.save(update_fields=["relay_campaign_state"])
+
+        with self.assertRaisesRegex(RelayCampaignApiError, "timed out after 30s"):
+            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk])
+
+        self.campaign.refresh_from_db()
+        self.delivery.refresh_from_db()
+        self.assertEqual(self.campaign.status, "needs_attention")
+        self.assertEqual(self.campaign.relay_campaign_state, "failed")
+        self.assertIn("timed out after 30s", self.campaign.relay_campaign_error)
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
+        mock_queue.assert_called_once()
+        mock_alert.assert_called_once()
+
+    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
     def test_first_stale_quarantined_task_persists_error_and_alerts_once(self, mock_alert):
         campaign = EmailCampaign.objects.create(
             subject="Legacy campaign",

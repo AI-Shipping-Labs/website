@@ -1,10 +1,14 @@
 """Tests for RequestIdMiddleware and the gunicorn access-log contract."""
 
+from unittest.mock import patch
+
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase
 
 from website.gunicorn_logging import (
+    RecipientTokenSafeLogger,
     is_token_bearing_path,
+    redact_query_string,
     redact_token_path,
 )
 from website.request_id_middleware import RequestIdMiddleware
@@ -62,8 +66,57 @@ class RecipientTokenRedactionTest(SimpleTestCase):
             redact_token_path('/unsubscribe/abc123'),
             '/unsubscribe/[token]',
         )
+        self.assertEqual(
+            redact_token_path('/book/reschedule/abc123'),
+            '/book/reschedule/[token]',
+        )
+        self.assertEqual(
+            redact_token_path('/blog/preview/12345678-1234-5678-9abc-123456789abc'),
+            '/blog/preview/[token]',
+        )
+        self.assertTrue(is_token_bearing_path('/book/ics/abc123'))
+        self.assertTrue(
+            is_token_bearing_path(
+                '/marketing-pages/preview/12345678-1234-5678-9abc-123456789abc'
+            )
+        )
 
     def test_plain_paths_are_untouched(self):
         self.assertEqual(redact_token_path('/about/'), '/about/')
         self.assertFalse(is_token_bearing_path('/about/'))
         self.assertTrue(is_token_bearing_path('/t/c/abc123'))
+
+    def test_sensitive_query_values_are_redacted(self):
+        self.assertEqual(
+            redact_query_string(
+                '?tag=ai&%65mail=person%40example.com&api_key=private&sig=abc'
+            ),
+            '?tag=ai&%65mail=[redacted]&api_key=[redacted]&sig=[redacted]',
+        )
+
+    @patch(
+        'gunicorn.glogging.Logger.atoms',
+        return_value={
+            'h': 'raw-proxy-address',
+            'q': 'topic=ai&email=private%40example.com',
+            'a': 'crawler\nforged "entry"',
+            'U': '/book/confirmed/booking-secret',
+        },
+    )
+    def test_access_log_atoms_use_coarse_ip_and_sanitized_values(self, _atoms):
+        logger = object.__new__(RecipientTokenSafeLogger)
+        atoms = logger.atoms(
+            None,
+            None,
+            {
+                'REMOTE_ADDR': '10.0.0.2',
+                'HTTP_X_FORWARDED_FOR': '198.51.100.27',
+                'PATH_INFO': '/book/confirmed/booking-secret',
+            },
+            0,
+        )
+
+        self.assertEqual(atoms['h'], '198.51.100.0/24')
+        self.assertEqual(atoms['q'], 'topic=ai&email=[redacted]')
+        self.assertEqual(atoms['a'], 'crawler forged \\"entry\\"')
+        self.assertEqual(atoms['U'], '/book/confirmed/[token]')

@@ -13,8 +13,10 @@ class RequestIdMiddleware:
 
     Mirrors the website canonical policy: accept a bounded external
     ``X-Request-ID`` / ``X-Correlation-ID`` or mint an opaque replacement,
-    so the gunicorn access log can join a line to a trace without ever
-    logging a client address, query string, or header value.
+    so the gunicorn access log can join a line to a trace without logging
+    raw client addresses or unsanitized query values. Gunicorn records only a
+    coarse client network, redacted query parameters, and a single-line
+    User-Agent for request forensics.
     """
 
     def __init__(self, get_response):

@@ -28,6 +28,7 @@ def robots_txt(request):
             'Disallow: /accounts/',
             'Disallow: /register',
             'Disallow: /api/',
+            'Disallow: /events/calendar/',
         ])
         lines.extend(
             f'Disallow: {pattern}'

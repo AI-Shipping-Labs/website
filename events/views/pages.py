@@ -258,12 +258,17 @@ def events_calendar(request, year=None, month=None):
     today = date.today()
     viewer_tz = viewer_timezone(request.user)
     events_display_timezone = str(viewer_tz) if viewer_tz is not None else ''
-    year = year or today.year
-    month = month or today.month
+    if year is None:
+        year = today.year
+    if month is None:
+        month = today.month
+
+    # Bound crawler-visible calendar URLs before constructing any dates.
+    if year < today.year - 3 or year > today.year + 2:
+        raise Http404
 
     # Clamp month to valid range
     if month < 1 or month > 12:
-        from django.http import Http404
         raise Http404
 
     # Build calendar grid (Monday start)

@@ -1,6 +1,7 @@
 from django.urls import path, re_path
 from django.views.generic import RedirectView
 
+from content.caching import cache_anonymous_page
 from content.views.api import download_file, request_download, submit_project
 from content.views.course_project_attempts import (
     attempt_review_form,
@@ -77,6 +78,14 @@ from content.views.workshops import (
     workshops_catalog,
     workshops_list,
 )
+
+# Cache these server-rendered public pages at the URL boundary so their
+# view modules remain focused on content and authorization decisions.
+project_detail = cache_anonymous_page()(project_detail)
+collection_list = cache_anonymous_page()(collection_list)
+tutorials_list = cache_anonymous_page()(tutorials_list)
+downloads_list = cache_anonymous_page()(downloads_list)
+interview_hub = cache_anonymous_page()(interview_hub)
 
 urlpatterns = [
     path('c/<uuid:content_id>', content_share_link, name='content_share_link'),

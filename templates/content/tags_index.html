@@ -24,7 +24,7 @@
       {% if tag_counts %}
       <div class="flex flex-wrap gap-3">
         {% for tag, count in tag_counts %}
-        <a href="/tags/{{ tag }}"
+        <a href="/tags/{{ tag }}" rel="nofollow"
            class="group inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 transition-colors hover:border-accent/50 hover:bg-card/80">
           <span class="font-medium text-foreground group-hover:text-accent transition-colors">{{ tag }}</span>
           <span class="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ count }}</span>

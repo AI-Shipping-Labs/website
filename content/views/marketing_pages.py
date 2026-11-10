@@ -1,6 +1,7 @@
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 
+from content.marketing_cache import published_marketing_page_paths
 from content.models import MarketingPage
 from content.models.marketing_page import STATUS_PUBLISHED
 
@@ -28,6 +29,8 @@ def marketing_page_fallback(request, path=''):
     public_path = request.path or ''
     if not public_path.startswith('/'):
         public_path = f'/{public_path}'
+    if public_path not in published_marketing_page_paths():
+        raise Http404('Marketing page not found')
     try:
         page = MarketingPage.objects.get(
             public_path=public_path,

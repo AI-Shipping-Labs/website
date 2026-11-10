@@ -1,6 +1,7 @@
 """Server-level middleware that runs before host validation."""
 
 import re
+import threading
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -8,6 +9,7 @@ from django.http import HttpResponse, HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
 from django.utils.cache import patch_vary_headers
 
+from scripts.gunicorn_runtime import gunicorn_thread_count
 from website.search_indexing import (
     NOINDEX_ROBOTS_DIRECTIVE,
     request_indexing_disabled,
@@ -118,6 +120,11 @@ class SearchIndexingPolicyMiddleware:
         response = self.get_response(request)
         if request_indexing_disabled(request):
             response['X-Robots-Tag'] = NOINDEX_ROBOTS_DIRECTIVE
+        elif (
+            request.path_info.startswith('/events/calendar/')
+            and response.status_code == 404
+        ):
+            response['X-Robots-Tag'] = NOINDEX_ROBOTS_DIRECTIVE
         return response
 
 
@@ -159,26 +166,11 @@ class CrawlerOAuthGuardMiddleware:
 
 
 class HealthCheckMiddleware:
-    """Respond to ``/ping`` with 200 + VERSION before any host-validation runs.
+    """Serve dependency-free health responses before host validation.
 
-    The ALB health check probes the container's VPC IP directly (e.g.
-    ``10.0.1.189:8000``), so the request's Host header is the IP, not a
-    public domain. Django's ``CommonMiddleware`` calls
-    ``request.get_host()`` which validates against ``ALLOWED_HOSTS`` and
-    raises ``DisallowedHost`` for any host not on the list. Returning 200
-    here short-circuits the request before that check, so ``ALLOWED_HOSTS``
-    can stay strict (no wildcard / no IP whitelist) while health checks
-    still pass.
-
-    Must be placed before host-validating middleware. The dev search-exclusion
-    policy wrapper is allowed ahead of it because it does not inspect the
-    request host and still lets this middleware short-circuit the request.
-
-    The body is the ``settings.VERSION`` string (e.g.
-    ``20260426-130731-b126a1e``) so the post-deploy Verify step can curl
-    ``/ping`` and string-compare against the expected commit hash without
-    parsing HTML. ALB only checks the status code, so the body is free
-    real estate.
+    Probes may use a private address that is absent from ``ALLOWED_HOSTS``.
+    This short-circuit avoids host validation and all downstream request
+    work. The body carries ``settings.VERSION`` for deploy verification.
     """
 
     PATH = '/ping'
@@ -194,6 +186,49 @@ class HealthCheckMiddleware:
                 content_type='text/plain',
             )
         return self.get_response(request)
+
+
+def _new_anonymous_request_semaphore():
+    """Limit anonymous work to half of this worker's configured threads."""
+    return threading.BoundedSemaphore(
+        max(1, gunicorn_thread_count() // 2),
+    )
+
+
+class AnonymousRequestLoadShedMiddleware:
+    """Reserve part of each worker's request slots for operational traffic."""
+
+    EXEMPT_PREFIXES = ('/studio/', '/admin/', '/api/webhooks/')
+    _semaphore = _new_anonymous_request_semaphore()
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = request.path_info
+        user = getattr(request, 'user', None)
+        bypass = (
+            request.method not in ('GET', 'HEAD')
+            or getattr(user, 'is_authenticated', False)
+            or path == HealthCheckMiddleware.PATH
+            or path == '/api/ses-events'
+            or path.startswith(self.EXEMPT_PREFIXES)
+        )
+        if bypass:
+            return self.get_response(request)
+        if not self._semaphore.acquire(blocking=False):
+            response = HttpResponse(
+                'Temporarily busy. Retry shortly.\n',
+                status=503,
+                content_type='text/plain; charset=utf-8',
+            )
+            response['Retry-After'] = '1'
+            response['Cache-Control'] = 'no-store'
+            return response
+        try:
+            return self.get_response(request)
+        finally:
+            self._semaphore.release()
 
 
 def _production_canonical_redirect_config():

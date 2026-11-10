@@ -234,16 +234,17 @@ single source of truth.
 
 ### CSP and consent boundary
 
-The Django application does not install a GTM container and does not own an
-edge/CDN Content Security Policy. If production adds a CSP outside this
-repository, the operator must allow the configured direct GA path before
-enabling measurement: `script-src https://www.googletagmanager.com` and the
-corresponding GA collection hosts in `connect-src` (including
-`https://www.google-analytics.com`). Confirm the final host list from the
-browser network panel because Google can use regional collection endpoints.
-Do not weaken unrelated CSP directives or add `unsafe-inline` solely for GTM;
-the site's existing inline-script policy must be handled by the owning CSP
-configuration.
+The Django application sends a minimal `Content-Security-Policy-Report-Only`
+baseline on HTML responses. It does not block current resources; violations
+are visible in browser developer tools while the policy is evaluated. The app
+does not install a GTM container or an enforcing edge/CDN CSP. Before enabling
+an enforcing policy, allow the configured direct GA path: `script-src
+https://www.googletagmanager.com` and the corresponding GA collection hosts in
+`connect-src` (including `https://www.google-analytics.com`). Confirm the
+final host list from the browser network panel because Google can use regional
+collection endpoints. Do not weaken unrelated directives or add
+`unsafe-inline` solely for GTM; keep enforcement in a separately reviewed
+policy after report-only findings are understood.
 
 The application implements basic affirmative consent for optional analytics:
 the global consent panel keeps analytics off until a visitor chooses "Allow

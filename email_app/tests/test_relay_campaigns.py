@@ -450,8 +450,8 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(self.campaign.relay_campaign_state, "failed")
         self.assertIn("timed out after 30s", self.campaign.relay_campaign_error)
         self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
-        mock_queue.assert_called_once()
-        mock_alert.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
+        self.assertEqual(mock_alert.call_count, 1)
 
     @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
     def test_first_stale_quarantined_task_persists_error_and_alerts_once(self, mock_alert):

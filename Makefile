@@ -207,12 +207,13 @@ lint-advisory:
 
 # Drift check for the committed OpenAPI spec (_docs/openapi.json).
 # Wired into CI in .github/workflows/deploy-dev.yml so a forgotten
-# regenerate fails the build instead of shipping a stale spec. Run
-# locally with ``make check-openapi-drift`` after changing any
-# @openapi_spec decorator; regenerate with
-# ``uv run python manage.py generate_openapi``.
+# regenerate fails the build instead of shipping a stale spec. This runs
+# before collectstatic, so skip Django system checks here; the deploy gate
+# runs the full checks after static files are collected. Run locally with
+# ``make check-openapi-drift`` after changing any @openapi_spec decorator;
+# regenerate with ``uv run python manage.py generate_openapi``.
 check-openapi-drift:
-	uv run python manage.py generate_openapi --check
+	uv run python manage.py generate_openapi --check --skip-checks
 
 # Local Docker boot-profiling harness (issue #1143). Reproduces the Fargate-dev
 # cold-start under --cpus=0.25 --memory=512m, runs the REAL instrumented boot

@@ -471,3 +471,24 @@ class MigrationSafetyRepositoryContractTest(SimpleTestCase):
             "scripts/check_migration_safety.py",
             (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(),
         )
+
+    def test_openapi_drift_gate_skips_system_checks_that_run_after_collectstatic(self):
+        makefile = (REPO_ROOT / "Makefile").read_text()
+        command = makefile.split("check-openapi-drift:\n", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("generate_openapi --check --skip-checks", command)
+
+        workflow = yaml.safe_load(
+            (REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml").read_text()
+        )
+        steps = workflow["jobs"]["checks"]["steps"]
+        openapi_index = next(
+            index for index, step in enumerate(steps) if step.get("name") == "Check OpenAPI spec drift"
+        )
+        collectstatic_index = next(
+            index for index, step in enumerate(steps) if step.get("name") == "Collect static files"
+        )
+        system_check_index = next(
+            index for index, step in enumerate(steps) if step.get("name") == "Run Django system checks"
+        )
+        self.assertLess(openapi_index, collectstatic_index)
+        self.assertLess(collectstatic_index, system_check_index)

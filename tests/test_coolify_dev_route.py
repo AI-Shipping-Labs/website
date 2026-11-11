@@ -40,7 +40,7 @@ class DevRouteContractTest(SimpleTestCase):
         middlewares = self.http["middlewares"]
         self.assertEqual(
             middlewares["aisl-dev-noindex"]["headers"]["customResponseHeaders"],
-            {"X-Robots-Tag": "noindex, nofollow"},
+            {"X-Robots-Tag": "noindex, nofollow, noarchive"},
         )
         self.assertEqual(
             self.http["routers"]["aisl-dev-https"]["middlewares"],

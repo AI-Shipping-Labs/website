@@ -35,7 +35,7 @@ http:
     aisl-dev-noindex:
       headers:
         customResponseHeaders:
-          X-Robots-Tag: "noindex, nofollow"
+          X-Robots-Tag: "noindex, nofollow, noarchive"
     aisl-dev-auth:
       basicAuth:
         realm: "AISL dev"

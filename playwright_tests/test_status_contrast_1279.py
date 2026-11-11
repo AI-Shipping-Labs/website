@@ -11,6 +11,8 @@ from django.utils import timezone
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context, create_user
+from playwright_tests.status_contrast_fixtures import seed_tag_result_types
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
@@ -330,26 +332,24 @@ def test_series_registrant_reads_registered_and_cancelled_states(django_server, 
     context.close()
 
 
-def test_visitor_browses_five_tag_result_types(django_server, browser):
-    from content.models import Article, Course, Download, Project
-    from events.models import Event
+@browser_journey
+def test_visitor_gets_not_found_for_unknown_tag(django_server, page):
+    # Exercise the same facet-cache warmer that preceded this file in shard
+    # 4/4. The next journey's transactional fixtures must get a fresh cache.
+    seed_tag_result_types('contrast-1279-previous')
+    response = page.goto(f'{django_server}/tags/nonexistent-contrast-1279')
+    assert response.status == 404
 
+
+def test_visitor_browses_five_tag_result_types(django_server, browser):
     tag = 'contrast-1279-types'
-    today = datetime.date.today()
-    Article.objects.create(title='Contrast article', slug='contrast-article-1279', date=today, tags=[tag], published=True)
-    Project.objects.create(title='Contrast project', slug='contrast-project-tag-1279', date=today, tags=[tag], published=True)
-    Course.objects.create(title='Contrast course', slug='contrast-course-tag-1279', status='published', tags=[tag])
-    Download.objects.create(title='Contrast download', slug='contrast-download-1279', tags=[tag], published=True)
-    Event.objects.create(
-        title='Contrast event', slug='contrast-event-tag-1279', tags=[tag],
-        start_datetime=timezone.now() + datetime.timedelta(days=2), status='upcoming',
-    )
-    connection.close()
+    seed_tag_result_types(tag)
 
     context = browser.new_context(viewport=DESKTOP)
     page = context.new_page()
     for theme in ('light', 'dark'):
-        page.goto(f'{django_server}/tags/{tag}', wait_until='domcontentloaded')
+        response = page.goto(f'{django_server}/tags/{tag}', wait_until='domcontentloaded')
+        assert response.status == 200
         _set_theme(page, theme)
         for label in ('Article', 'Project', 'Course', 'Download', 'Event'):
             badge = page.locator('article span').filter(has_text=label).first

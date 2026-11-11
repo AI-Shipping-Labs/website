@@ -24,6 +24,8 @@ from typing import NamedTuple
 import requests
 from community_base.mail.models import EmailDelivery
 from community_base.mail.service import MailError
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
@@ -452,8 +454,26 @@ class SlackCommunityService(CommunityService):
         if not self.bot_token or not is_enabled('SLACK_ENABLED'):
             return ("unknown", None)
 
+        normalized_email = email.strip() if isinstance(email, str) else ""
         try:
-            data = self._api_call("users.lookupByEmail", email=email)
+            if not normalized_email:
+                raise ValidationError("Email is required.")
+            validate_email(normalized_email)
+        except ValidationError:
+            # Legacy/imported user rows can bypass form validation. Avoid
+            # sending malformed addresses to Slack, and leave membership
+            # unchanged so an operator can correct the source record.
+            logger.warning(
+                "Slack workspace action=membership_lookup outcome=skipped "
+                "error_code=invalid_email",
+            )
+            return ("unknown", None)
+
+        try:
+            data = self._api_call(
+                "users.lookupByEmail",
+                email=normalized_email,
+            )
             uid = data.get("user", {}).get("id")
             if uid:
                 return ("member", uid)

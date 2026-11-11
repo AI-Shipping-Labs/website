@@ -373,6 +373,42 @@ class SlackLoggingPrivacyTest(TestCase):
                     rendered,
                 )
 
+    def test_invalid_membership_email_is_skipped_without_provider_call(self):
+        for email in ("", "not-an-email", "someone @example.com"):
+            with self.subTest(email=email):
+                with (
+                    patch.object(self.service, "_api_call") as api_call,
+                    self.assertLogs(
+                        "community.services.slack", level="WARNING"
+                    ) as logs,
+                ):
+                    result = self.service.check_workspace_membership(email)
+
+                self.assertEqual(result, ("unknown", None))
+                api_call.assert_not_called()
+                rendered = self._assert_no_sentinels(logs.output)
+                self.assertIn(
+                    "action=membership_lookup outcome=skipped "
+                    "error_code=invalid_email",
+                    rendered,
+                )
+
+    def test_membership_lookup_trims_valid_email_before_provider_call(self):
+        with patch.object(
+            self.service,
+            "_api_call",
+            return_value={"user": {"id": "U_FOUND"}},
+        ) as api_call:
+            result = self.service.check_workspace_membership(
+                "  person@example.com  ",
+            )
+
+        self.assertEqual(result, ("member", "U_FOUND"))
+        api_call.assert_called_once_with(
+            "users.lookupByEmail",
+            email="person@example.com",
+        )
+
 @override_settings(SLACK_ENABLED=True)
 @tag('core')
 class SlackAPICallTest(TestCase):

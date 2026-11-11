@@ -270,12 +270,14 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
             ",".join(addresses) if key == "CAMPAIGN_TEST_RECIPIENTS" else default
         )
         responses = []
-        for index in range(9):  # GET, reconcile, four member chunks, PUT, recount, queue
+        # GET, reconcile, four member chunks, 200 contact verifications, PUT,
+        # recount, queue
+        for index in range(9 + 200):
             response = MagicMock()
             response.status_code = 404 if index == 0 else 200
             response.json.return_value = (
                 {"recipient_count": 200, "skipped_count": 0}
-                if index in {7, 8}
+                if index in {207, 208}
                 else {"queued": True, "campaign": {"status": "queued"}}
             )
             responses.append(response)
@@ -304,6 +306,18 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         ]
         self.assertEqual(len(queued_members), 200)
         self.assertEqual({member["email"] for member in queued_members}, set(addresses))
+        verification_calls = [
+            call for call in mock_request.call_args_list
+            if call.args[1].endswith("/api/contacts")
+        ]
+        self.assertEqual(len(verification_calls), 200)
+        self.assertTrue(all(
+            call.kwargs["json"]["verified"] is True for call in verification_calls
+        ))
+        self.assertEqual(
+            {call.kwargs["json"]["email"] for call in verification_calls},
+            set(addresses),
+        )
         campaign_payload = next(
             call.kwargs["json"]
             for call in mock_request.call_args_list

@@ -185,13 +185,15 @@ class RelayProofConfirmTest(RelayProofApiTestBase):
         with override_settings(CAMPAIGN_TEST_RECIPIENTS=proof_list()):
             key = preview_native_test_campaign(self.campaign)["campaign_key"]
             responses = []
-            for index in range(9):  # GET, reconcile, four member chunks, PUT, recount, queue
+            # GET, reconcile, four member chunks, 200 contact verifications,
+            # PUT, recount, queue
+            for index in range(9 + 200):
                 payload = MagicMock()
                 payload.status_code = 404 if index == 0 else 200
                 payload.json.return_value = (
                     {"recipient_count": 200, "skipped_count": 0}
-                    if index in {7, 8}
-                    else {"campaign": {"status": "queued"}}
+                    if index in {207, 208}
+                    else {"status": "ok"}
                 )
                 responses.append(payload)
             with (

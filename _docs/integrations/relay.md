@@ -143,6 +143,11 @@ The same proof is available to staff tokens through the API, and through
 | `POST /api/campaigns/<id>/relay-proof/confirm` | Queue the proof with `{"campaign_key": "..."}`. |
 | `GET /api/campaigns/<id>/relay-proof/<campaign_key>` | Read an allowlist of Relay's counters and timing fields. |
 
+Confirm also marks every list member verified through Relay's contacts
+upsert: the dispatch-time suppression recheck skips unverified contacts even
+for `allow_unverified` campaigns, so an unverified proof list would queue
+successfully and silently send to nobody.
+
 The stats route accepts only `aishl-test-<id>-...` keys for that campaign. It
 does not recheck the signature, because a list change after sending must not
 make a sent proof unreadable. Test sends have no local row, so the stall

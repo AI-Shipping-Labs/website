@@ -119,6 +119,13 @@ class FakeCoolify:
             return copy.deepcopy(self.deployment_history)
         if path == "/api/v1/deployments":
             return copy.deepcopy(self.active_deployments)
+        if path.startswith(f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}/envs/"):
+            if method == "DELETE":
+                self.app_envs = [
+                    item for item in self.app_envs
+                    if not (isinstance(item, dict) and item.get("key") == "VERSION")
+                ]
+                return {"message": "Environment variable deleted."}
         if path == "/api/v1/deployments/deploy-1":
             return {
                 "deployment_uuid": "deploy-1",
@@ -190,6 +197,30 @@ class FakeCoolify:
 
 @tag("core")
 class ReleaseOrchestrationTest(SimpleTestCase):
+    def test_stale_release_identity_env_is_cleared_before_the_web_deploy(self):
+        coolify = FakeCoolify()
+        coolify.app_envs = fake_web_environment()
+        coolify.app_envs.append(
+            {"key": "VERSION", "value": "7635acfc", "uuid": "env-version-1",
+             "is_preview": False},
+        )
+        deployer = ReleaseDeployer(
+            release_config(), coolify, FakeDiagnostics(), lambda _url: SHA,
+        )
+
+        deployer.deploy()
+
+        deletes = [
+            (method, path) for method, path in coolify.calls if method == "DELETE"
+        ]
+        self.assertEqual(
+            deletes,
+            [(
+                "DELETE",
+                f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}/envs/env-version-1",
+            )],
+        )
+
     def _assert_source_receipt(self, result):
         receipt = result.source_receipt
         self.assertEqual(receipt["cutoff"], "2026-10-23T14:00:00+00:00")

@@ -14,6 +14,7 @@ from .contracts import (
     validate_web_environment,
     verify_persisted_compose,
     web_runtime_fingerprint,
+    without_release_identity,
 )
 from .errors import ReleaseError
 from .public_readiness import public_endpoints_ready
@@ -78,8 +79,9 @@ class ReleaseDeployer:
         compose, names = pin_runtime_images(source, self.config.image)
         app = self.coolify.call("GET", self.app_path)
         validate_web_application(app, self.config.web_app_uuid)
-        app_envs = self.coolify.call("GET", f"{self.app_path}/envs")
-        reject_version_override(app_envs, "web-application")
+        app_envs = without_release_identity(
+            self.coolify.call("GET", f"{self.app_path}/envs")
+        )
         validate_web_environment(app_envs)
         self._reject_active_web_deployments()
         fingerprint = web_runtime_fingerprint(app, app_envs)
@@ -189,9 +191,22 @@ class ReleaseDeployer:
         )
         return waiter.receipt
 
+    def _clear_release_identity_override(self):
+        """Remove a stale ``VERSION`` env so the deployed image's identity applies.
+
+        The rolling follower mirrors the source container env, including its
+        ``VERSION``; a copy taken before this deploy would otherwise shadow the
+        new image's ``/ping`` identity. Application envs beat image ENV in
+        Docker, so the stale entry must go before the rollout.
+        """
+        for item in self.coolify.call("GET", f"{self.app_path}/envs") or []:
+            if isinstance(item, dict) and item.get("key") == "VERSION" and item.get("uuid"):
+                self.coolify.call("DELETE", f"{self.app_path}/envs/{item['uuid']}")
+
     def _deploy_web(self, plan, timeout, interval):
         self._guard_web_unchanged(plan)
         self._require_source_runtime(plan)
+        self._clear_release_identity_override()
         repository, tag = self.config.image.rsplit(":", 1)
         payload = {
             "docker_registry_image_name": repository,
@@ -233,7 +248,7 @@ class ReleaseDeployer:
 
     def _verify_web_fingerprint(self, plan, current, current_envs):
         validate_web_application(current, self.config.web_app_uuid)
-        reject_version_override(current_envs, "web-application")
+        current_envs = without_release_identity(current_envs)
         validate_web_environment(current_envs)
         if web_runtime_fingerprint(current, current_envs) != plan.web_fingerprint:
             raise ReleaseError("concurrent-web-runtime-edit")

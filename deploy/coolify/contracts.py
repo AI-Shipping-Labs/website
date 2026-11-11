@@ -141,6 +141,21 @@ def reject_version_override(envs, owner):
             raise ReleaseError(f"runtime-version-override owner={owner}")
 
 
+def without_release_identity(envs):
+    """Drop a ``VERSION`` env entry from a web-application env list.
+
+    The rolling follower copies the source container env, which includes the
+    image's ``ENV VERSION``, into the application envs. A copied value is the
+    source's release identity, never a manual pin on this application, and a
+    stale copy would shadow the newly deployed image's identity through
+    ``/ping``. Callers exclude it from contract checks and delete it before
+    deploying so the image's own ``VERSION`` applies.
+    """
+    if not isinstance(envs, list):
+        return envs
+    return [item for item in envs if isinstance(item, dict) and item.get("key") != "VERSION"]
+
+
 def load_compose(raw):
     try:
         compose = yaml.safe_load(raw)

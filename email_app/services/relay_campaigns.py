@@ -631,6 +631,35 @@ def preview_native_test_campaign(campaign, *, campaign_key=None):
     }
 
 
+def _verify_proof_contacts(recipients, scope, *, session=None):
+    """Mark the proof list members verified at Relay, failing closed.
+
+    The dispatch-time suppression recheck skips unverified contacts even when
+    the campaign was queued with ``allow_unverified``, so the proof marks each
+    contact verified through the contacts upsert endpoint before queueing. Any
+    failed verification aborts the queue: a partially verified list would
+    silently send to only part of the reviewed list.
+    """
+    for address in recipients:
+        try:
+            _campaign_api_request(
+                "POST",
+                "/api/contacts",
+                payload=scope | {
+                    "email": address,
+                    "verified": True,
+                    "status": "subscribed",
+                },
+                session=session,
+            )
+        except RelayCampaignError as exc:
+            raise RelayProofRejected(
+                "Relay could not mark every proof contact verified; the queue was "
+                "aborted and no campaign was queued. Check the Relay API and run "
+                "dry-run again."
+            ) from exc
+
+
 def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
     """Queue a test-only Relay campaign from an exact configured address list.
 
@@ -639,6 +668,10 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
     explicit management command and the staff API
     ``POST /api/campaigns/<id>/relay-proof/confirm``, both of which need a
     reviewed dry-run key, and it cannot fall back to an audience/list key.
+
+    The list members are also marked verified at Relay: the dispatch worker's
+    suppression recheck ignores ``allow_unverified`` and skips unverified
+    contacts, so an unverified proof list would silently send to nobody.
     """
     plan = preview_native_test_campaign(campaign, campaign_key=campaign_key)
     recipients = plan["_recipients"]
@@ -686,6 +719,7 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
                 payload=scope | {"list": list_defaults, "members": member_batch},
                 session=session,
             )
+        _verify_proof_contacts(recipients, scope, session=session)
         payload = scope | {
             "subject": f"[TEST] {campaign.subject}",
             "preview_text": "AISHL Relay tracking test",

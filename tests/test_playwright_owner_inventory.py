@@ -735,6 +735,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_static_node_does_not_require_browser",
     })
     migrated_owner = "playwright_tests/test_dev_smoke_sitemap.py::test_sitemap_xml_is_served"
+    tag_cache_isolation_owner = (
+        "playwright_tests/test_status_contrast_1279.py::test_visitor_gets_not_found_for_unknown_tag"
+    )
     campaign_owner = (
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffReconcilesAmbiguousDelivery::"
@@ -2291,11 +2294,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2962)
-        self.assertEqual(len(inventory.owners), 2757)
+        self.assertEqual(inventory.item_count, 2963)
+        self.assertEqual(len(inventory.owners), 2758)
         self.assertEqual(
             inventory.declared_owners,
-            {self.migrated_owner, self.campaign_owner}
+            {self.migrated_owner, self.campaign_owner, self.tag_cache_isolation_owner}
             | self.issue_1528_owners | self.issue_1529_owners
             | self.issue_1530_owners | self.issue_1531_owners
             | self.issue_1815_owners | self.issue_1837_owners
@@ -2453,6 +2456,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.tag_crawl_safety_owners
             | self.issue_1980_owners
             | self.device_login_owners
+            | {self.tag_cache_isolation_owner}
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

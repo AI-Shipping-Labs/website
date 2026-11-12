@@ -57,6 +57,7 @@ from django.core.management import call_command
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from playwright_tests.cache_isolation import _reset_integration_config_cache as _reset_integration_config_cache
 from playwright_tests.local_capacity import (
     CapacityAdmissionError,
     CapacityConfigurationError,
@@ -349,41 +350,6 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionfinish(session, exitstatus):
     _release_playwright_local_capacity(session.config)
     _release_playwright_worktree_guard(session.config)
-
-
-@pytest.fixture(autouse=True)
-def _reset_integration_config_cache():
-    """Drop the process-wide IntegrationSetting cache around every test (#1470).
-
-    ``integrations.config`` memoizes every ``IntegrationSetting`` row in a
-    module-level ``_cache``, and DB overrides win over ``settings`` and env in
-    ``get_config()``. Nothing invalidates that cache when a
-    ``django_db(transaction=True)`` test truncates the table at teardown, and
-    the cross-process stamp lives in the ``django_q`` DatabaseCache table,
-    which the same flush also truncates — so a value seeded by one module
-    survives, invisibly, into every later test in the same process.
-
-    Serially the poison usually gets healed by chance (some later module calls
-    ``clear_config_cache()``, which republishes a stamp). Under
-    ``--dist loadfile`` the file order changes per worker, so whether a module
-    runs before or after its accidental antidote becomes a coin flip. That is
-    what made ``test_workshop_copy_file.py`` (a stale
-    ``AWS_S3_CONTENT_BUCKET`` sending the sync at real S3 with blank
-    credentials) and ``test_plan_sprints_ingest_889.py`` (a stale Slack
-    channel/environment value making the ingest no-op and return ``None``)
-    order-dependent.
-
-    Resetting here is in-memory only — no DB write, no stamp — so it is safe
-    for tests with no database access: the next ``get_config()`` simply
-    repopulates from whatever the database currently holds. That the 33
-    Playwright modules already hand-rolling ``clear_config_cache()`` in their
-    own fixtures exist at all is the evidence this belongs in one place.
-    """
-    from integrations.config import reset_local_config_cache
-
-    reset_local_config_cache()
-    yield
-    reset_local_config_cache()
 
 
 def pytest_terminal_summary(terminalreporter):

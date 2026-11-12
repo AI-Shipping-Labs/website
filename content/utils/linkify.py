@@ -1,16 +1,17 @@
 import re
 
 # Regex to match bare URLs (http or https) in HTML text content.
-# Handles &amp; as part of URL (common in HTML-encoded query strings).
+# Handles & as part of URL (common in HTML-encoded query strings).
+# Allows parentheses in URL path/query (valid per RFC 3986).
 _URL_RE = re.compile(
     r'https?://'
-    r'(?:[^\s<>\'")\]]*(?:&amp;)[^\s<>\'")\]]*)*'  # segments joined by &amp;
-    r'[^\s<>\'")\]]*'
-    r'[^\s<>\'")\].,;:!?]'  # must not end with punctuation
+    r'(?:[^\s<>"\]]*(?:&)[^\s<>"\]]*)*'  # segments joined by &
+    r'[^\s<>"\]]*'
+    r'[^\s<>"\].,;:!?]'  # must not end with punctuation
     r'|'
     r'https?://'
-    r'[^\s<>\'")\]]*'
-    r'[^\s<>\'")\].,;:!?]'
+    r'[^\s<>"\]]*'
+    r'[^\s<>"\].,;:!?]'
 )
 
 # Pattern to match regions where we should NOT linkify:

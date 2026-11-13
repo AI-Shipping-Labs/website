@@ -25,8 +25,11 @@ VALID_BODY = (
     b'Disallow: /accounts/\n'
     b'Disallow: /register\n'
     b'Disallow: /api/\n'
+    b'Disallow: /events/calendar/\n'
     b'Disallow: /blog?*tag=\n'
     b'Disallow: /blog?*topic=\n'
+    b'Disallow: /courses?*page=\n'
+    b'Disallow: /courses?*tag=\n'
     b'Disallow: /projects?*difficulty=\n'
     b'Disallow: /projects?*tag=\n'
     b'Disallow: /resources?*tag=\n'
@@ -51,7 +54,7 @@ class RobotsValidationTest(SimpleTestCase):
 
         self.assertEqual(result['user-agent'], 1)
         self.assertEqual(result['allow'], 1)
-        self.assertEqual(result['disallow'], 13)
+        self.assertEqual(result['disallow'], 16)
         self.assertEqual(result['sitemap'], 1)
 
     def test_rejects_non_plain_text_and_invalid_utf8(self):
@@ -146,7 +149,7 @@ class RobotsValidationTest(SimpleTestCase):
             EXPECTED_SITEMAP,
         )
 
-        self.assertEqual(result['disallow'], 13)
+        self.assertEqual(result['disallow'], 16)
 
     def test_rejects_missing_duplicate_or_unexpected_sitemap(self):
         wrong_targets = (

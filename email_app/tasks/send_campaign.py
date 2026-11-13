@@ -177,6 +177,7 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
                 result.get("recipient_count"),
                 result.get("skipped_count"),
                 stage="queue",
+                allowed_skipped_count=result.get("suppressed_skipped_count", 0),
             )
         if result.get("already_queued"):
             for delivery in deliveries.filter(resolution=CampaignDelivery.Resolution.RETRY):

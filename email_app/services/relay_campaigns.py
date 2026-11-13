@@ -325,17 +325,53 @@ def _member_batches(members):
         yield members[offset:offset + RELAY_CAMPAIGN_MEMBER_BATCH_SIZE]
 
 
-def validate_native_campaign_recipient_counts(expected_count, recipient_count, skipped_count, *, stage):
+ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS = frozenset({"global_unsubscribe", "hard_bounce"})
+
+
+def _relay_suppression_skip_count(recount):
+    """Return skipped count when all Relay skips are global suppressions, else 0."""
+    skipped_count = recount.get("skipped_count") if isinstance(recount, dict) else None
+    skip_reason_counts = recount.get("skip_reason_counts") if isinstance(recount, dict) else None
+    if (
+        not isinstance(skipped_count, int)
+        or isinstance(skipped_count, bool)
+        or skipped_count <= 0
+        or not isinstance(skip_reason_counts, dict)
+        or not skip_reason_counts
+    ):
+        return 0
+    total = 0
+    for reason, count in skip_reason_counts.items():
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            return 0
+        if count == 0:
+            continue
+        if reason not in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+            return 0
+        total += count
+    return skipped_count if total == skipped_count else 0
+
+
+def validate_native_campaign_recipient_counts(
+    expected_count,
+    recipient_count,
+    skipped_count,
+    *,
+    stage,
+    allowed_skipped_count=0,
+):
+    expected_sendable = expected_count - allowed_skipped_count
     if (
         not isinstance(recipient_count, int)
         or isinstance(recipient_count, bool)
         or not isinstance(skipped_count, int)
         or isinstance(skipped_count, bool)
-        or recipient_count != expected_count
-        or skipped_count != 0
+        or expected_sendable < 0
+        or recipient_count != expected_sendable
+        or skipped_count != allowed_skipped_count
     ):
         raise RelayCampaignApiError(
-            f"Relay campaign {stage} recipient count mismatch: expected {expected_count}, "
+            f"Relay campaign {stage} recipient count mismatch: expected {expected_sendable}, "
             f"Relay reported {recipient_count!r} recipients and {skipped_count!r} skipped."
         )
 
@@ -522,11 +558,13 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         payload=scope,
         session=session,
     )
+    suppressed_count = _relay_suppression_skip_count(recount)
     validate_native_campaign_recipient_counts(
         len(included_delivery_ids),
         recount.get("recipient_count"),
         recount.get("skipped_count"),
         stage="preflight",
+        allowed_skipped_count=suppressed_count,
     )
     queued = _campaign_api_request(
         "POST",
@@ -539,8 +577,10 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         queued.get("recipient_count"),
         queued.get("skipped_count"),
         stage="queue",
+        allowed_skipped_count=suppressed_count,
     )
     queued["included_delivery_ids"] = included_delivery_ids
+    queued["suppressed_skipped_count"] = suppressed_count
     return queued
 
 

@@ -13,6 +13,9 @@ from django.db.models import Q
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.services.campaign_attention_alerts import (
+    alert_unalerted_attention_and_stuck_campaigns,
+)
 from email_app.services.relay_campaign_progress import (
     campaign_relay_keys,
     read_campaign_relay_progress,
@@ -257,4 +260,11 @@ def run_relay_campaign_watchdog():
             # Broad on purpose: each campaign is an isolated external boundary.
             logger.exception("Relay campaign watchdog failed campaign=%s", campaign.pk)
             failures += 1
-    return {"checked": len(campaigns), "failed": failures}
+    extra = alert_unalerted_attention_and_stuck_campaigns(
+        now=now,
+        stall_minutes=minutes,
+    )
+    return {
+        "checked": len(campaigns) + extra["checked"],
+        "failed": failures + extra["failed"],
+    }

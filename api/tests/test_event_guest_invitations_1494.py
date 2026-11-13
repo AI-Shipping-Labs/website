@@ -242,8 +242,8 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
     def test_guest_registration_keeps_attendee_reschedule_and_cancel_lifecycle(
         self, initial_send,
     ):
-        from events.tasks.notify_cancellation import send_cancellation_notice_one
-        from events.tasks.notify_reschedule import send_reschedule_notice_one
+        from events.tasks.notify_cancellation import send_cancellation_notice_fanout
+        from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 
         initial_send.return_value = None
         self.post(email=self.guest.email)
@@ -256,31 +256,31 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
         ])
 
         with patch(
-            'events.tasks.notify_reschedule._send_calendar_email',
-            return_value='guest-reschedule',
-        ) as reschedule_send:
-            rescheduled = send_reschedule_notice_one(
-                self.event.pk, self.guest.pk, old_start.isoformat(),
+            'events.tasks.notify_reschedule.submit_event_notice_campaign',
+            return_value={'campaign': {'external_key': 'guest-reschedule'}},
+        ) as reschedule_submit:
+            rescheduled = send_reschedule_notice_fanout(
+                self.event.pk, old_start.isoformat(),
             )
 
         self.event.status = 'cancelled'
         self.event.ics_sequence += 1
         self.event.save(update_fields=['status', 'ics_sequence'])
         with patch(
-            'events.tasks.notify_cancellation._send_calendar_email',
-            return_value='guest-cancellation',
-        ) as cancellation_send:
-            cancelled = send_cancellation_notice_one(
-                self.event.pk, self.guest.pk,
-            )
+            'events.tasks.notify_cancellation.submit_event_notice_campaign',
+            return_value={'campaign': {'external_key': 'guest-cancellation'}},
+        ) as cancellation_submit:
+            cancelled = send_cancellation_notice_fanout(self.event.pk)
 
-        self.assertEqual(rescheduled['status'], 'sent')
-        self.assertEqual(cancelled['status'], 'sent')
+        self.assertEqual(rescheduled['status'], 'submitted')
+        self.assertEqual(cancelled['status'], 'submitted')
         self.assertEqual(
-            reschedule_send.call_args.kwargs['to_email'], self.guest.email,
+            [r['email'] for r in reschedule_submit.call_args.kwargs['recipients']],
+            [self.guest.email],
         )
         self.assertEqual(
-            cancellation_send.call_args.kwargs['to_email'], self.guest.email,
+            [r['email'] for r in cancellation_submit.call_args.kwargs['recipients']],
+            [self.guest.email],
         )
         self.assertTrue(EventRegistration.objects.filter(
             event=self.event, user=self.guest,

@@ -1,13 +1,25 @@
 """Relay calendar invites for series registration, update, and cancellation."""
 
 import logging
+from hashlib import sha256
 
 from content.access import can_access
-from email_app.relay_transactional import recipient_template_context
+from email_app.relay_transactional import (
+    calendar_alternative,
+    recipient_template_context,
+)
+from email_app.services.email_classification import (
+    get_calendar_sender,
+    relay_sender_id,
+)
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.registration_email import _send_calendar_email
+from events.services.relay_event_notice import (
+    build_relay_recipient,
+    submit_event_notice_campaign,
+)
 from events.services.series_email_context import (
     build_series_subject_context,
 )
@@ -128,7 +140,7 @@ def _series_ics(events, attendee_email, method):
 
 
 def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
-    """Fan one stable-key REQUEST invite to each eligible subscriber."""
+    """Submit one Relay campaign for all eligible series-update subscribers."""
     series = getattr(event, 'event_series', None)
     if series is None:
         return 0
@@ -140,21 +152,45 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
 
     from accounts.models import User
 
-    sent = 0
+    prepared = []
     for user in User.objects.filter(id__in=subscriber_user_ids):
-        try:
-            sent += _send_series_update_one(event, user, series, old_start)
-        except Exception:
-            logger.exception(
-                'Failed to send series update to user %s for series "%s"',
-                getattr(user, 'email', user.pk), series.slug,
-            )
-    logger.info(
-        'Series update fan-out for series "%s" occurrence "%s": '
-        '%d subscribers notified',
-        series.slug, event.slug, sent,
+        item = _prepare_series_update_item(event, user, series, old_start)
+        if item is not None:
+            prepared.append(item)
+
+    if not prepared:
+        return 0
+
+    external_key = _series_update_key(series, event, user_ids)
+    submit_event_notice_campaign(
+        external_key=external_key,
+        subject=prepared[0]['subject'],
+        template_key='series_update',
+        recipients=[item['member'] for item in prepared],
+        sender_id=relay_sender_id(get_calendar_sender()),
+        metadata={
+            'series_id': series.pk,
+            'event_id': event.pk,
+            'email_type': 'series_update',
+        },
     )
-    return sent
+    for item in prepared:
+        _log_send(item['user'], 'series_update', item['subject'], external_key, item['dedupe_key'])
+
+    logger.info(
+        'Series update campaign %s for series "%s" occurrence "%s": %d subscribers',
+        external_key, series.slug, event.slug, len(prepared),
+    )
+    return len(prepared)
+
+
+def _series_update_key(series, event, user_ids):
+    base = f'series-update-{series.pk}-event-{event.pk}-seq-{event.ics_sequence}'
+    if user_ids is None:
+        return base
+    raw = ','.join(str(uid) for uid in sorted(set(user_ids)))
+    digest = sha256(raw.encode('utf-8')).hexdigest()[:8]
+    return f'{base}-u{digest}'
 
 
 def _parse_old_start(old_start_iso):
@@ -177,31 +213,55 @@ def _subscriber_ids(series, user_ids):
     return subscriber_ids
 
 
-def _send_series_update_one(event, user, series, old_start):
+def _prepare_series_update_item(event, user, series, old_start):
     if user_has_permanent_bounce(user):
-        return 0
+        return None
     events = _subscriber_upcoming_events(user, series)
     if not events:
-        return 0
+        return None
     dedupe_key = (
         f'series-update:{series.pk}:{user.pk}:{event.pk}:{event.ics_sequence}'
     )
-    _send_series_calendar(
+    return _build_series_item(
         user,
         series,
         events,
         template_key='series_update',
-        email_type='series_update',
         method='REQUEST',
         dedupe_key=dedupe_key,
         changed_event=event,
         old_start=old_start,
     )
-    return 1
+
+
+def _build_series_item(
+    user,
+    series,
+    events,
+    *,
+    template_key,
+    method,
+    dedupe_key,
+    changed_event=None,
+    old_start=None,
+):
+    subject, context = build_series_subject_context(
+        template_key,
+        user,
+        series,
+        events,
+        changed_event=changed_event,
+        old_start=old_start,
+    )
+    full_ctx = recipient_template_context(user, context)
+    ics_content = _series_ics(events, user.email, method)
+    calendar = calendar_alternative(ics_content, method=method, name='event.ics')
+    member = build_relay_recipient(user.email, f'user-{user.pk}', full_ctx, calendar=calendar)
+    return {'user': user, 'subject': subject, 'dedupe_key': dedupe_key, 'member': member}
 
 
 def send_series_cancellation_to_subscribers(event):
-    """Fan one stable-key CANCEL invite to registered series subscribers."""
+    """Submit one Relay campaign for registered series-cancellation subscribers."""
     series = getattr(event, 'event_series', None)
     if series is None:
         return 0
@@ -210,8 +270,6 @@ def send_series_cancellation_to_subscribers(event):
     if not subscriber_user_ids:
         return 0
 
-    # Only subscribers who actually had this occurrence on their calendar
-    # (held an EventRegistration) need the cancel.
     registered_user_ids = set(
         EventRegistration.objects.filter(
             event=event, user_id__in=subscriber_user_ids,
@@ -222,38 +280,36 @@ def send_series_cancellation_to_subscribers(event):
 
     from accounts.models import User
 
-    sent = 0
+    prepared = []
     for user in User.objects.filter(id__in=registered_user_ids):
-        try:
-            sent += _send_series_cancellation_one(event, user, series)
-        except Exception:
-            logger.exception(
-                'Failed to send series cancellation to user %s for '
-                'occurrence "%s"',
-                getattr(user, 'email', user.pk), event.slug,
-            )
-    logger.info(
-        'Series cancellation fan-out for occurrence "%s": '
-        '%d subscribers notified',
-        event.slug, sent,
-    )
-    return sent
+        if user_has_permanent_bounce(user):
+            continue
+        dedupe_key = f'series-cancellation:{series.pk}:{user.pk}:{event.pk}:{event.ics_sequence}'
+        prepared.append(_build_series_item(
+            user, series, [event], template_key='series_cancellation', method='CANCEL', dedupe_key=dedupe_key,
+        ))
 
-
-def _send_series_cancellation_one(event, user, series):
-    if user_has_permanent_bounce(user):
+    if not prepared:
         return 0
-    dedupe_key = (
-        f'series-cancellation:{series.pk}:{user.pk}:'
-        f'{event.pk}:{event.ics_sequence}'
-    )
-    _send_series_calendar(
-        user,
-        series,
-        [event],
+
+    external_key = f'series-cancellation-{series.pk}-event-{event.pk}-seq-{event.ics_sequence}'
+    submit_event_notice_campaign(
+        external_key=external_key,
+        subject=prepared[0]['subject'],
         template_key='series_cancellation',
-        email_type='series_cancellation',
-        method='CANCEL',
-        dedupe_key=dedupe_key,
+        recipients=[item['member'] for item in prepared],
+        sender_id=relay_sender_id(get_calendar_sender()),
+        metadata={
+            'series_id': series.pk,
+            'event_id': event.pk,
+            'email_type': 'series_cancellation',
+        },
     )
-    return 1
+    for item in prepared:
+        _log_send(item['user'], 'series_cancellation', item['subject'], external_key, item['dedupe_key'])
+
+    logger.info(
+        'Series cancellation campaign %s for occurrence "%s": %d subscribers',
+        external_key, event.slug, len(prepared),
+    )
+    return len(prepared)

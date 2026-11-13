@@ -15,8 +15,8 @@ from events.models import (
     SeriesRegistration,
 )
 from events.services.registration_email import send_registration_confirmation
-from events.tasks.notify_cancellation import send_cancellation_notice_one
-from events.tasks.notify_reschedule import send_reschedule_notice_one
+from events.tasks.notify_cancellation import send_cancellation_notice_fanout
+from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 
 User = get_user_model()
 
@@ -68,6 +68,10 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
     def _calendar(self, mock_send):
         return Calendar.from_ical(mock_send.call_args.kwargs['ics_content'])
 
+    def _campaign_calendar(self, mock_submit, index=0):
+        recipient = mock_submit.call_args.kwargs['recipients'][index]
+        return Calendar.from_ical(recipient['calendar_alternative']['content'])
+
     def _assert_bare_organizer(self, cal):
         self.assertEqual(
             str(_vevent(cal).get('organizer')),
@@ -99,25 +103,26 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
         self.assertNotIn('zoom.us/j/raw-secret', str(vevent.to_ical()))
 
-    @patch('events.tasks.notify_reschedule._send_calendar_email')
+    @patch('events.tasks.notify_reschedule.submit_event_notice_campaign')
     def test_reschedule_relay_calendar_updates_same_uid_with_higher_sequence(
-        self, mock_send,
+        self, mock_submit,
     ):
-        mock_send.return_value = 'relay-update'
+        mock_submit.return_value = {'campaign_id': 'relay-update'}
         self.event.start_datetime = self.start + timedelta(days=1)
         self.event.end_datetime = self.start + timedelta(days=1, hours=2)
         self.event.ics_sequence = 1
         self.event.save(update_fields=['start_datetime', 'end_datetime', 'ics_sequence'])
 
-        result = send_reschedule_notice_one(
+        result = send_reschedule_notice_fanout(
             self.event.pk,
-            self.user.pk,
             self.start.isoformat(),
         )
 
-        self.assertEqual(result['status'], 'sent')
-        cal = self._calendar(mock_send)
-        self.assertEqual(mock_send.call_args.kwargs['method'], 'REQUEST')
+        self.assertEqual(result['status'], 'submitted')
+        self.assertEqual(result['count'], 1)
+        cal = self._campaign_calendar(mock_submit)
+        recipient = mock_submit.call_args.kwargs['recipients'][0]
+        self.assertEqual(recipient['calendar_alternative']['method'], 'REQUEST')
         self.assertEqual(str(cal.get('method')), 'REQUEST')
         vevent = _vevent(cal)
         self._assert_bare_organizer(cal)
@@ -137,49 +142,50 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             self.start + timedelta(days=1, hours=2),
         )
 
-    @patch('events.tasks.notify_cancellation._send_calendar_email')
-    @patch('events.tasks.notify_reschedule._send_calendar_email')
+    @patch('events.tasks.notify_cancellation.submit_event_notice_campaign')
+    @patch('events.tasks.notify_reschedule.submit_event_notice_campaign')
     def test_rename_reschedule_and_cancel_reuse_original_uid(
         self, mock_reschedule, mock_cancel,
     ):
         """Mutable public slugs never split one event into duplicate entries."""
-        mock_reschedule.return_value = 'relay-reschedule'
-        mock_cancel.return_value = 'relay-cancel'
+        mock_reschedule.return_value = {'campaign_id': 'relay-reschedule'}
+        mock_cancel.return_value = {'campaign_id': 'relay-cancel'}
         original_uid = self.event.calendar_uid
         self.event.slug = 'renamed-calendar-lifecycle-1073'
         self.event.start_datetime = self.start + timedelta(days=1)
         self.event.save()
 
-        send_reschedule_notice_one(
+        send_reschedule_notice_fanout(
             self.event.pk,
-            self.user.pk,
             self.start.isoformat(),
         )
-        reschedule_cal = self._calendar(mock_reschedule)
+        reschedule_cal = self._campaign_calendar(mock_reschedule)
         self.assertEqual(str(_vevent(reschedule_cal).get('uid')), original_uid)
 
         self.event.status = 'cancelled'
         self.event.ics_sequence += 1
         self.event.save(update_fields=['status', 'ics_sequence'])
-        send_cancellation_notice_one(self.event.pk, self.user.pk)
-        cancellation_cal = self._calendar(mock_cancel)
+        send_cancellation_notice_fanout(self.event.pk)
+        cancellation_cal = self._campaign_calendar(mock_cancel)
         self.assertEqual(str(_vevent(cancellation_cal).get('uid')), original_uid)
 
-    @patch('events.tasks.notify_cancellation._send_calendar_email')
+    @patch('events.tasks.notify_cancellation.submit_event_notice_campaign')
     def test_cancellation_relay_calendar_is_cancel_with_status_cancelled(
-        self, mock_send,
+        self, mock_submit,
     ):
-        mock_send.return_value = 'relay-cancel'
+        mock_submit.return_value = {'campaign_id': 'relay-cancel'}
         self.event.status = 'cancelled'
         self.event.ics_sequence = 2
         self.event.save(update_fields=['status', 'ics_sequence'])
 
-        result = send_cancellation_notice_one(self.event.pk, self.user.pk)
+        result = send_cancellation_notice_fanout(self.event.pk)
 
-        self.assertEqual(result['status'], 'sent')
-        cal = self._calendar(mock_send)
-        self.assertEqual(mock_send.call_args.kwargs['method'], 'CANCEL')
-        self.assertEqual(mock_send.call_args.kwargs['template_key'], 'event_cancelled')
+        self.assertEqual(result['status'], 'submitted')
+        self.assertEqual(result['count'], 1)
+        cal = self._campaign_calendar(mock_submit)
+        recipient = mock_submit.call_args.kwargs['recipients'][0]
+        self.assertEqual(recipient['calendar_alternative']['method'], 'CANCEL')
+        self.assertEqual(mock_submit.call_args.kwargs['template_key'], 'event_cancelled')
         self.assertEqual(str(cal.get('method')), 'CANCEL')
         vevent = _vevent(cal)
         self._assert_bare_organizer(cal)
@@ -191,41 +197,43 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertEqual(int(vevent.get('sequence')), 2)
         self.assertEqual(str(vevent.get('status')), 'CANCELLED')
 
-    @patch('events.tasks.notify_reschedule._send_calendar_email')
+    @patch('events.tasks.notify_reschedule.submit_event_notice_campaign')
     def test_unsubscribed_attendee_still_receives_transactional_update(
-        self, mock_send,
+        self, mock_submit,
     ):
-        mock_send.return_value = 'relay-unsub'
+        mock_submit.return_value = {'campaign_id': 'relay-unsub'}
         self.user.unsubscribed = True
         self.user.save(update_fields=['unsubscribed'])
         self.event.ics_sequence = 1
         self.event.save(update_fields=['ics_sequence'])
 
-        result = send_reschedule_notice_one(
+        result = send_reschedule_notice_fanout(
             self.event.pk,
-            self.user.pk,
             (timezone.now() + timedelta(days=1)).isoformat(),
         )
 
-        self.assertEqual(result['status'], 'sent')
-        self.assertEqual(mock_send.call_count, 1)
-        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(result['status'], 'submitted')
+        self.assertEqual(result['count'], 1)
+        self.assertEqual(mock_submit.call_count, 1)
+        call_kwargs = mock_submit.call_args.kwargs
         self.assertEqual(call_kwargs['template_key'], 'event_rescheduled')
-        self.assertEqual(call_kwargs['to_email'], self.user.email)
-        self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
-        self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
+        recipient = call_kwargs['recipients'][0]
+        self.assertEqual(recipient['email'], self.user.email)
+        ctx = recipient['metadata']['relay_campaign_context']
+        self.assertEqual(ctx['event_title'], self.event.title)
+        self.assertEqual(recipient['calendar_alternative']['method'], 'REQUEST')
 
-    @patch('events.tasks.notify_cancellation._send_calendar_email')
+    @patch('events.tasks.notify_cancellation.submit_event_notice_campaign')
     def test_cancelled_registration_is_skipped_before_cancellation_send(
-        self, mock_send,
+        self, mock_submit,
     ):
         self.registration.delete()
 
-        result = send_cancellation_notice_one(self.event.pk, self.user.pk)
+        result = send_cancellation_notice_fanout(self.event.pk)
 
         self.assertEqual(result['status'], 'skipped')
-        self.assertEqual(result['reason'], 'registration_cancelled')
-        mock_send.assert_not_called()
+        self.assertEqual(result['count'], 0)
+        mock_submit.assert_not_called()
         self.assertFalse(
             EmailLog.objects.filter(
                 user=self.user,
@@ -277,29 +285,20 @@ class CancellationSeriesSubscriberDedupTest(TestCase):
         )
 
     @patch(
-        'events.tasks.notify_cancellation._send_calendar_email',
-        return_value='ses-one-off-cancel',
+        'events.tasks.notify_cancellation.submit_event_notice_campaign',
+        return_value={'campaign_id': 'ses-one-off-cancel'},
     )
     def test_series_subscriber_skips_standalone_send_but_one_off_receives_it(
-        self, mock_send,
+        self, mock_submit,
     ):
-        subscriber_result = send_cancellation_notice_one(
-            self.event.pk,
-            self.series_subscriber.pk,
-        )
-        one_off_result = send_cancellation_notice_one(
-            self.event.pk,
-            self.one_off_registrant.pk,
-        )
+        result = send_cancellation_notice_fanout(self.event.pk)
 
-        self.assertEqual(subscriber_result['status'], 'skipped')
-        self.assertEqual(subscriber_result['reason'], 'series_subscriber')
-        self.assertEqual(one_off_result['status'], 'sent')
-        mock_send.assert_called_once()
-        self.assertEqual(
-            mock_send.call_args.kwargs['to_email'],
-            self.one_off_registrant.email,
-        )
+        self.assertEqual(result['status'], 'submitted')
+        self.assertEqual(result['count'], 1)
+        self.assertEqual(mock_submit.call_count, 1)
+        recipients = mock_submit.call_args.kwargs['recipients']
+        self.assertEqual(len(recipients), 1)
+        self.assertEqual(recipients[0]['email'], self.one_off_registrant.email)
 
         cancellation_logs = EmailLog.objects.filter(
             email_type='event_cancelled',
@@ -307,7 +306,10 @@ class CancellationSeriesSubscriberDedupTest(TestCase):
         self.assertEqual(cancellation_logs.count(), 1)
         cancellation_log = cancellation_logs.get()
         self.assertEqual(cancellation_log.user, self.one_off_registrant)
-        self.assertEqual(cancellation_log.ses_message_id, 'ses-one-off-cancel')
+        self.assertEqual(
+            cancellation_log.ses_message_id,
+            f'event-cancelled-{self.event.pk}-seq-{self.event.ics_sequence}',
+        )
         self.assertFalse(
             cancellation_logs.filter(user=self.series_subscriber).exists(),
         )

@@ -12,8 +12,8 @@ from email_app.models import EmailLog
 from events.models import Event, EventRegistration, HostInviteDelivery
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import maybe_register_host_as_attendee
-from events.tasks.notify_cancellation import send_cancellation_notice_one
-from events.tasks.notify_reschedule import send_reschedule_notice_one
+from events.tasks.notify_cancellation import send_cancellation_notice_fanout
+from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 from integrations.config import site_base_url
 
 User = get_user_model()
@@ -285,37 +285,36 @@ class HostCalendarLifecycleTest(TestCase):
             event=self.event, user=self.host,
         )
 
-    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-update')
+    @patch('events.tasks.notify_reschedule.submit_event_notice_campaign', return_value={'created': True})
     def test_reschedule_uses_attendee_audience_and_deduplicates(self, mock_send):
         self.event.ics_sequence = 2
         self.event.save(update_fields=['ics_sequence'])
-        first = send_reschedule_notice_one(
+        first = send_reschedule_notice_fanout(
             self.event.pk,
-            self.host.pk,
             (self.event.start_datetime - timedelta(days=1)).isoformat(),
         )
-        second = send_reschedule_notice_one(
+        second = send_reschedule_notice_fanout(
             self.event.pk,
-            self.host.pk,
             (self.event.start_datetime - timedelta(days=1)).isoformat(),
         )
-        self.assertEqual(first['status'], 'sent')
-        self.assertEqual(second['status'], 'deduplicated')
+        self.assertEqual(first['status'], 'submitted')
+        self.assertEqual(second['status'], 'skipped')
         self.assertEqual(mock_send.call_count, 1)
         call_kwargs = mock_send.call_args.kwargs
-        vevent = _vevent(call_kwargs['ics_content'])
+        ctx = call_kwargs['recipients'][0]['metadata']['relay_campaign_context']
+        vevent = _vevent(ctx['calendar_alternative']['content'])
         join_url = f'{site_base_url()}{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)
         self.assertEqual(call_kwargs['template_key'], 'event_rescheduled')
-        self.assertEqual(call_kwargs['context']['join_url'], join_url)
-        self.assertNotIn(self.event.zoom_join_url, call_kwargs['context'].values())
+        self.assertEqual(ctx['join_url'], join_url)
+        self.assertNotIn(self.event.zoom_join_url, ctx.values())
         self.assertEqual(
             EmailLog.objects.get(email_type='event_rescheduled').event,
             self.event,
         )
 
-    @patch('events.tasks.notify_reschedule._send_calendar_email')
+    @patch('events.tasks.notify_reschedule.submit_event_notice_campaign')
     def test_new_host_initial_invite_at_current_sequence_wins_race(self, mock_send):
         self.event.ics_sequence = 4
         self.event.save(update_fields=['ics_sequence'])
@@ -328,31 +327,29 @@ class HostCalendarLifecycleTest(TestCase):
             sent_at=timezone.now(),
             sent_ics_sequence=4,
         )
-        result = send_reschedule_notice_one(
+        result = send_reschedule_notice_fanout(
             self.event.pk,
-            self.host.pk,
             (self.event.start_datetime - timedelta(days=1)).isoformat(),
         )
-        self.assertEqual(result['status'], 'deduplicated')
-        self.assertEqual(
-            result['reason'], 'host_initial_invite_has_current_sequence',
-        )
+        self.assertEqual(result['status'], 'skipped')
+        self.assertEqual(result['reason'], 'no_recipients')
         mock_send.assert_not_called()
 
     @patch(
-        'events.tasks.notify_cancellation._send_calendar_email',
-        return_value='ses-cancel',
+        'events.tasks.notify_cancellation.submit_event_notice_campaign',
+        return_value={'created': True},
     )
     def test_cancel_uses_attendee_audience_and_deduplicates(self, mock_send):
         self.event.status = 'cancelled'
         self.event.ics_sequence = 3
         self.event.save(update_fields=['status', 'ics_sequence'])
-        first = send_cancellation_notice_one(self.event.pk, self.host.pk)
-        second = send_cancellation_notice_one(self.event.pk, self.host.pk)
-        self.assertEqual(first['status'], 'sent')
-        self.assertEqual(second['status'], 'deduplicated')
+        first = send_cancellation_notice_fanout(self.event.pk)
+        second = send_cancellation_notice_fanout(self.event.pk)
+        self.assertEqual(first['status'], 'submitted')
+        self.assertEqual(second['status'], 'skipped')
         self.assertEqual(mock_send.call_count, 1)
-        vevent = _vevent(mock_send.call_args.kwargs['ics_content'])
+        ctx = mock_send.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
+        vevent = _vevent(ctx['calendar_alternative']['content'])
         join_url = f'{site_base_url()}{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)

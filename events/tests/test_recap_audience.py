@@ -11,7 +11,6 @@ from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 from django.test import TestCase, tag
@@ -19,7 +18,7 @@ from django.utils import timezone
 
 from bookclub.models import Book, Chapter, ChapterRead, Note
 from content.models import Cohort, CohortEnrollment, Course, Module, Unit
-from email_app.testing import StubRelayClient, deliver_pending_mail
+from email_app.models import EmailLog
 from events.models import Event, EventRegistration, EventSeries
 from events.services.event_recap_notification import (
     notify_recap_ready,
@@ -28,6 +27,13 @@ from events.services.event_recap_notification import (
 from notifications.models import EventReminderLog
 
 User = get_user_model()
+
+SUBMIT_PATCH = (
+    'events.services.event_recap_notification.submit_event_notice_campaign'
+)
+STATUSES_PATCH = (
+    'events.services.event_recap_notification.get_event_notice_statuses'
+)
 
 
 def _reasons(item):
@@ -145,18 +151,32 @@ class RecapAudienceTest(TestCase):
             preview['by_reason'],
             {'attended': 1, 'book_club': 3, 'cohort': 2, 'registered': 2},
         )
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertFalse(
+            EmailLog.objects.filter(
+                event=self.event, email_type='event_recap_ready',
+            ).exists(),
+        )
         self.assertFalse(EventReminderLog.objects.exists())
 
     def test_send_emails_each_person_once_and_rerun_never_double_emails(self):
-        result = notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            result = notify_recap_ready(self.event)
 
         self.assertFalse(result['dry_run'])
         self.assertEqual(result['eligible'], 7)
         self.assertEqual(result['emailed'], 6)
         self.assertEqual(result['failed'], 0)
+        self.assertEqual(mock_submit.call_count, 1)
         recipients = list(
-            EmailDelivery.objects.values_list('recipient_email', flat=True),
+            EmailLog.objects.filter(
+                event=self.event, email_type='event_recap_ready',
+            ).values_list('recipient_email', flat=True),
         )
         self.assertEqual(len(recipients), 6)
         self.assertEqual(len(set(recipients)), 6)
@@ -165,25 +185,56 @@ class RecapAudienceTest(TestCase):
         self.assertNotIn('unrelated@test.com', recipients)
         self.assertNotIn('inactive-member@test.com', recipients)
 
-        rerun = notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_rerun_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            rerun = notify_recap_ready(self.event)
+        self.assertEqual(mock_rerun_submit.call_count, 0)
         self.assertEqual(rerun['emailed'], 0)
         self.assertEqual(rerun['already_emailed'], 6)
-        self.assertEqual(EmailDelivery.objects.count(), 6)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                event=self.event, email_type='event_recap_ready',
+            ).count(),
+            6,
+        )
         preview = preview_recap_audience(self.event)
         self.assertEqual(preview['would_email'], 0)
         self.assertEqual(preview['already_emailed'], 6)
 
     def test_rerun_reaches_a_cohort_member_enrolled_after_the_first_send(self):
-        notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ),
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            notify_recap_ready(self.event)
         late = User.objects.create_user(email='late@test.com', email_verified=True)
         cohort = Cohort.objects.get(name='Cohort 4')
         CohortEnrollment.objects.create(cohort=cohort, user=late)
 
-        rerun = notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k2'}},
+            ),
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            rerun = notify_recap_ready(self.event)
 
         self.assertEqual(rerun['emailed'], 1)
         self.assertTrue(
-            EmailDelivery.objects.filter(recipient_email='late@test.com').exists(),
+            EmailLog.objects.filter(
+                event=self.event,
+                email_type='event_recap_ready',
+                recipient_email='late@test.com',
+            ).exists(),
         )
 
     def test_dry_run_reports_not_ready_instead_of_failing(self):
@@ -196,30 +247,35 @@ class RecapAudienceTest(TestCase):
         self.assertEqual(preview['reason_code'], 'missing_recap')
         self.assertEqual(preview['eligible'], 7)
 
-    def _resolved_contexts(self):
-        stub = StubRelayClient()
-        with patch(
-            'community_base.mail.backends.relay.configured_client',
-            return_value=stub,
-        ):
-            deliver_pending_mail()
-        return [call['context'] for call in stub.calls]
-
     def test_email_links_recording_when_the_event_has_one(self):
         Event.objects.filter(pk=self.event.pk).update(
             recording_url='https://www.youtube.com/watch?v=abc',
         )
         self.event.refresh_from_db()
-        notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            notify_recap_ready(self.event)
 
-        context = self._resolved_contexts()[0]
+        context = mock_submit.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
         event_url = f'https://aishippinglabs.com{self.event.get_absolute_url()}'
         self.assertEqual(context['recording_url'], event_url)
 
     def test_email_omits_recording_link_without_a_recording(self):
-        notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            notify_recap_ready(self.event)
 
-        context = self._resolved_contexts()[0]
+        context = mock_submit.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
         self.assertEqual(context['recording_url'], '')
 
 
@@ -259,22 +315,20 @@ class RecapEmailLinkByAudienceTest(TestCase):
         CohortEnrollment.objects.create(cohort=cohort, user=cls.cohort_member)
         EventRegistration.objects.create(event=cls.event, user=cls.registrant)
 
-    def _contexts_by_recipient(self):
-        stub = StubRelayClient()
-        with patch(
-            'community_base.mail.backends.relay.configured_client',
-            return_value=stub,
-        ):
-            deliver_pending_mail()
-        contexts = {}
-        for call in stub.calls:
-            contexts[call['delivery'].recipient_email] = call['context']
-        return contexts
-
     def test_cohort_member_gets_the_session_unit_and_registrant_the_event_recap(self):
-        notify_recap_ready(self.event)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            notify_recap_ready(self.event)
 
-        contexts = self._contexts_by_recipient()
+        contexts = {
+            r['email']: r['metadata']['relay_campaign_context']
+            for r in mock_submit.call_args.kwargs['recipients']
+        }
         unit_url = f'https://aishippinglabs.com{self.unit.get_absolute_url()}?cohort=4'
         recap_url = f'https://aishippinglabs.com{self.event.get_recap_url()}'
         self.assertEqual(contexts['cohort-link@test.com']['recap_url'], unit_url)
@@ -307,17 +361,34 @@ class NotifyRecapReadyCommandTest(TestCase):
         output = out.getvalue()
         self.assertIn('command-member@test.com\twould_send\tregistered', output)
         self.assertIn('eligible=1 would_email=1', output)
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertFalse(
+            EmailLog.objects.filter(
+                event=self.event, email_type='event_recap_ready',
+            ).exists(),
+        )
 
     def test_send_then_rerun_reports_already_sent(self):
         first, second = StringIO(), StringIO()
-        call_command('notify_recap_ready', str(self.event.pk), stdout=first)
-        call_command('notify_recap_ready', str(self.event.pk), stdout=second)
+        with (
+            patch(
+                SUBMIT_PATCH,
+                return_value={'campaign': {'external_key': 'k'}},
+            ) as mock_submit,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            call_command('notify_recap_ready', str(self.event.pk), stdout=first)
+            call_command('notify_recap_ready', str(self.event.pk), stdout=second)
 
+        self.assertEqual(mock_submit.call_count, 1)
         self.assertIn('emailed=1', first.getvalue())
         self.assertIn('emailed=0', second.getvalue())
         self.assertIn('already_sent=1', second.getvalue())
-        self.assertEqual(EmailDelivery.objects.count(), 1)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                event=self.event, email_type='event_recap_ready',
+            ).count(),
+            1,
+        )
 
     def test_unknown_event_and_not_ready_event_fail(self):
         with self.assertRaisesMessage(CommandError, 'No event with id=999999'):

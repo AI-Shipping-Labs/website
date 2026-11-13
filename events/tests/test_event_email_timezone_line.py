@@ -23,7 +23,7 @@ from django.utils import timezone
 from events.models import Event, EventRegistration, EventSeries, SeriesRegistration
 from events.services.registration_email import send_registration_confirmation
 from events.services.series_invite import send_series_registration_invite
-from events.tasks.notify_reschedule import send_reschedule_notice_one
+from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 from integrations.config import clear_config_cache
 from payments.models import Tier
 
@@ -140,16 +140,16 @@ class RescheduleEmailTimezoneLineTest(TestCase):
         # once in 6,400 renders.
         with (
             patch(
-                "events.tasks.notify_reschedule._send_calendar_email",
+                "events.tasks.notify_reschedule.submit_event_notice_campaign",
             ) as mock_send,
             patch(
                 "events.tasks.notify_reschedule.generate_cancel_token",
                 return_value="deterministic-cancel-token",
             ),
         ):
-            mock_send.return_value = "relay-tz-resched-1"
-            send_reschedule_notice_one(self.event.pk, user.pk, old_start)
-        return mock_send.call_args.kwargs["context"]
+            mock_send.return_value = {"created": True}
+            send_reschedule_notice_fanout(self.event.pk, old_start)
+        return mock_send.call_args.kwargs["recipients"][0]["metadata"]["relay_campaign_context"]
 
     def test_one_line_covers_both_times_for_zoned_recipient(self):
         user = User.objects.create_user(

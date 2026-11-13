@@ -1,0 +1,17 @@
+{% if relay_notice_statuses %}
+  <div class="bg-card border border-border rounded-lg p-4" id="relay-notice-status-panel" data-testid="relay-notice-status-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Relay notice status</h2>
+    <dl class="space-y-2 text-xs">
+      {% for notice in relay_notice_statuses %}
+        <div class="border border-border rounded p-2" data-testid="relay-notice-row" data-notice-key="{{ notice.external_key }}">
+          <dt class="font-medium text-foreground mb-1">{{ notice.label }}</dt>
+          <dd class="text-muted-foreground">
+            Sent: {{ notice.sent_count }} /
+            Delivered: {{ notice.delivered_count }} /
+            Pending: {{ notice.pending_count }}
+          </dd>
+        </div>
+      {% endfor %}
+    </dl>
+  </div>
+{% endif %}

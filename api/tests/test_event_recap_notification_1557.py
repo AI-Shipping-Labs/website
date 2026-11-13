@@ -3,7 +3,6 @@
 import datetime
 from datetime import timedelta
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
@@ -11,8 +10,8 @@ from django.utils import timezone
 from accounts.models import Token
 from content.models import Cohort, CohortEnrollment, Course
 from email_app.models import EmailLog
-from email_app.testing import deliver_pending_mail
 from events.models import Event, EventRegistration, EventSeries
+from events.tests.recap_relay import start_recap_relay
 from notifications.models import Notification
 
 User = get_user_model()
@@ -51,6 +50,10 @@ class EventRecapNotificationApiTest(TestCase):
         )
         EventRegistration.objects.create(event=cls.event, user=cls.member)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def _auth(self):
         return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
 
@@ -68,30 +71,20 @@ class EventRecapNotificationApiTest(TestCase):
         self.assertEqual(body['notified'], 1)
         self.assertEqual(body['results'][0]['user_id'], self.member.pk)
         self.assertEqual(body['results'][0]['email_status'], 'sent')
-        # A1.2 slice 3: the email channel records a durable delivery; the
-        # summary id is the delivery id until the worker writes the
-        # EmailLog audit row (which keeps the event FK).
-        delivery = EmailDelivery.objects.get(
-            purpose='event_recap_ready', recipient_user=self.member,
+        # One Relay campaign; the summary id is the EmailLog audit row.
+        log = EmailLog.objects.get(
+            event=self.event, email_type='event_recap_ready',
         )
-        self.assertEqual(
-            body['results'][0]['email_log_id'], str(delivery.pk),
-        )
-        # Issue #1613: the durable context stores no URL; the worker
-        # mints the recap link from the related event.
-        self.assertEqual(delivery.context_data, {})
+        self.assertEqual(body['results'][0]['email_log_id'], log.pk)
+        self.assertEqual(len(self.relay.campaigns), 1)
+        self.assertEqual(len(body['relay']), 1)
+        self.assertEqual(body['relay'][0]['external_key'], log.ses_message_id)
+        self.assertEqual(body['relay'][0]['sent_count'], 1)
         self.assertEqual(
             body['results'][0]['notification_id'],
             Notification.objects.get(
                 user=self.member, notification_type='event_recap',
             ).pk,
-        )
-        deliver_pending_mail()
-        self.assertEqual(
-            EmailLog.objects.get(
-                event=self.event, email_type='event_recap_ready',
-            ).dedupe_key,
-            delivery.idempotency_key,
         )
 
     def test_missing_recap_returns_stable_422_reason(self):
@@ -219,6 +212,10 @@ class EventNotifyRecapByIdApiTest(TestCase):
         )
         CohortEnrollment.objects.create(cohort=cohort, user=cls.cohort_member)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def _post(self, query='', token=None):
         key = (token or self.token).key
         return self.client.post(
@@ -238,7 +235,7 @@ class EventNotifyRecapByIdApiTest(TestCase):
             'notify-recap-registrant@test.com': ['registered'],
             'notify-recap-cohort@test.com': ['cohort'],
         })
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertEqual(self.relay.campaigns, [])
 
     def test_send_reaches_registrant_and_cohort_member_once(self):
         first = self._post().json()
@@ -249,8 +246,9 @@ class EventNotifyRecapByIdApiTest(TestCase):
         self.assertEqual(first['by_reason'], {'cohort': 1, 'registered': 1})
         self.assertEqual(second['emailed'], 0)
         self.assertEqual(second['already_emailed'], 2)
+        self.assertEqual(len(self.relay.campaigns), 1)
         self.assertEqual(
-            set(EmailDelivery.objects.values_list('recipient_email', flat=True)),
+            set(self.relay.emails),
             {'notify-recap-registrant@test.com', 'notify-recap-cohort@test.com'},
         )
 
@@ -272,11 +270,11 @@ class EventNotifyRecapByIdApiTest(TestCase):
         preview = self._post('?dry_run=1').json()
         self.assertFalse(preview['ready'])
         self.assertEqual(preview['eligible'], 2)
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertEqual(self.relay.campaigns, [])
 
     def test_non_staff_token_cannot_preview_or_send(self):
         for query in ('?dry_run=true', ''):
             with self.subTest(query=query):
                 response = self._post(query, token=self.non_staff_token)
                 self.assertEqual(response.status_code, 401)
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertEqual(self.relay.campaigns, [])

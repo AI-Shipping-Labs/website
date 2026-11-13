@@ -823,7 +823,48 @@ def get_native_campaign_stats(external_key, *, session=None, allow_not_found=Fal
     )
     if any(not isinstance(campaign.get(field), int) for field in required):
         raise RelayCampaignApiError("Relay campaign stats response omitted aggregate metrics")
+    if not isinstance(campaign.get("pending_count"), int):
+        recipient_count = campaign.get("recipient_count") or 0
+        sent_count = campaign.get("sent_count") or 0
+        skipped_count = campaign.get("skipped_count") or 0
+        campaign["pending_count"] = max(recipient_count - sent_count - skipped_count, 0)
     return campaign
+
+
+def submit_native_campaign(
+    *,
+    external_key: str,
+    subject: str,
+    template_key: str,
+    recipients: list[dict],
+    context: dict | None = None,
+    sender_id: str | None = None,
+    metadata: dict | None = None,
+    allow_unverified: bool = True,
+    audience: str = RELAY_CAMPAIGN_AUDIENCE,
+    client: str = RELAY_CAMPAIGN_CLIENT,
+    session=None,
+) -> dict:
+    """Create, reconcile recipients, and queue a Relay campaign in one request."""
+    payload = {
+        "audience": audience,
+        "client": client,
+        "subject": (subject or template_key)[:255],
+        "template_key": template_key,
+        "context": context or {},
+        "sender_id": sender_id or get_relay_from_email(),
+        "allow_unverified": allow_unverified,
+        "include_tags": [],
+        "exclude_tags": [],
+        "recipients": recipients,
+        "metadata": metadata or {},
+    }
+    return _campaign_api_request(
+        "POST",
+        f"/api/campaigns/{external_key}/submit",
+        payload=payload,
+        session=session,
+    )
 
 
 def submit_transient_list(

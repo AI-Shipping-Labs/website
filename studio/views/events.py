@@ -942,6 +942,8 @@ def _event_edit_panels_context(event) -> dict:
     context['delete_help'] = EVENT_DELETE_HELP
     _apply_workshop_ready_context(context, event)
     _apply_recap_ready_context(context, event)
+    from events.services.relay_event_notice import get_event_notice_statuses
+    context['relay_notice_statuses'] = get_event_notice_statuses(event)
     # Issue #701: surface registered attendees on the edit page so
     # operators can see and export the roster without dropping into
     # Django admin. ``-registered_at`` matches the model's default

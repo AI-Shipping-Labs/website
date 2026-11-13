@@ -60,7 +60,7 @@ class WorkshopReadyServiceTest(TestCase):
         self.event.host_email = self.host_user.email
         self.event.save(update_fields=['host_email'])
 
-    @patch('events.services.workshop_ready_notification.submit_transient_list')
+    @patch('events.services.workshop_ready_notification.submit_event_notice_campaign')
     def test_sends_to_registrants_and_host_only(self, mock_send):
         mock_send.return_value = relay_result('relay-a')
 
@@ -85,14 +85,14 @@ class WorkshopReadyServiceTest(TestCase):
         )
         self.assertEqual(mock_send.call_count, 1)
         kwargs = mock_send.call_args.kwargs
-        self.assertEqual(len(kwargs['members']), 3)
+        self.assertEqual(len(kwargs['recipients']), 3)
         context = kwargs['context']
         self.assertEqual(context['event_title'], 'Workshop Ready Event')
         self.assertEqual(context['workshop_title'], 'Workshop Ready Notes')
         self.assertIn('/workshops/workshop-ready-event-workshop', context['workshop_url'])
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_host_already_registered_is_deduped(self, mock_send):
@@ -117,10 +117,10 @@ class WorkshopReadyServiceTest(TestCase):
             1,
         )
         self.assertEqual(mock_send.call_count, 1)
-        self.assertEqual(len(mock_send.call_args.kwargs['members']), 3)
+        self.assertEqual(len(mock_send.call_args.kwargs['recipients']), 3)
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_rerun_skips_existing_and_reaches_new_registrant(self, mock_send):
@@ -143,7 +143,7 @@ class WorkshopReadyServiceTest(TestCase):
         )
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_unsubscribed_registrant_still_receives_transactional_email(self, mock_send):
@@ -161,7 +161,7 @@ class WorkshopReadyServiceTest(TestCase):
         self.assertEqual(classify_email_type(EMAIL_TYPE), EMAIL_KIND_TRANSACTIONAL)
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_non_user_host_receives_email_only(self, mock_send):
@@ -190,7 +190,7 @@ class WorkshopReadyServiceTest(TestCase):
         )
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_inactive_host_user_is_skipped_not_email_only(self, mock_send):
@@ -210,7 +210,7 @@ class WorkshopReadyServiceTest(TestCase):
             EmailLog.objects.filter(user=inactive).exists(),
         )
 
-    @patch('events.services.workshop_ready_notification.submit_transient_list')
+    @patch('events.services.workshop_ready_notification.submit_event_notice_campaign')
     def test_recipient_failure_is_reported_and_rest_continue(self, mock_send):
         mock_send.side_effect = RuntimeError('Relay failed')
 
@@ -261,7 +261,7 @@ class WorkshopReadyStudioAndApiTest(TestCase):
         self.client.login(email='staff@example.com', password='pw')
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_studio_endpoint_sends_and_reports_counts(self, mock_send):
@@ -287,7 +287,7 @@ class WorkshopReadyStudioAndApiTest(TestCase):
         self.assertContains(response, 'A linked published workshop is required')
 
     @patch(
-        'events.services.workshop_ready_notification.submit_transient_list',
+        'events.services.workshop_ready_notification.submit_event_notice_campaign',
         return_value=relay_result(),
     )
     def test_api_endpoint_success_and_error_cases(self, mock_send):

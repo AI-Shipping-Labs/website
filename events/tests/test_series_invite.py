@@ -272,22 +272,32 @@ class LegacySesSettingTest(TierSetupMixin, TestCase):
         SeriesRegistration.objects.create(series=self.series, user=self.user)
         EventRegistration.objects.create(event=self.e1, user=self.user)
 
+    @patch('events.services.series_invite.submit_event_notice_campaign')
     @patch(
         'events.services.series_invite._send_calendar_email',
     )
-    def test_disabled_ses_setting_does_not_suppress_relay(self, mock_send):
+    def test_disabled_ses_setting_does_not_suppress_relay(self, mock_send, mock_submit):
         mock_send.return_value = 'relay-message'
+        mock_submit.return_value = {'campaign_id': 'relay-message'}
         log = send_series_registration_invite(self.user, self.series, [self.e1])
         send_series_update_to_subscribers(self.e1)
         send_series_cancellation_to_subscribers(self.e1)
 
-        self.assertEqual(mock_send.call_count, 3)
+        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(mock_submit.call_count, 2)
         self.assertEqual(log.ses_message_id, 'relay-message')
-        for etype in ('series_registration', 'series_update', 'series_cancellation'):
+        self.assertTrue(
+            EmailLog.objects.filter(
+                user=self.user,
+                email_type='series_registration',
+                ses_message_id='relay-message',
+            ).exists(),
+        )
+        for etype in ('series_update', 'series_cancellation'):
             self.assertTrue(
                 EmailLog.objects.filter(
-                    user=self.user, email_type=etype,
-                    ses_message_id='relay-message',
+                    user=self.user,
+                    email_type=etype,
                 ).exists(),
                 msg=f'no Relay log for {etype}',
             )
@@ -324,17 +334,22 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             EventRegistration.objects.create(event=self.e2, user=user)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_update_carries_bumped_sequence_and_request_method(self, mock_send):
-        mock_send.return_value = 'relay-update'
+    def test_update_carries_bumped_sequence_and_request_method(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-update'}
 
         sent = send_series_update_to_subscribers(self.e1)
 
         self.assertEqual(sent, 2)
-        call = mock_send.call_args.kwargs
-        ics = call['ics_content']
-        method = call['method']
+        mock_submit.assert_called_once()
+        recipients = mock_submit.call_args.kwargs['recipients']
+        alice_recipient = next(
+            r for r in recipients if r['email'] == 'alice@test.com'
+        )
+        calendar = alice_recipient['calendar_alternative']
+        ics = calendar['content']
+        method = calendar['method']
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
         cal = _parse(ics)
@@ -359,10 +374,10 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_targets_only_given_user_ids(self, mock_send):
-        mock_send.return_value = 'relay-update'
+    def test_targets_only_given_user_ids(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-update'}
 
         sent = send_series_update_to_subscribers(
             self.e1, user_ids=[self.alice.id],
@@ -380,32 +395,26 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             ).exists(),
         )
 
-    @patch('events.services.series_invite._send_calendar_email')
-    def test_per_recipient_failure_isolated(self, mock_send):
-        # Alice's send raises; Bob's must still go through.
-        def side_effect(to_email, **kwargs):
-            if to_email == 'alice@test.com':
-                raise RuntimeError('SES boom')
-            return 'ok'
+    @patch('events.services.series_invite.submit_event_notice_campaign')
+    def test_per_recipient_failure_isolated(self, mock_submit):
+        # All eligible subscribers are submitted in one Relay campaign batch;
+        # if campaign submission fails, no partial EmailLog rows are created.
+        mock_submit.side_effect = RuntimeError('Relay boom')
 
-        mock_send.side_effect = side_effect
+        with self.assertRaises(RuntimeError):
+            send_series_update_to_subscribers(self.e1)
 
-        sent = send_series_update_to_subscribers(self.e1)
-
-        self.assertEqual(sent, 1)
-        self.assertTrue(
-            EmailLog.objects.filter(
-                email_type='series_update', user=self.bob,
-            ).exists(),
+        mock_submit.assert_called_once()
+        self.assertEqual(
+            len(mock_submit.call_args.kwargs['recipients']),
+            2,
         )
         self.assertFalse(
-            EmailLog.objects.filter(
-                email_type='series_update', user=self.alice,
-            ).exists(),
+            EmailLog.objects.filter(email_type='series_update').exists(),
         )
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
     def test_unsubscribed_subscriber_still_gets_transactional_update(
         self, mock_send,
@@ -457,17 +466,18 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         SeriesRegistration.objects.create(series=self.series, user=self.other)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_cancel_single_vevent_bumped_sequence(self, mock_send):
-        mock_send.return_value = 'relay-cancel'
+    def test_cancel_single_vevent_bumped_sequence(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-cancel'}
 
         sent = send_series_cancellation_to_subscribers(self.cancelled)
 
         self.assertEqual(sent, 1)
-        call = mock_send.call_args.kwargs
-        ics = call['ics_content']
-        method = call['method']
+        call = mock_submit.call_args.kwargs
+        calendar = call['recipients'][0]['calendar_alternative']
+        ics = calendar['content']
+        method = calendar['method']
         self.assertEqual(call['template_key'], 'series_cancellation')
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'CANCEL')
@@ -491,10 +501,10 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_only_registered_subscribers_get_cancel(self, mock_send):
-        mock_send.return_value = 'relay-cancel'
+    def test_only_registered_subscribers_get_cancel(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-cancel'}
 
         send_series_cancellation_to_subscribers(self.cancelled)
 
@@ -578,14 +588,14 @@ class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.open2, user=self.free_user)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_update_invite_excludes_inaccessible(self, mock_send):
-        mock_send.return_value = 'relay-update'
+    def test_update_invite_excludes_inaccessible(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-update'}
 
         send_series_update_to_subscribers(self.open1)
 
-        ics = mock_send.call_args.kwargs['ics_content']
+        ics = mock_submit.call_args.kwargs['recipients'][0]['calendar_alternative']['content']
         cal = _parse(ics)
         uids = {str(v.get('uid')) for v in _vevents(cal)}
         self.assertIn('event-woh-o1@aishippinglabs.com', uids)
@@ -720,10 +730,10 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertNotIn('Main tier', note)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_cancellation_note_computed_against_whole_series(self, mock_boto3):
-        mock_boto3.return_value = 'relay-message'
+    def test_cancellation_note_computed_against_whole_series(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-message'}
         # One open session is cancelled; the gated session remains gated.
         self.open1.status = 'cancelled'
         self.open1.save(update_fields=['status'])
@@ -731,22 +741,22 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         sent = send_series_cancellation_to_subscribers(self.open1)
 
         self.assertEqual(sent, 1)
-        note = self._sent_note(mock_boto3)
+        note = mock_submit.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']['partial_note']
         # The note reflects the still-gated Main session, not the cancelled one.
         self.assertIn('1 more session', note)
         self.assertIn('Main tier', note)
         self.assertIn(self.PRICING_URL, note)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
-    def test_update_note_for_partial_access_subscriber(self, mock_boto3):
-        mock_boto3.return_value = 'relay-message'
+    def test_update_note_for_partial_access_subscriber(self, mock_submit):
+        mock_submit.return_value = {'campaign_id': 'relay-message'}
 
         sent = send_series_update_to_subscribers(self.open1)
 
         self.assertEqual(sent, 1)
-        note = self._sent_note(mock_boto3)
+        note = mock_submit.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']['partial_note']
         self.assertIn('1 more session', note)
         self.assertIn('Main tier', note)
         self.assertIn(self.PRICING_URL, note)

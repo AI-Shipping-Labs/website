@@ -7,8 +7,11 @@ from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
 from email_app.relay_transactional import recipient_template_context
-from email_app.services.relay_campaigns import submit_transient_list
 from email_app.services.relay_templates import relay_template_subject
+from events.services.relay_event_notice import (
+    build_relay_recipient,
+    submit_event_notice_campaign,
+)
 from events.services.workshop_ready_recipients import (
     relay_recipient_identity as _relay_recipient_identity,
 )
@@ -66,27 +69,22 @@ def notify_workshop_ready(event):
         user = _render_user(recipient)
         member_ctx = recipient_template_context(user, base_context)
         identity = _relay_recipient_identity(recipient)
-        members.append({
-            'email': recipient.email,
-            'source_object_key': identity,
-            'active': True,
-            'metadata': {'user_name': member_ctx['user_name']},
-        })
+        members.append(build_relay_recipient(recipient.email, identity, member_ctx))
         pending_meta.append((
             recipient,
             identity,
             relay_template_subject(EMAIL_TYPE, member_ctx),
         ))
 
+    external_key = f'event-workshop-ready-{event.pk}'
     try:
-        response = submit_transient_list(
-            list_key=f'{EMAIL_TYPE}:{event.pk}',
-            name=f'Workshop ready: {event.title}',
+        submit_event_notice_campaign(
+            external_key=external_key,
+            subject=pending_meta[0][2],
             template_key=EMAIL_TYPE,
-            idempotency_key=f'{EMAIL_TYPE}:{event.pk}',
+            recipients=members,
             context=base_context,
-            members=members,
-            category=EMAIL_TYPE,
+            metadata={'event_id': event.pk, 'email_type': EMAIL_TYPE},
         )
     except Exception as exc:
         logger.exception(
@@ -103,11 +101,9 @@ def notify_workshop_ready(event):
             )
         return _build_summary(event, workshop, results)
 
-    queued_ids = list((response or {}).get('queued_message_ids') or [])
-    for idx, (recipient, identity, subject) in enumerate(pending_meta):
-        msg_id = str(queued_ids[idx]) if idx < len(queued_ids) else f'{EMAIL_TYPE}:{event.pk}:{identity}'
+    for recipient, _identity, subject in pending_meta:
         results.append(
-            _record_sent(event, workshop, recipient, identity, subject, msg_id)
+            _record_sent(event, workshop, recipient, _identity, subject, external_key)
         )
 
     return _build_summary(event, workshop, results)

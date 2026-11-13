@@ -1,31 +1,15 @@
 """Background tasks for notifying registered attendees when an event is rescheduled.
 
-Two-stage fan-out (issue #670):
-
-1. ``enqueue_reschedule_notice(event_id, old_start_iso)`` — enqueues the
-   stage-1 fan-out task. Called from the Studio edit view after detecting
-   a start_datetime change.
-
-2. ``send_reschedule_notice_fanout(event_id, old_start_iso)`` — loads the
-   event, iterates its registrations, and enqueues one stage-2 per-user
-   task per registration. Mirrors the campaign send_campaign / batch
-   split so a poisoned per-user send does not kill the whole batch.
-
-3. ``send_reschedule_notice_one(event_id, user_id, old_start_iso)`` —
-   per-user send. Re-loads the recipient, formats both old and new
-   start times in the recipient's timezone via the shared
-   ``format_user_datetime`` helper, renders the ``event_rescheduled``
-   template, sends through Relay with a fresh ``.ics`` attachment
-   carrying ``METHOD:REQUEST`` and a bumped SEQUENCE, and writes one
-   ``EmailLog(email_type='event_rescheduled')`` row.
-
-Calendar lifecycle email is transactional: global newsletter unsubscribe
-does not suppress it. Permanent bounce state still suppresses delivery.
+Submits one Relay campaign per reschedule event (with per-recipient context
+and ``.ics`` payload) so Relay owns pacing, retries, and deduplication.
+Calendar lifecycle email is transactional: global newsletter unsubscribe does
+not suppress it. Permanent bounce state still suppresses delivery.
 """
 
-import logging
+from __future__ import annotations
 
-from django.contrib.auth import get_user_model
+import logging
+from datetime import datetime
 
 from accounts.services.timezones import (
     CALENDAR_INVITE_DATETIME_FORMAT,
@@ -33,26 +17,31 @@ from accounts.services.timezones import (
     build_timezone_email_line,
     format_user_datetime,
 )
-from email_app.relay_transactional import recipient_template_context
+from email_app.relay_transactional import (
+    calendar_alternative,
+    recipient_template_context,
+)
+from email_app.services.email_classification import (
+    get_calendar_sender,
+    relay_sender_id,
+)
 from email_app.services.relay_templates import relay_template_subject
-from events.models import Event, EventRegistration, SeriesRegistration
+from events.models import Event, EventRegistration, HostInviteDelivery, SeriesRegistration
 from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import is_host_registration
-from events.services.registration_email import _send_calendar_email
+from events.services.relay_event_notice import (
+    build_relay_recipient,
+    submit_event_notice_campaign,
+)
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
 
 def enqueue_reschedule_notice(event_id, old_start_iso):
-    """Enqueue the stage-1 fan-out for a rescheduled event.
-
-    Called synchronously from the Studio edit view; the actual fan-out
-    (and every per-user send) runs on a worker so the request returns
-    quickly even when an event has thousands of registrations.
-    """
+    """Enqueue the reschedule notice job for a rescheduled event."""
     from jobs.tasks import async_task, build_task_name
 
     return async_task(
@@ -68,222 +57,128 @@ def enqueue_reschedule_notice(event_id, old_start_iso):
 
 
 def send_reschedule_notice_fanout(event_id, old_start_iso):
-    """Stage-1 fan-out: enqueue one per-user send job per registration.
-
-    Uses ``select_related('user')`` so the registration list is fetched
-    with a single JOIN (no N+1 over the user FK when we serialize
-    ``user_id`` for the per-user task). The actual user object is
-    re-fetched in the per-user job, so a stale user in this iteration
-    is not a correctness issue — only an efficiency one.
-    """
-    try:
-        event = Event.objects.get(pk=event_id)
-    except Event.DoesNotExist:
-        logger.warning(
-            "send_reschedule_notice_fanout: event %s no longer exists",
-            event_id,
-        )
+    """Submit all eligible reschedule notices as one Relay campaign."""
+    event = Event.objects.filter(pk=event_id).first()
+    if event is None:
+        logger.warning("send_reschedule_notice_fanout: event %s no longer exists", event_id)
         return {"status": "skipped", "reason": "missing_event", "event_id": event_id}
 
-    from jobs.tasks import async_task, build_task_name
+    old_start = _parse_iso(old_start_iso)
+    prepared = _prepare_reschedule_recipients(event, old_start)
+    if not prepared:
+        return {"status": "skipped", "reason": "no_recipients", "event_id": event_id, "count": 0}
 
-    registrations = list(
-        EventRegistration.objects.filter(event=event).select_related('user'),
+    external_key = f"event-rescheduled-{event.pk}-seq-{event.ics_sequence}"
+    subject = prepared[0]["subject"]
+    submit_event_notice_campaign(
+        external_key=external_key,
+        subject=subject,
+        template_key="event_rescheduled",
+        recipients=[item["member"] for item in prepared],
+        context={"event_title": event.title},
+        sender_id=relay_sender_id(get_calendar_sender()),
+        metadata={
+            "event_id": event.pk,
+            "email_type": "event_rescheduled",
+            "ics_sequence": event.ics_sequence,
+        },
     )
-
-    for registration in registrations:
-        async_task(
-            "events.tasks.notify_reschedule.send_reschedule_notice_one",
-            event_id,
-            registration.user_id,
-            old_start_iso,
-            task_name=build_task_name(
-                "Send reschedule notice (user)",
-                f"event #{event_id} user #{registration.user_id}",
-                "studio reschedule fan-out",
-            ),
-        )
-
+    _record_reschedule_logs(event, prepared, external_key)
     logger.info(
-        "Reschedule notice fan-out: event %s, %d registrations enqueued",
-        event_id, len(registrations),
+        'Submitted reschedule notice campaign %s for event "%s" (%d recipients)',
+        external_key, event.title, len(prepared),
     )
     return {
-        "status": "enqueued",
+        "status": "submitted",
         "event_id": event_id,
-        "count": len(registrations),
+        "count": len(prepared),
+        "external_key": external_key,
     }
 
 
-def send_reschedule_notice_one(event_id, user_id, old_start_iso):
-    """Stage-2 per-user send.
-
-    Renders ``old_start`` and the event's
-    current ``start_datetime`` in the recipient's preferred timezone
-    (UTC fallback when unset) so the body shows both times in the same
-    zone — never UTC for one and local for the other.
-
-    Writes one ``EmailLog(email_type='event_rescheduled')`` row per
-    successful send.
-    """
-    User = get_user_model()
-
-    try:
-        event = Event.objects.get(pk=event_id)
-    except Event.DoesNotExist:
-        return {"status": "skipped", "reason": "missing_event", "event_id": event_id}
-
-    try:
-        user = User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        return {"status": "skipped", "reason": "missing_user", "user_id": user_id}
-
-    if user_has_permanent_bounce(user):
-        return {
-            "status": "skipped",
-            "reason": "permanent_bounce",
-            "user_id": user_id,
-        }
-
-    # The registration may have been cancelled between fan-out and the
-    # per-user send; emailing a rescheduled time to someone who already
-    # cancelled would be wrong.
-    try:
-        registration = EventRegistration.objects.get(event=event, user=user)
-    except EventRegistration.DoesNotExist:
-        return {
-            "status": "skipped",
-            "reason": "registration_cancelled",
-            "user_id": user_id,
-        }
-
-    # Issue #869 de-dup contract: a series subscriber's canonical update
-    # for a time change is the multi-event series invite
-    # (``send_series_update_to_subscribers``), sent from the Studio
-    # reschedule path. To avoid sending that subscriber two emails for the
-    # same change (a single-event reschedule notice AND a series update),
-    # the per-event reschedule notice goes to one-off registrants only.
-    if event.event_series_id and SeriesRegistration.objects.filter(
-        series_id=event.event_series_id, user=user,
-    ).exists():
-        return {
-            "status": "skipped",
-            "reason": "series_subscriber",
-            "user_id": user_id,
-        }
-
-    old_start = _parse_iso(old_start_iso)
-
-    site_url = site_base_url()
-    # Issue #1082: id-canonical join URL via ``Event.get_join_url``.
-    join_url = f'{site_url}{event.get_join_url()}'
-    cancel_token = generate_cancel_token(registration)
-    cancel_url = (
-        f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'
+def _series_subscriber_ids(event) -> set[int]:
+    if not event.event_series_id:
+        return set()
+    return set(
+        SeriesRegistration.objects.filter(series_id=event.event_series_id)
+        .values_list("user_id", flat=True),
     )
-    is_host = is_host_registration(registration)
 
-    if is_host:
-        from events.models import HostInviteDelivery
-        if HostInviteDelivery.objects.filter(
+
+def _sent_host_user_ids(event) -> set[int]:
+    return set(
+        HostInviteDelivery.objects.filter(
             event=event,
-            user=user,
             access_version=event.host_access_version,
             status=HostInviteDelivery.STATUS_SENT,
             sent_ics_sequence__gte=event.ics_sequence,
-        ).exists():
-            return {
-                'status': 'deduplicated',
-                'reason': 'host_initial_invite_has_current_sequence',
-                'user_id': user_id,
-            }
+        ).values_list("user_id", flat=True),
+    )
 
+
+def _prepare_reschedule_recipients(event, old_start) -> list[dict]:
     from email_app.models import EmailLog
-    dedupe_key = f'event-rescheduled:{event.pk}:{user.pk}:{event.ics_sequence}'
-    existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
-    if existing_log is not None:
-        return {
-            'status': 'deduplicated',
-            'user_id': user_id,
-            'email_log_id': existing_log.pk,
-        }
 
-    template_context = {
-        'event_title': event.title,
-            # Issue #666 contract: pre-format BOTH times via
-            # format_user_datetime so the template context carries
-            # strings, not raw datetimes. Both render in the recipient's
-            # timezone (or UTC fallback) — never mismatched. Issue #1071:
-            # calendar-invite emails carry the weekday via the dedicated
-            # CALENDAR_INVITE_DATETIME_FORMAT (the global default stays
-            # weekday-free).
-            'old_event_datetime': format_user_datetime(
-                old_start, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
-            ),
-            'new_event_datetime': format_user_datetime(
-                event.start_datetime, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
-            ),
-            'timezone_help': build_timezone_email_line(
-                user, build_timezone_account_url(site_url),
-            ),
-            'join_url': join_url,
-            'cancel_url': cancel_url,
-        'is_host_registration': is_host,
+    series_ids = _series_subscriber_ids(event)
+    sent_hosts = _sent_host_user_ids(event)
+    registrations = EventRegistration.objects.filter(event=event).select_related("user")
+    site_url = site_base_url()
+    prepared = []
+    for registration in registrations:
+        user = registration.user
+        if user_has_permanent_bounce(user) or user.pk in series_ids:
+            continue
+        is_host = is_host_registration(registration)
+        if is_host and user.pk in sent_hosts:
+            continue
+        dedupe_key = f"event-rescheduled:{event.pk}:{user.pk}:{event.ics_sequence}"
+        if EmailLog.objects.filter(dedupe_key=dedupe_key).exists():
+            continue
+        prepared.append(_build_reschedule_item(event, registration, old_start, site_url, is_host, dedupe_key))
+    return prepared
+
+
+def _build_reschedule_item(event, registration, old_start, site_url, is_host, dedupe_key) -> dict:
+    user = registration.user
+    cancel_token = generate_cancel_token(registration)
+    base_ctx = {
+        "event_title": event.title,
+        "old_event_datetime": format_user_datetime(old_start, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT),
+        "new_event_datetime": format_user_datetime(event.start_datetime, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT),
+        "timezone_help": build_timezone_email_line(user, build_timezone_account_url(site_url)),
+        "join_url": f"{site_url}{event.get_join_url()}",
+        "cancel_url": f"{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}",
+        "is_host_registration": is_host,
     }
-    subject = relay_template_subject(
-        'event_rescheduled', recipient_template_context(user, template_context),
-    )
-
-    # METHOD:REQUEST + bumped SEQUENCE so calendar clients overwrite the
-    # original event entry instead of duplicating it. The SEQUENCE bump
-    # itself happens at the Studio view layer (the same place that
-    # detected the change), so by the time this task runs the event's
-    # ``ics_sequence`` is already greater than whatever the registration
-    # email's ``.ics`` carried.
+    full_ctx = recipient_template_context(user, base_ctx)
+    subject = relay_template_subject("event_rescheduled", full_ctx)
     ics_content = generate_ics(
-        event,
-        method='REQUEST',
-        audience=AUDIENCE_ATTENDEE,
-        attendee_email=user.email,
+        event, method="REQUEST", audience=AUDIENCE_ATTENDEE, attendee_email=user.email,
     )
+    calendar = calendar_alternative(ics_content, method="REQUEST", name="event.ics")
+    member = build_relay_recipient(user.email, f"user-{user.pk}", full_ctx, calendar=calendar)
+    return {"user": user, "dedupe_key": dedupe_key, "subject": subject, "member": member}
 
-    ses_message_id = _send_calendar_email(
-        to_email=user.email,
-        template_key='event_rescheduled',
-        context=recipient_template_context(user, template_context),
-        ics_content=ics_content,
-        idempotency_key=dedupe_key,
-        safe_correlation=f'event={event.pk} user={user.pk}',
-        method='REQUEST',
-    )
 
-    email_log = EmailLog.objects.create(
-        user=user,
-        event=event,
-        recipient_email=user.email,
-        email_type='event_rescheduled',
-        subject=subject,
-        ses_message_id=ses_message_id,
-        dedupe_key=dedupe_key,
-    )
+def _record_reschedule_logs(event, prepared: list[dict], external_key: str):
+    from email_app.models import EmailLog
 
-    logger.info(
-        'Sent reschedule notice to %s for event "%s" (Relay: %s)',
-        user.email, event.title, ses_message_id,
-    )
-
-    return {"status": "sent", "user_id": user_id, "email_log_id": email_log.pk}
+    for item in prepared:
+        EmailLog.objects.get_or_create(
+            dedupe_key=item["dedupe_key"],
+            defaults={
+                "user": item["user"],
+                "event": event,
+                "recipient_email": item["user"].email,
+                "email_type": "event_rescheduled",
+                "subject": item["subject"],
+                "ses_message_id": external_key,
+            },
+        )
 
 
 def _parse_iso(value):
-    """Parse an ISO datetime string back into a timezone-aware datetime.
-
-    The Studio view serializes ``old_start`` via ``datetime.isoformat()``
-    so the worker receives a string (Django-Q's task arguments must be
-    JSON-serialisable). This helper is the symmetric ``fromisoformat``
-    that re-hydrates it without re-importing datetime at the call site.
-    """
-    from datetime import datetime
+    """Parse an ISO datetime string back into a timezone-aware datetime."""
     if value is None:
         return None
     return datetime.fromisoformat(value)

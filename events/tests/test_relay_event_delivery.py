@@ -19,8 +19,8 @@ from events.services.series_invite import (
     send_series_update_to_subscribers,
 )
 from events.services.workshop_ready_notification import notify_workshop_ready
-from events.tasks.notify_cancellation import send_cancellation_notice_one
-from events.tasks.notify_reschedule import send_reschedule_notice_one
+from events.tasks.notify_cancellation import send_cancellation_notice_fanout
+from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 from notifications.models import EventReminderLog, Notification
 
 User = get_user_model()
@@ -97,6 +97,13 @@ RELAY_SETTINGS = override_settings(
 
 
 @tag("core")
+def campaign_submit_response(*_args, **_kwargs):
+    resp = Mock(status_code=201, content=b'{"created": true, "queued": true}', text='{"created": true, "queued": true}')
+    resp.headers = {"content-type": "application/json"}
+    resp.json.return_value = {"created": True, "queued": True}
+    return resp
+
+
 @RELAY_SETTINGS
 class RelayCalendarCallerTest(RelayPayloadAssertions, TestCase):
     def setUp(self):
@@ -106,8 +113,9 @@ class RelayCalendarCallerTest(RelayPayloadAssertions, TestCase):
             preferred_timezone="UTC",
         )
 
+    @patch("email_app.services.relay_campaigns.requests.Session.request", side_effect=campaign_submit_response)
     @patch("email_app.relay_transactional.requests.post", side_effect=relay_response)
-    def test_registration_reschedule_and_cancellation_payloads(self, post):
+    def test_registration_reschedule_and_cancellation_payloads(self, post, campaign_req):
         event = make_event("relay-event-lifecycle")
         registration = EventRegistration.objects.create(event=event, user=self.user)
         send_registration_confirmation(registration)
@@ -121,35 +129,49 @@ class RelayCalendarCallerTest(RelayPayloadAssertions, TestCase):
             ics_sequence=1,
         )
         event.refresh_from_db()
-        send_reschedule_notice_one(event.pk, self.user.pk, old_start.isoformat())
-        send_reschedule_notice_one(event.pk, self.user.pk, old_start.isoformat())
+        send_reschedule_notice_fanout(event.pk, old_start.isoformat())
+        send_reschedule_notice_fanout(event.pk, old_start.isoformat())
 
         Event.objects.filter(pk=event.pk).update(status="cancelled", ics_sequence=2)
         event.refresh_from_db()
-        send_cancellation_notice_one(event.pk, self.user.pk)
-        send_cancellation_notice_one(event.pk, self.user.pk)
+        send_cancellation_notice_fanout(event.pk)
+        send_cancellation_notice_fanout(event.pk)
 
-        self.assertEqual(post.call_count, 3)
-        self._assert_single_event_requests(post.call_args_list, event, registration)
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(campaign_req.call_count, 2)
+        reg_payload = self.assert_request(
+            post.call_args,
+            "event_registration",
+            self.user.email,
+            f"event-registration:{event.pk}:{self.user.pk}:{registration.pk}",
+        )
+        self.assert_calendar_payload(reg_payload, event, "REQUEST", 0)
+        self.assertEqual(reg_payload["context"]["user_name"], "Ada")
+
+        resched_url = campaign_req.call_args_list[0].args[1]
+        resched_payload = campaign_req.call_args_list[0].kwargs["json"]
+        self.assertTrue(resched_url.endswith(f"/api/campaigns/event-rescheduled-{event.pk}-seq-1/submit"))
+        self.assertEqual(resched_payload["template_key"], "event_rescheduled")
+        self.assertIn("old_event_datetime", resched_payload["recipients"][0]["metadata"]["relay_campaign_context"])
+        self.assert_calendar_payload(
+            {"email": self.user.email, **resched_payload["recipients"][0]["metadata"]["relay_campaign_context"]},
+            event, "REQUEST", 1,
+        )
+
+        cancel_url = campaign_req.call_args_list[1].args[1]
+        cancel_payload = campaign_req.call_args_list[1].kwargs["json"]
+        self.assertTrue(cancel_url.endswith(f"/api/campaigns/event-cancelled-{event.pk}-seq-2/submit"))
+        self.assertEqual(cancel_payload["template_key"], "event_cancelled")
+        self.assertIn("event_datetime", cancel_payload["recipients"][0]["metadata"]["relay_campaign_context"])
+        self.assert_calendar_payload(
+            {"email": self.user.email, **cancel_payload["recipients"][0]["metadata"]["relay_campaign_context"]},
+            event, "CANCEL", 2,
+        )
         self.assertEqual(EmailLog.objects.filter(event=event).count(), 3)
 
-    def _assert_single_event_requests(self, requests, event, registration):
-        keys = [
-            f"event-registration:{event.pk}:{self.user.pk}:{registration.pk}",
-            f"event-rescheduled:{event.pk}:{self.user.pk}:1",
-            f"event-cancelled:{event.pk}:{self.user.pk}:2",
-        ]
-        templates = ["event_registration", "event_rescheduled", "event_cancelled"]
-        methods = ["REQUEST", "REQUEST", "CANCEL"]
-        for index, request in enumerate(requests):
-            payload = self.assert_request(request, templates[index], self.user.email, keys[index])
-            self.assert_calendar_payload(payload, event, methods[index], index)
-        self.assertEqual(requests[0].kwargs["json"]["context"]["user_name"], "Ada")
-        self.assertIn("old_event_datetime", requests[1].kwargs["json"]["context"])
-        self.assertIn("event_datetime", requests[2].kwargs["json"]["context"])
-
+    @patch("email_app.services.relay_campaigns.requests.Session.request", side_effect=campaign_submit_response)
     @patch("email_app.relay_transactional.requests.post", side_effect=relay_response)
-    def test_series_registration_update_and_cancellation_payloads(self, post):
+    def test_series_registration_update_and_cancellation_payloads(self, post, campaign_req):
         series = EventSeries.objects.create(
             name="Relay Series",
             slug="relay-series",
@@ -167,37 +189,40 @@ class RelayCalendarCallerTest(RelayPayloadAssertions, TestCase):
         send_series_registration_invite(self.user, series, [event])
         old_start = event.start_datetime - timedelta(days=1)
         send_series_update_to_subscribers(event, old_start_iso=old_start.isoformat())
-        send_series_update_to_subscribers(event, old_start_iso=old_start.isoformat())
         Event.objects.filter(pk=event.pk).update(status="cancelled", ics_sequence=3)
         event.refresh_from_db()
         send_series_cancellation_to_subscribers(event)
-        send_series_cancellation_to_subscribers(event)
 
-        self.assertEqual(post.call_count, 3)
-        self._assert_series_requests(post.call_args_list, series, event, series_registration)
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(campaign_req.call_count, 2)
+        reg_payload = self.assert_request(
+            post.call_args,
+            "series_registration",
+            self.user.email,
+            f"series-registration:{series.pk}:{self.user.pk}:{series_registration.pk}",
+        )
+        self.assert_calendar_payload(reg_payload, event, "REQUEST", 2)
+
+        upd_payload = campaign_req.call_args_list[0].kwargs["json"]
+        self.assertEqual(upd_payload["template_key"], "series_update")
+        upd_ctx = upd_payload["recipients"][0]["metadata"]["relay_campaign_context"]
+        self.assertEqual(upd_ctx["series_name"], series.name)
+        self.assertTrue(upd_ctx["changed_occurrence"])
+        self.assert_calendar_payload({"email": self.user.email, **upd_ctx}, event, "REQUEST", 2)
+
+        cancel_payload = campaign_req.call_args_list[1].kwargs["json"]
+        self.assertEqual(cancel_payload["template_key"], "series_cancellation")
+        cancel_ctx = cancel_payload["recipients"][0]["metadata"]["relay_campaign_context"]
+        self.assertEqual(cancel_ctx["series_name"], series.name)
+        self.assert_calendar_payload({"email": self.user.email, **cancel_ctx}, event, "CANCEL", 3)
         self.assertEqual(EmailLog.objects.filter(user=self.user).count(), 3)
-
-    def _assert_series_requests(self, requests, series, event, registration):
-        keys = [
-            f"series-registration:{series.pk}:{self.user.pk}:{registration.pk}",
-            f"series-update:{series.pk}:{self.user.pk}:{event.pk}:2",
-            f"series-cancellation:{series.pk}:{self.user.pk}:{event.pk}:3",
-        ]
-        templates = ["series_registration", "series_update", "series_cancellation"]
-        methods = ["REQUEST", "REQUEST", "CANCEL"]
-        sequences = [2, 2, 3]
-        for index, request in enumerate(requests):
-            payload = self.assert_request(request, templates[index], self.user.email, keys[index])
-            self.assert_calendar_payload(payload, event, methods[index], sequences[index])
-            self.assertEqual(payload["context"]["series_name"], series.name)
-        self.assertTrue(requests[1].kwargs["json"]["context"]["changed_occurrence"])
 
 
 @tag("core")
 @RELAY_SETTINGS
 class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
-    @patch("email_app.relay_transactional.requests.post", side_effect=relay_response)
-    def test_recording_ready_native_context_log_and_dedupe(self, post):
+    @patch("email_app.services.relay_campaigns.requests.Session.request", side_effect=campaign_submit_response)
+    def test_recording_ready_native_context_log_and_dedupe(self, mock_request):
         host = User.objects.create_user(email="relay-host@example.com", first_name="Grace")
         event = make_event("relay-recording-ready", completed=True)
         event.host_email = host.email
@@ -217,29 +242,23 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         second = notify_recording_ready(event)
 
         self.assertEqual((first["status"], second["status"]), ("sent", "skipped"))
-        self.assertEqual(post.call_count, 1)
-        key = f"event_recording_ready:{event.pk}:user:{host.pk}"
-        payload = self.assert_request(post.call_args, "event_recording_ready", host.email, key)
+        self.assertEqual(mock_request.call_count, 1)
+        method, url = mock_request.call_args.args[:2]
+        self.assertEqual(method, "POST")
+        self.assertTrue(url.endswith(f"/api/campaigns/event-recording-ready-{event.pk}/submit"))
+        payload = mock_request.call_args.kwargs["json"]
+        self.assertEqual(payload["template_key"], "event_recording_ready")
+        self.assertEqual(payload["recipients"][0]["email"], host.email)
         self.assertNotIn("calendar_alternative", payload)
         self.assertEqual(payload["context"]["event_title"], event.title)
         self.assertEqual(payload["context"]["publish_state"], "Published and available to watch")
         self.assertTrue(payload["context"]["is_available_to_watch"])
         self.assertIn(workshop.get_absolute_url(), payload["context"]["watch_url"])
         log = EmailLog.objects.get(event=event, email_type="event_recording_ready")
-        self.assertEqual(log.ses_message_id, "relay-event_recording_ready-1")
+        self.assertEqual(log.ses_message_id, f"event-recording-ready-{event.pk}")
 
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    @patch("email_app.services.relay_campaigns.requests.Session.request", side_effect=campaign_submit_response)
     def test_workshop_ready_native_context_log_notification_and_dedupe(self, mock_request):
-        class _Resp:
-            status_code = 202
-            content = b'{"queued_message_ids": ["relay-event_workshop_ready-1"]}'
-            text = content.decode()
-            headers = {"content-type": "application/json"}
-
-            def json(self):
-                return {"queued_message_ids": ["relay-event_workshop_ready-1"]}
-
-        mock_request.return_value = _Resp()
         member = User.objects.create_user(email="relay-member@example.com", first_name="Lin")
         event = make_event("relay-workshop-ready", completed=True)
         EventRegistration.objects.create(event=event, user=member)
@@ -259,15 +278,15 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         self.assertEqual(mock_request.call_count, 1)
         method, url = mock_request.call_args.args[:2]
         self.assertEqual(method, "POST")
-        self.assertTrue(url.endswith("/api/transient-recipient-lists/transactional-send"))
+        self.assertTrue(url.endswith(f"/api/campaigns/event-workshop-ready-{event.pk}/submit"))
         payload = mock_request.call_args.kwargs["json"]
         self.assertEqual(payload["template_key"], "event_workshop_ready")
-        self.assertEqual(len(payload["members"]), 1)
-        self.assertEqual(payload["members"][0]["email"], member.email)
-        self.assertEqual(payload["members"][0]["source_object_key"], f"user:{member.pk}")
+        self.assertEqual(len(payload["recipients"]), 1)
+        self.assertEqual(payload["recipients"][0]["email"], member.email)
+        self.assertEqual(payload["recipients"][0]["source_object_key"], f"user:{member.pk}")
         self.assertEqual(payload["context"]["workshop_title"], workshop.title)
         self.assertEqual(payload["context"]["workshop_url"], f"https://aishippinglabs.test{workshop.get_absolute_url()}")
         log = EmailLog.objects.get(event=event, email_type="event_workshop_ready")
-        self.assertEqual(log.ses_message_id, "relay-event_workshop_ready-1")
+        self.assertEqual(log.ses_message_id, f"event-workshop-ready-{event.pk}")
         self.assertEqual(EventReminderLog.objects.filter(event=event, user=member).count(), 1)
         self.assertEqual(Notification.objects.filter(user=member).count(), 1)

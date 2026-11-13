@@ -111,7 +111,7 @@ class RecordingReadyNotificationSendTest(TestCase):
     def test_event_recording_ready_is_transactional(self):
         self.assertEqual(classify_email_type(EMAIL_TYPE), EMAIL_KIND_TRANSACTIONAL)
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_sends_external_host_email_and_writes_event_scoped_log(self, mock_send):
         mock_send.return_value = relay_result('relay-ready-1')
         event = make_event(host_email='external-host@example.com')
@@ -127,12 +127,12 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertIsNone(log.user)
         self.assertEqual(log.recipient_email, 'external-host@example.com')
         self.assertEqual(log.email_type, EMAIL_TYPE)
-        self.assertEqual(log.ses_message_id, 'relay-ready-1')
+        self.assertEqual(log.ses_message_id, f'event-recording-ready-{event.pk}')
 
-        call = mock_send.call_args
-        self.assertEqual(call.args[0], 'external-host@example.com')
-        self.assertEqual(call.args[1], EMAIL_TYPE)
-        context = call.args[2]
+        kwargs = mock_send.call_args.kwargs
+        self.assertEqual(kwargs['recipients'][0]['email'], 'external-host@example.com')
+        self.assertEqual(kwargs['template_key'], EMAIL_TYPE)
+        context = kwargs['context']
         self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
         self.assertEqual(context['publish_state'], 'Ready for review/publishing')
         self.assertNotIn(event.recording_s3_url, str(context))
@@ -145,7 +145,7 @@ class RecordingReadyNotificationSendTest(TestCase):
             context['campaign_prefill_url'],
         )
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_registered_host_logs_user_and_recipient_snapshot(self, mock_send):
         mock_send.return_value = relay_result('relay-user-host')
         user = get_user_model().objects.create_user(
@@ -161,7 +161,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(log.user, user)
         self.assertEqual(log.recipient_email, user.email)
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_replay_skips_existing_event_recipient_log(self, mock_send):
         event = make_event(host_email='external-host@example.com')
         existing = EmailLog.objects.create(
@@ -179,7 +179,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         mock_send.assert_not_called()
         self.assertEqual(EmailLog.objects.count(), 1)
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_send_error_is_best_effort_and_does_not_write_log(self, mock_send):
         mock_send.side_effect = RuntimeError('SES unavailable')
         event = make_event(host_email='external-host@example.com')
@@ -191,7 +191,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(result['email_log_ids'], [])
         self.assertEqual(EmailLog.objects.count(), 0)
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_published_event_copy_does_not_change_publish_state(self, mock_send):
         mock_send.return_value = relay_result('relay-published')
         event = make_event(
@@ -201,7 +201,7 @@ class RecordingReadyNotificationSendTest(TestCase):
 
         notify_recording_ready(event)
 
-        context = mock_send.call_args.args[2]
+        context = mock_send.call_args.kwargs['context']
         self.assertEqual(context['publish_state'], 'Uploaded and currently published')
         event.refresh_from_db()
         self.assertTrue(event.published)
@@ -251,7 +251,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         ):
             return notify_recording_ready(event)
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_published_workshop_email_says_available_to_watch_with_video_link(
         self, mock_send,
     ):
@@ -264,7 +264,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
 
         self.assertEqual(result['status'], 'sent')
         subject = EmailLog.objects.get().subject
-        context = mock_send.call_args.args[2]
+        context = mock_send.call_args.kwargs['context']
 
         self.assertEqual(subject, expected_subject)
         self.assertIn('available to watch', context['publish_copy'].lower())
@@ -282,7 +282,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         self.assertNotIn('amazonaws.com', str(context))
         self.assertNotIn(event.recording_s3_url, str(context))
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_unpublished_workshop_event_keeps_ready_for_review_copy(
         self, mock_send,
     ):
@@ -295,7 +295,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         )
 
         subject = EmailLog.objects.get().subject
-        context = mock_send.call_args.args[2]
+        context = mock_send.call_args.kwargs['context']
         self.assertEqual(subject, 'Relay recording review audit subject')
         self.assertEqual(context['publish_state'], 'Ready for review/publishing')
         self.assertNotIn('available to watch', context['publish_copy'].lower())
@@ -303,7 +303,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
         self.assertFalse(context['is_available_to_watch'])
 
-    @patch('events.services.recording_ready_notification.send_relay_transactional')
+    @patch('events.services.recording_ready_notification.submit_event_notice_campaign')
     def test_published_but_no_watchable_surface_keeps_review_framing(
         self, mock_send,
     ):
@@ -316,7 +316,7 @@ class RecordingAvailableToWatchCopyTest(TestCase):
 
         notify_recording_ready(event)
 
-        context = mock_send.call_args.args[2]
+        context = mock_send.call_args.kwargs['context']
         self.assertNotIn('available to watch', context['publish_copy'].lower())
         self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
         self.assertEqual(context['watch_url'], '')

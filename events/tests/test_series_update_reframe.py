@@ -283,30 +283,30 @@ class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
         self.old_start = self.changed.start_datetime - timedelta(days=1)
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
     def test_old_start_iso_renders_before_after(self, mock_send):
-        mock_send.return_value = 'relay-update'
+        mock_send.return_value = {'created': True}
 
         sent = send_series_update_to_subscribers(
             self.changed, old_start_iso=self.old_start.isoformat(),
         )
 
         self.assertEqual(sent, 1)
-        context = mock_send.call_args.kwargs['context']
+        context = mock_send.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
         self.assertIn('(was ', context['occurrences_list'])
         self.assertTrue(context['changed_occurrence'])
 
     @patch(
-        'events.services.series_invite._send_calendar_email',
+        'events.services.series_invite.submit_event_notice_campaign',
     )
     def test_no_old_start_iso_keeps_whole_series_framing(self, mock_send):
-        mock_send.return_value = 'relay-update'
+        mock_send.return_value = {'created': True}
 
         sent = send_series_update_to_subscribers(self.changed)
 
         self.assertEqual(sent, 1)
-        context = mock_send.call_args.kwargs['context']
+        context = mock_send.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
         self.assertNotIn('(was ', context['occurrences_list'])
         self.assertFalse(context['changed_occurrence'])
 
@@ -392,20 +392,20 @@ class RescheduleNoticeWeekdayTest(TestCase):
         )
 
     @patch(
-        'events.tasks.notify_reschedule._send_calendar_email',
+        'events.tasks.notify_reschedule.submit_event_notice_campaign',
     )
     def test_old_and_new_times_include_weekday(self, mock_send):
-        from events.tasks.notify_reschedule import send_reschedule_notice_one
+        from events.tasks.notify_reschedule import send_reschedule_notice_fanout
 
-        mock_send.return_value = 'relay-reschedule'
+        mock_send.return_value = {'created': True}
         old_start = datetime(2026, 6, 24, 16, 0, tzinfo=UTC)  # Wednesday
 
-        result = send_reschedule_notice_one(
-            self.event.pk, self.user.pk, old_start.isoformat(),
+        result = send_reschedule_notice_fanout(
+            self.event.pk, old_start.isoformat(),
         )
 
-        self.assertEqual(result['status'], 'sent')
-        context = mock_send.call_args.kwargs['context']
+        self.assertEqual(result['status'], 'submitted')
+        context = mock_send.call_args.kwargs['recipients'][0]['metadata']['relay_campaign_context']
         self.assertIn('Wednesday, June 24, 2026, 18:00 Europe/Berlin', context['old_event_datetime'])
         self.assertIn('Thursday, June 25, 2026, 18:00 Europe/Berlin', context['new_event_datetime'])
         self.assertEqual(

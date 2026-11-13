@@ -10,12 +10,12 @@ import datetime
 from datetime import timedelta
 from unittest.mock import patch
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Cohort, CohortEnrollment, Course
+from email_app.models import EmailLog
 from events.models import Event, EventRegistration, EventSeries
 from events.services.event_audience import resolve_event_audience
 from events.services.event_recap_notification import notify_recap_ready
@@ -27,6 +27,8 @@ from integrations.models import IntegrationSetting
 User = get_user_model()
 
 ENQUEUE = 'events.services.event_recap_notification.enqueue_recap_auto_notify'
+SUBMIT = 'events.services.event_recap_notification.submit_event_notice_campaign'
+STATUSES = 'events.services.event_recap_notification.get_event_notice_statuses'
 
 
 @tag('core')
@@ -59,12 +61,16 @@ class RecapAutoNotifyTest(TestCase):
         return event
 
     def _recap_recipients(self):
-        return sorted(EmailDelivery.objects.filter(
-            purpose='event_recap_ready',
+        return sorted(EmailLog.objects.filter(
+            event=self.event, email_type='event_recap_ready',
         ).values_list('recipient_email', flat=True))
 
     def test_recap_becoming_ready_announces_once_and_edits_never_resend(self):
-        with patch(ENQUEUE) as enqueue:
+        with (
+            patch(ENQUEUE) as enqueue,
+            patch(SUBMIT, return_value={'campaign': {'external_key': 'k'}}) as mock_submit,
+            patch(STATUSES, return_value=[]),
+        ):
             self._save_recap('## What we covered\n\nEvals.')
             enqueue.assert_called_once_with(self.event.pk)
 
@@ -73,6 +79,7 @@ class RecapAutoNotifyTest(TestCase):
             second = send_recap_auto_notify(self.event.pk)
 
         self.assertEqual(enqueue.call_count, 1)
+        self.assertEqual(mock_submit.call_count, 1)
         self.assertEqual(first['status'], 'sent')
         self.assertEqual(first['emailed'], 2)
         self.assertEqual(second, {
@@ -85,11 +92,16 @@ class RecapAutoNotifyTest(TestCase):
     def test_recap_already_sent_manually_is_not_announced_again(self):
         with patch(ENQUEUE):
             self._save_recap('Notes.')
-        notify_recap_ready(Event.objects.get(pk=self.event.pk))
+        with (
+            patch(SUBMIT, return_value={'campaign': {'external_key': 'k'}}) as mock_submit,
+            patch(STATUSES, return_value=[]),
+        ):
+            notify_recap_ready(Event.objects.get(pk=self.event.pk))
         with patch(ENQUEUE) as enqueue:
             self._save_recap('')
             self._save_recap('Rewritten notes.')
         enqueue.assert_not_called()
+        self.assertEqual(mock_submit.call_count, 1)
         self.assertEqual(len(self._recap_recipients()), 2)
 
     def test_toggle_off_does_not_queue(self):

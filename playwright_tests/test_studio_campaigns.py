@@ -485,11 +485,20 @@ def _queue_failed_retry(page, recipients_url):
 
 
 def _complete_failed_retry(campaign, delivery):
+    from email_app.models import EmailCampaign
     from email_app.tasks.send_campaign import send_campaign_batch
 
+    EmailCampaign.objects.filter(pk=campaign.pk).update(
+        status="sending", relay_campaign_state="pending",
+    )
     with mock.patch(
-        "email_app.tasks.send_campaign.send_campaign_delivery_to_relay",
-        return_value="retried-ok",
+        "email_app.tasks.send_campaign.queue_native_campaign",
+        return_value={
+            "included_delivery_ids": [delivery.pk],
+            "recipient_count": 1,
+            "skipped_count": 0,
+            "queued": True,
+        },
     ):
         send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
     connection.close()
@@ -651,8 +660,19 @@ class TestStaffSeesSkippedSnapshotAsSent:
         recipient.unsubscribed = True
         recipient.save(update_fields=["unsubscribed"])
         EmailCampaign = campaign.__class__
-        EmailCampaign.objects.filter(pk=campaign.pk).update(status="sending")
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
+        EmailCampaign.objects.filter(pk=campaign.pk).update(
+            status="sending", relay_campaign_state="pending",
+        )
+        with mock.patch(
+            "email_app.tasks.send_campaign.queue_native_campaign",
+            return_value={
+                "included_delivery_ids": [],
+                "recipient_count": 0,
+                "skipped_count": 0,
+                "queued": True,
+            },
+        ):
+            send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
         connection.close()
 
         context = _auth_context(browser, "admin@test.com")

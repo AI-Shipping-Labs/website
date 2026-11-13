@@ -36,7 +36,6 @@ DEFAULT_MAX_DELIVERY_ATTEMPTS = 3
 # recoverable without a second automatic transport call.
 DELIVERY_CLAIM_SECONDS = 330
 INACTIVE_AT_SEND = 'inactive_at_send'
-VERIFIED_AT_SEND = 'verified_at_send'
 PERMANENT_BOUNCE_AT_SEND = 'permanent_bounce_at_send'
 
 

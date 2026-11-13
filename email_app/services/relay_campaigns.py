@@ -367,6 +367,35 @@ def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_id
     return [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched]
 
 
+def _mark_campaign_contacts_verified(emails, scope, *, session=None):
+    """Mirror the website's ``email_verified`` flag onto Relay contacts.
+
+    Relay's dispatch-time suppression recheck skips contacts that are
+    unverified *at Relay*, even for members the website verified. List upsert
+    creates unverified Relay contacts, so without this step a ``verified_only``
+    campaign preflights with most recipients skipped (campaign 18: 47 of 1382).
+    Only locally verified users are marked; a failure aborts the queue so a
+    partially verified list can never send.
+    """
+    for address in emails:
+        try:
+            _campaign_api_request(
+                "POST",
+                "/api/contacts",
+                payload=scope | {
+                    "email": address,
+                    "verified": True,
+                    "status": "subscribed",
+                },
+                session=session,
+            )
+        except RelayCampaignError as exc:
+            raise RelayCampaignApiError(
+                "Relay could not mark every verified campaign contact verified; "
+                "nothing was queued."
+            ) from exc
+
+
 def queue_native_campaign(campaign, deliveries, *, external_key=None, session=None):
     """Reconcile one immutable website snapshot and queue it as a Relay campaign.
 
@@ -387,6 +416,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
     key = external_key or f"aishl-campaign-{campaign.pk}"
     list_key = key
     members = []
+    verified_emails = []
     included_delivery_ids = []
     source_deliveries = deliveries.select_related("user").order_by("recipient_user_pk")
     for delivery in source_deliveries:
@@ -434,6 +464,8 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
             "subscribe_if_missing": True,
         })
         included_delivery_ids.append(delivery.pk)
+        if user.email_verified:
+            verified_emails.append(delivery.recipient_email)
 
     scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
     existing = _campaign_api_request(
@@ -487,6 +519,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
             },
             session=session,
         )
+    _mark_campaign_contacts_verified(verified_emails, scope, session=session)
     campaign_payload = scope | {
         "subject": campaign.subject,
         "preview_text": "",

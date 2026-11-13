@@ -76,6 +76,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
             (404, {}),
             (200, {"recipient_list": {}}),
             (200, {"recipient_list": {}}),
+            (200, {"contact": {}}),
             (201, {"campaign": {"status": "draft"}}),
             (200, {"recipient_count": 1, "skipped_count": 0}),
             (200, {"queued": True, "recipient_count": 1, "skipped_count": 0,
@@ -95,7 +96,14 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
 
         self.assertEqual(result["relay_campaign_key"], f"aishl-campaign-{self.campaign.pk}")
         self.assertTrue(result["relay_queued"])
-        self.assertEqual(mock_request.call_count, 6)
+        self.assertEqual(mock_request.call_count, 7)
+        # Regression (campaign 18): list upsert makes unverified Relay contacts,
+        # and Relay skips those at preflight; locally verified members must be
+        # marked verified at Relay before the campaign is created.
+        verify_call = mock_request.call_args_list[3]
+        self.assertTrue(verify_call.args[1].endswith("/api/contacts"))
+        self.assertEqual(verify_call.kwargs["json"]["email"], self.user.email)
+        self.assertIs(verify_call.kwargs["json"]["verified"], True)
         clear_call = mock_request.call_args_list[1]
         self.assertTrue(clear_call.args[1].endswith("/members/reconcile"))
         self.assertEqual(clear_call.kwargs["json"]["members"], [])
@@ -108,7 +116,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(set(recipient_context), {"verify_email_url", "client_recipient_key"})
         self.assertNotIn(self.campaign.body, json.dumps(list_call.kwargs["json"]))
         self.assertLess(len(json.dumps(list_call.kwargs["json"])), 2_000)
-        campaign_call = mock_request.call_args_list[3]
+        campaign_call = mock_request.call_args_list[4]
         self.assertEqual(campaign_call.kwargs["json"]["template_key"], "campaign-broadcast")
         self.assertEqual(campaign_call.kwargs["json"]["recipient_list_key"], f"aishl-campaign-{self.campaign.pk}")
         self.assertEqual(campaign_call.kwargs["json"]["allow_unverified"], False)
@@ -118,6 +126,36 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.delivery.refresh_from_db()
         self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
         self.assertEqual(self.delivery.email_log.ses_message_id, "")
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
+    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_contact_verification_failure_aborts_queue_and_alerts(self, mock_request, mock_alert):
+        self.campaign.relay_campaign_state = "pending"
+        self.campaign.save(update_fields=["relay_campaign_state"])
+        responses = []
+        for status, document in [
+            (404, {}),
+            (200, {"recipient_list": {}}),
+            (200, {"recipient_list": {}}),
+            (500, {}),
+        ]:
+            response = MagicMock()
+            response.status_code = status
+            response.json.return_value = document
+            responses.append(response)
+        mock_request.side_effect = responses
+
+        with self.assertRaises(RelayCampaignApiError):
+            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk], send_delay=0)
+
+        self.assertEqual(mock_request.call_count, 4)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.relay_campaign_state, "failed")
+        self.assertEqual(mock_alert.call_count, 1)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",
@@ -199,6 +237,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
             (404, {}),
             (200, {"recipient_list": {}}),
             (200, {"recipient_list": {}}),
+            (200, {"contact": {}}),
             (201, {"campaign": {"status": "draft"}}),
             (200, {"recipient_count": 0, "skipped_count": 1}),
         ]:

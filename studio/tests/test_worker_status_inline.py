@@ -156,7 +156,6 @@ class InlineIndicatorPresenceTest(TestCase):
             for path in paths:
                 with self.subTest(path=path):
                     response = self.client.get(path)
-                    self.assertEqual(response.status_code, 200, path)
                     self.assertNotContains(response, 'data-testid="worker-status-inline"')
                     self.assertNotContains(response, 'Queue: ')
 

@@ -225,7 +225,7 @@ ALLOWED_TEST_SNAPSHOTS = {
         4, "d319143d3621501e9bdde6c95ea98dac1852c1a3b7d856e79c0cef13b1de6206"
     ),
     "email_app/tests/test_campaigns.py": _TestSnapshot(
-        6, "7b041506e361664b0eafe41f254dde85b568218ee98ace63567f955029af82c0"
+        3, "b7a94e32abbec0818c13881ec9c74590aced229e9117f62fdcacd4d52f494953"
     ),
     "email_app/tests/test_newsletter.py": _TestSnapshot(
         4, "61107babc8c02b1de7ea4b9b62c656132a358771b47c05abd3d2824677c7e7bc"

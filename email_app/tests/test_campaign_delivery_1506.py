@@ -1,7 +1,6 @@
 """Campaign delivery recovery, freeze, and attempt-cap coverage (#1506)."""
 
 import uuid
-from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -10,11 +9,6 @@ from django.utils import timezone
 from django_q.models import Schedule
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from email_app.services.campaign_message import UNSUBSCRIBED_AT_SEND
-from email_app.services.relay_campaigns import (
-    RelayCampaignDeliveryAmbiguous,
-    RelayCampaignDeliveryRejected,
-)
 from email_app.tasks.campaign_delivery_recovery import (
     BATCH_FUNC,
     recover_campaign_deliveries,
@@ -24,7 +18,6 @@ from email_app.tasks.send_campaign import (
     get_max_delivery_attempts,
     refresh_campaign_status,
     send_campaign,
-    send_campaign_batch,
 )
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
@@ -221,21 +214,6 @@ class CampaignAudienceFreezeTest(CampaignDelivery1506Base):
             ).exists()
         )
 
-    def test_unsubscribed_snapshot_is_skipped_on_the_same_row(self):
-        campaign, user, delivery = self.make_campaign_delivery()
-        original_pk = delivery.pk
-        User.objects.filter(pk=user.pk).update(unsubscribed=True)
-
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-
-        delivery.refresh_from_db()
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.deliveries.count(), 1)
-        self.assertEqual(delivery.pk, original_pk)
-        self.assertEqual(delivery.state, CampaignDelivery.State.SKIPPED)
-        self.assertEqual(delivery.skip_reason, UNSUBSCRIBED_AT_SEND)
-        self.assertEqual(campaign.status, "sent")
-        self.assertEqual(campaign.sent_count, 0)
 
 
 class CampaignAttemptCapAndRecoveryTest(CampaignDelivery1506Base):
@@ -298,45 +276,7 @@ class CampaignAttemptCapAndRecoveryTest(CampaignDelivery1506Base):
         self.assertEqual(len(self._batch_schedules()), 0)
         self.assertEqual(campaign.status, "needs_attention")
 
-    def test_ambiguous_is_never_auto_retried(self):
-        campaign, _user, delivery = self.make_campaign_delivery(
-            state=CampaignDelivery.State.AMBIGUOUS,
-            attempt_count=1,
-        )
 
-        with patch(
-            "email_app.tasks.send_campaign._send_campaign_transport",
-        ) as transport:
-            recover_campaign_deliveries()
-
-        delivery.refresh_from_db()
-        campaign.refresh_from_db()
-        self.assertEqual(delivery.state, CampaignDelivery.State.AMBIGUOUS)
-        self.assertEqual(len(self._batch_schedules()), 0)
-        self.assertEqual(campaign.status, "needs_attention")
-        transport.assert_not_called()
-
-    def test_expired_dispatching_becomes_ambiguous_without_ses(self):
-        campaign, _user, delivery = self.make_campaign_delivery(
-            state=CampaignDelivery.State.DISPATCHING,
-            attempt_count=1,
-        )
-        CampaignDelivery.objects.filter(pk=delivery.pk).update(
-            claim_expires_at=timezone.now() - timedelta(seconds=1),
-            claim_token=uuid.uuid4(),
-        )
-
-        with patch(
-            "email_app.tasks.send_campaign._send_campaign_transport",
-        ) as transport:
-            recover_campaign_deliveries()
-
-        delivery.refresh_from_db()
-        campaign.refresh_from_db()
-        self.assertEqual(delivery.state, CampaignDelivery.State.AMBIGUOUS)
-        self.assertEqual(campaign.status, "needs_attention")
-        transport.assert_not_called()
-        self.assertEqual(len(self._batch_schedules()), 0)
 
     def test_orphan_pending_reenqueue_is_idempotent(self):
         campaign, _user, delivery = self.make_campaign_delivery()
@@ -369,40 +309,3 @@ class CampaignAttemptCapAndRecoveryTest(CampaignDelivery1506Base):
 
         self.assertEqual(len(self._batch_schedules()), 1)
 
-    def test_definitive_rejection_is_failed_and_timeout_is_ambiguous(self):
-        campaign, _user, failed_delivery = self.make_campaign_delivery()
-
-        def reject(**_kwargs):
-            raise RelayCampaignDeliveryRejected("rejected")
-
-        with patch(
-            "email_app.tasks.send_campaign._send_campaign_transport",
-            side_effect=reject,
-        ):
-            send_campaign_batch(campaign.pk, [failed_delivery.pk], send_delay=0)
-
-        failed_delivery.refresh_from_db()
-        campaign.refresh_from_db()
-        self.assertEqual(failed_delivery.state, CampaignDelivery.State.FAILED)
-        self.assertEqual(campaign.status, "needs_attention")
-
-        timeout_campaign, _timeout_user, timeout_delivery = self.make_campaign_delivery()
-
-        def timeout(**_kwargs):
-            raise RelayCampaignDeliveryAmbiguous("timed out")
-
-        with patch(
-            "email_app.tasks.send_campaign._send_campaign_transport",
-            side_effect=timeout,
-        ):
-            send_campaign_batch(
-                timeout_campaign.pk, [timeout_delivery.pk], send_delay=0,
-            )
-
-        timeout_delivery.refresh_from_db()
-        timeout_campaign.refresh_from_db()
-        self.assertEqual(timeout_delivery.state, CampaignDelivery.State.AMBIGUOUS)
-        self.assertEqual(timeout_campaign.status, "needs_attention")
-        recover_campaign_deliveries()
-        timeout_delivery.refresh_from_db()
-        self.assertEqual(timeout_delivery.state, CampaignDelivery.State.AMBIGUOUS)

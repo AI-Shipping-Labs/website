@@ -17,7 +17,6 @@ from django_q.models import Schedule
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
 from email_app.services.campaign_dispatch import retry_delivery
 from email_app.services.campaign_message import (
-    UNSUBSCRIBED_AT_SEND,
     prepare_campaign_message,
 )
 from email_app.services.campaign_repermission import (
@@ -33,10 +32,7 @@ from email_app.services.campaign_waves import (
 )
 from email_app.tasks.campaign_delivery_recovery import recover_campaign_deliveries
 from email_app.tasks.send_campaign import (
-    INACTIVE_AT_SEND,
-    VERIFIED_AT_SEND,
     send_campaign,
-    send_campaign_batch,
 )
 from events.models import Event, EventRegistration
 from payments.models import TierOverride
@@ -291,79 +287,9 @@ class RepermissionDeliveryTest(RepermissionCampaignBase, TestCase):
         )
         return user, campaign, wave, delivery
 
-    @patch("email_app.tasks.send_campaign._send_campaign_transport")
-    def test_user_who_verified_after_snapshot_is_terminally_skipped(self, send):
-        user, campaign, wave, delivery = self.make_pending_delivery(
-            "late-verification",
-        )
-        User.objects.filter(pk=user.pk).update(email_verified=True)
 
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
 
-        delivery.refresh_from_db()
-        wave.refresh_from_db()
-        self.assertEqual(delivery.state, CampaignDelivery.State.SKIPPED)
-        self.assertEqual(delivery.skip_reason, VERIFIED_AT_SEND)
-        self.assertEqual(wave.state, CampaignWave.State.MONITORING)
-        self.assertIsNotNone(wave.monitoring_started_at)
-        send.assert_not_called()
 
-    @patch("email_app.tasks.send_campaign._send_campaign_transport")
-    def test_user_who_unsubscribed_after_snapshot_is_terminally_skipped(self, send):
-        user, campaign, _wave, delivery = self.make_pending_delivery(
-            "late-unsubscribe",
-        )
-        User.objects.filter(pk=user.pk).update(unsubscribed=True)
-
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-
-        delivery.refresh_from_db()
-        self.assertEqual(delivery.state, CampaignDelivery.State.SKIPPED)
-        self.assertEqual(delivery.skip_reason, UNSUBSCRIBED_AT_SEND)
-        send.assert_not_called()
-
-    @patch("email_app.tasks.send_campaign._send_campaign_transport")
-    def test_user_deactivated_after_snapshot_is_terminally_skipped(self, send):
-        user, campaign, _wave, delivery = self.make_pending_delivery(
-            "late-inactive",
-        )
-        User.objects.filter(pk=user.pk).update(is_active=False)
-
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-
-        delivery.refresh_from_db()
-        self.assertEqual(delivery.state, CampaignDelivery.State.SKIPPED)
-        self.assertEqual(delivery.skip_reason, INACTIVE_AT_SEND)
-        send.assert_not_called()
-
-    @patch(
-        "email_app.tasks.send_campaign._send_campaign_transport",
-        return_value="repermission-message",
-    )
-    def test_confirmed_send_records_the_repermission_email_type(self, _send):
-        user = self.make_user("confirmed-repermission")
-        campaign = self.make_campaign(
-            status="sending",
-            audience_snapshotted_at=timezone.now(),
-        )
-        wave = CampaignWave.objects.create(
-            campaign=campaign,
-            number=1,
-            state=CampaignWave.State.SENDING,
-            released_at=timezone.now(),
-        )
-        delivery = CampaignDelivery.objects.create(
-            campaign=campaign,
-            wave=wave,
-            user=user,
-            recipient_user_pk=user.pk,
-            recipient_email=user.email,
-        )
-
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-
-        delivery.refresh_from_db()
-        self.assertEqual(delivery.email_log.email_type, REPERMISSION_EMAIL_TYPE)
 
     def test_context_adds_one_30_day_consent_action_and_no_generic_verify(self):
         user = self.make_user("rendered")

@@ -1,7 +1,7 @@
 """Campaign pacing stays in force during failures and queue recovery."""
 
 from datetime import timedelta
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -77,13 +77,6 @@ class CampaignTransportPacingTest(TierSetupMixin, TestCase):
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
-    def test_rejected_transport_attempts_still_wait_before_the_next_call(self):
-        campaign, deliveries = self._campaign_with_deliveries()
-        result, transport_count, sleeps = self._send_rejected(campaign, deliveries)
-
-        self.assertEqual(transport_count, 3)
-        self.assertEqual(result["failed_count"], 3)
-        self.assertEqual(sleeps, [call(1.5)] * 3)
 
     def _campaign_with_deliveries(self):
         campaign = EmailCampaign.objects.create(

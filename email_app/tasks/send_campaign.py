@@ -1,28 +1,15 @@
 """Fail-closed campaign fan-out and per-recipient delivery tasks."""
 
 import logging
-import uuid
-from datetime import timedelta
 
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Q
+from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
-from email_app.services.campaign_message import (
-    UNSUBSCRIBED_AT_SEND,
-    prepare_campaign_message,
-)
 from email_app.services.campaign_pacing import (
     DEFAULT_SEND_DELAY,
     get_campaign_batch_interval_seconds,
-    paced_campaign_send,
-)
-from email_app.services.campaign_repermission import (
-    monitored_message_parts,
 )
 from email_app.services.relay_campaign_progress import (
     begin_native_queue,
@@ -31,13 +18,9 @@ from email_app.services.relay_campaign_progress import (
 )
 from email_app.services.relay_campaigns import (
     RelayCampaignApiError,
-    RelayCampaignDeliveryAmbiguous,
-    RelayCampaignDeliveryRejected,
-    RelayCampaignEdgeBlocked,
     alert_relay_campaign_failure,
     queue_native_campaign,
     retry_native_campaign_delivery,
-    send_campaign_delivery_to_relay,
     validate_native_campaign_recipient_counts,
 )
 from integrations.config import get_config
@@ -90,57 +73,6 @@ def get_max_delivery_attempts():
         )
         return DEFAULT_MAX_DELIVERY_ATTEMPTS
     return value
-
-
-def _edge_block_cooldown_seconds():
-    raw = get_config(
-        'CAMPAIGN_EDGE_BLOCK_COOLDOWN_SECONDS',
-        DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS,
-    )
-    try:
-        return max(int(raw), 0)
-    except (TypeError, ValueError):
-        return DEFAULT_EDGE_BLOCK_COOLDOWN_SECONDS
-
-
-def edge_breaker_open(campaign_id, *, now=None):
-    """Durable circuit breaker: a recent edge block on this campaign pauses it.
-
-    State lives on the released rows (``last_error`` marker plus ``updated_at``),
-    so it is shared across workers and expires on its own.
-    """
-    now = now or timezone.now()
-    return CampaignDelivery.objects.filter(
-        campaign_id=campaign_id,
-        state=CampaignDelivery.State.PENDING,
-        last_error__contains=EDGE_BLOCK_MARKER,
-        updated_at__gte=now - timedelta(seconds=_edge_block_cooldown_seconds()),
-    ).exists()
-
-
-def _release_claim_to_pending(delivery_id, claim_token, *, error):
-    """Return a claim to PENDING: the edge refused it, nothing was accepted."""
-    with transaction.atomic():
-        delivery = CampaignDelivery.objects.select_for_update().get(pk=delivery_id)
-        if (
-            delivery.state != CampaignDelivery.State.DISPATCHING
-            or delivery.claim_token != claim_token
-        ):
-            return False
-        delivery.state = CampaignDelivery.State.PENDING
-        delivery.claim_token = None
-        delivery.claimed_at = None
-        delivery.claim_expires_at = None
-        delivery.attempt_count = max(delivery.attempt_count - 1, 0)
-        delivery.last_error = _append_diagnostic(
-            delivery.last_error, f'{EDGE_BLOCK_MARKER} {error}',
-        )
-        delivery.completed_at = None
-        delivery.save(update_fields=[
-            'state', 'claim_token', 'claimed_at', 'claim_expires_at',
-            'attempt_count', 'last_error', 'completed_at', 'updated_at',
-        ])
-        return True
 
 
 def _chunk(items, size):
@@ -456,23 +388,6 @@ def send_campaign(campaign_id, batch_size=None, released_by_id=None):
     }
 
 
-def _mark_pending_terminal(delivery_id, *, state, reason='', error=''):
-    now = timezone.now()
-    with transaction.atomic():
-        delivery = CampaignDelivery.objects.select_for_update().get(pk=delivery_id)
-        if delivery.state != CampaignDelivery.State.PENDING:
-            return False
-        delivery.state = state
-        delivery.skip_reason = reason[:100]
-        if error:
-            delivery.last_error = _append_diagnostic(delivery.last_error, error)
-        delivery.completed_at = now
-        delivery.save(update_fields=[
-            'state', 'skip_reason', 'last_error', 'completed_at', 'updated_at',
-        ])
-        return True
-
-
 def _append_diagnostic(existing, new):
     if not existing:
         return new[:500]
@@ -503,170 +418,6 @@ def _expire_stale_claim(delivery_id, *, now=None):
             'state', 'last_error', 'completed_at', 'updated_at',
         ])
         return True
-
-
-def _claim_delivery(delivery_id, *, recipient_email):
-    now = timezone.now()
-    token = uuid.uuid4()
-    updated = CampaignDelivery.objects.filter(
-        pk=delivery_id,
-        state=CampaignDelivery.State.PENDING,
-    ).update(
-        recipient_email=recipient_email,
-        state=CampaignDelivery.State.DISPATCHING,
-        claim_token=token,
-        claimed_at=now,
-        claim_expires_at=now + timedelta(seconds=DELIVERY_CLAIM_SECONDS),
-        attempt_count=F('attempt_count') + 1,
-        completed_at=None,
-        updated_at=now,
-    )
-    return token if updated == 1 else None
-
-
-def _claim_monitored_delivery(delivery_id, *, user_id, recipient_email):
-    """Re-check re-permission eligibility inside the durable claim boundary."""
-    User = get_user_model()
-    now = timezone.now()
-    token = uuid.uuid4()
-    with transaction.atomic():
-        user = User.objects.select_for_update().filter(pk=user_id).first()
-        delivery = CampaignDelivery.objects.select_for_update().filter(
-            pk=delivery_id,
-            state=CampaignDelivery.State.PENDING,
-        ).first()
-        if delivery is None:
-            return None, None
-        reason = None
-        if user is None:
-            reason = 'user_missing_at_send'
-        elif not user.is_active:
-            reason = INACTIVE_AT_SEND
-        elif user.unsubscribed:
-            reason = UNSUBSCRIBED_AT_SEND
-        elif user.email_verified:
-            reason = VERIFIED_AT_SEND
-        elif user.bounce_state == User.BounceState.PERMANENT:
-            reason = PERMANENT_BOUNCE_AT_SEND
-        if reason:
-            delivery.state = CampaignDelivery.State.SKIPPED
-            delivery.skip_reason = reason
-            delivery.completed_at = now
-            delivery.save(update_fields=[
-                'state', 'skip_reason', 'completed_at', 'updated_at',
-            ])
-            return None, reason
-        delivery.recipient_email = recipient_email
-        delivery.state = CampaignDelivery.State.DISPATCHING
-        delivery.claim_token = token
-        delivery.claimed_at = now
-        delivery.claim_expires_at = now + timedelta(seconds=DELIVERY_CLAIM_SECONDS)
-        delivery.attempt_count = F('attempt_count') + 1
-        delivery.completed_at = None
-        delivery.save(update_fields=[
-            'recipient_email', 'state', 'claim_token', 'claimed_at',
-            'claim_expires_at', 'attempt_count', 'completed_at', 'updated_at',
-        ])
-        return token, None
-
-
-def _mark_transport_outcome(delivery_id, claim_token, *, state, error):
-    now = timezone.now()
-    with transaction.atomic():
-        delivery = CampaignDelivery.objects.select_for_update().get(pk=delivery_id)
-        if (
-            delivery.state != CampaignDelivery.State.DISPATCHING
-            or delivery.claim_token != claim_token
-        ):
-            return False
-        delivery.state = state
-        delivery.last_error = _append_diagnostic(delivery.last_error, error)
-        delivery.completed_at = now
-        delivery.save(update_fields=[
-            'state', 'last_error', 'completed_at', 'updated_at',
-        ])
-        return True
-
-
-def _finalize_delivery_sent(delivery_id, claim_token, message_id):
-    """Finalize only the exact live claim; log and state commit together."""
-    with transaction.atomic():
-        delivery = (
-            CampaignDelivery.objects.select_for_update(of=('self',))
-            .select_related('campaign', 'user')
-            .get(pk=delivery_id)
-        )
-        if (
-            delivery.state != CampaignDelivery.State.DISPATCHING
-            or delivery.claim_token != claim_token
-        ):
-            return False
-        try:
-            # Keep an integrity failure inside a savepoint so the outer
-            # transaction remains usable for the defensive lookup.
-            with transaction.atomic():
-                email_type = (
-                    monitored_message_parts(delivery.campaign, preview=True)[1]
-                    if delivery.campaign.audience_verification
-                    == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-                    else 'campaign'
-                )
-                log = EmailLog.objects.create(
-                    campaign=delivery.campaign,
-                    user=delivery.user,
-                    recipient_email=delivery.recipient_email,
-                    email_type=email_type,
-                    subject=delivery.campaign.subject,
-                    ses_message_id=message_id,
-                )
-        except IntegrityError:
-            log = EmailLog.objects.get(
-                campaign=delivery.campaign,
-                user_id=delivery.recipient_user_pk,
-            )
-            if log.ses_message_id != message_id:
-                raise RuntimeError(
-                    'A conflicting confirmed send log already exists.',
-                )
-        now = timezone.now()
-        delivery.state = CampaignDelivery.State.SENT
-        delivery.ses_message_id = message_id
-        delivery.email_log = log
-        delivery.completed_at = now
-        delivery.save(update_fields=[
-            'state', 'ses_message_id', 'email_log', 'completed_at', 'updated_at',
-        ])
-        return True
-
-
-def _relay_transport_failure_state(exc):
-    """Classify Relay delivery error into FAILED (rejection) or AMBIGUOUS (transient/network)."""
-    if isinstance(exc, RelayCampaignDeliveryRejected):
-        return CampaignDelivery.State.FAILED, f'Relay definitively rejected: {exc}'
-    return (
-        CampaignDelivery.State.AMBIGUOUS,
-        f'Relay transport outcome was indeterminate; automatic retry suppressed: {exc}',
-    )
-
-
-def _send_campaign_transport(prepared, campaign_id, delivery_id, user_pk):
-    """Deliver one policy-checked campaign message through Relay v2."""
-    idempotency_key = f'campaign-{campaign_id}-delivery-{delivery_id}'
-    metadata = {
-        'campaign_id': campaign_id,
-        'delivery_id': delivery_id,
-        'user_id': user_pk,
-    }
-    return send_campaign_delivery_to_relay(
-        recipient_email=prepared.recipient,
-        subject=prepared.subject,
-        body_markdown=prepared.body_markdown,
-        idempotency_key=idempotency_key,
-        unsubscribe_url=prepared.unsubscribe_url,
-        verify_email_url=prepared.verify_email_url,
-        footer_note=prepared.footer_note,
-        metadata=metadata,
-    )
 
 
 def send_campaign_batch(
@@ -705,303 +456,14 @@ def send_campaign_batch(
             "ambiguous_count": 0,
             "legacy_quarantined": True,
         }
-    if not settings.TESTING:
-        error = RelayCampaignApiError(
-            "Campaign task has no native Relay campaign state; refusing transactional fallback."
-        )
-        campaign.relay_campaign_state = "failed"
-        campaign.relay_campaign_error = str(error)
-        campaign.save(update_fields=["relay_campaign_state", "relay_campaign_error"])
-        alert_relay_campaign_failure(campaign, "queue", error)
-        raise error
-
-    if delivery_ids is None:
-        delivery_ids = []
-        already_sent_count = 0
-        if user_ids and campaign.status != 'needs_attention':
-            # Rolling-deploy/direct-call compatibility: establish the durable
-            # ledger before crossing Relay. Migration-quarantined legacy sends
-            # are refused above by their needs_attention state.
-            User = get_user_model()
-            with transaction.atomic():
-                existing_logs = {
-                    log.user_id: log
-                    for log in EmailLog.objects.filter(
-                        campaign=campaign,
-                        user_id__in=user_ids,
-                    )
-                }
-                users_by_id = {
-                    user.pk: user for user in User.objects.filter(pk__in=user_ids)
-                }
-                for user_id in user_ids:
-                    user = users_by_id.get(user_id)
-                    if user is None:
-                        continue
-                    existing_log = existing_logs.get(user.pk)
-                    delivery, _ = CampaignDelivery.objects.get_or_create(
-                        campaign=campaign,
-                        recipient_user_pk=user.pk,
-                        defaults={
-                            'user': user,
-                            'recipient_email': user.email,
-                            'state': (
-                                CampaignDelivery.State.SENT
-                                if existing_log
-                                else CampaignDelivery.State.PENDING
-                            ),
-                            'attempt_count': 1 if existing_log else 0,
-                            'email_log': existing_log,
-                            'ses_message_id': (
-                                existing_log.ses_message_id if existing_log else ''
-                            ),
-                            'completed_at': (
-                                existing_log.sent_at if existing_log else None
-                            ),
-                        },
-                    )
-                    delivery_ids.append(delivery.pk)
-                    if existing_log:
-                        already_sent_count += 1
-        elif user_ids:
-            logger.warning(
-                'Suppressing legacy campaign batch campaign=%s recipients=%s',
-                campaign_id,
-                len(user_ids),
-            )
-    else:
-        already_sent_count = 0
-
-    if (
-        campaign.status == 'needs_attention'
-        and campaign.audience_snapshotted_at is None
-        and not campaign.deliveries.exists()
-    ):
-        # A pre-deploy task may still be present in the ORM broker. Its SES
-        # outcome is unknowable, so preserve the migration quarantine.
-        _alert_legacy_quarantined_campaign_once(campaign_id)
-        return {
-            'campaign_id': campaign_id,
-            'batch_size': 0,
-            'sent_count': 0,
-            'skipped_count': 0,
-            'unsubscribed_at_send_count': 0,
-            'failed_count': 0,
-            'ambiguous_count': 0,
-            'legacy_quarantined': True,
-        }
-
-    sent_count = 0
-    skipped_count = already_sent_count
-    failed_count = 0
-    ambiguous_count = 0
-
-    User = get_user_model()
-    for delivery_id in delivery_ids:
-        if edge_breaker_open(campaign_id):
-            logger.error(
-                'Campaign %s paused: Relay edge block cooldown is active',
-                campaign_id,
-            )
-            break
-        if _expire_stale_claim(delivery_id):
-            ambiguous_count += 1
-            continue
-        delivery = CampaignDelivery.objects.filter(
-            pk=delivery_id,
-            campaign_id=campaign_id,
-        ).first()
-        if delivery is None or delivery.state != CampaignDelivery.State.PENDING:
-            continue
-        # ``recipient_user_pk`` is the immutable snapshotted identity. Account
-        # merge may repoint ``delivery.user`` to the canonical account for
-        # history, but that must not turn the retired recipient into a send to
-        # the active canonical user.
-        user = User.objects.filter(pk=delivery.recipient_user_pk).first()
-        if user is None:
-            if _mark_pending_terminal(
-                delivery_id,
-                state=CampaignDelivery.State.SKIPPED,
-                reason='user_missing_at_send',
-            ):
-                skipped_count += 1
-            continue
-        if not user.is_active:
-            if _mark_pending_terminal(
-                delivery_id,
-                state=CampaignDelivery.State.SKIPPED,
-                reason=INACTIVE_AT_SEND,
-            ):
-                skipped_count += 1
-            continue
-
-        if (
-            campaign.audience_verification
-            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-        ):
-            if user.unsubscribed:
-                if _mark_pending_terminal(
-                    delivery_id,
-                    state=CampaignDelivery.State.SKIPPED,
-                    reason=UNSUBSCRIBED_AT_SEND,
-                ):
-                    skipped_count += 1
-                continue
-            if user.email_verified:
-                if _mark_pending_terminal(
-                    delivery_id,
-                    state=CampaignDelivery.State.SKIPPED,
-                    reason=VERIFIED_AT_SEND,
-                ):
-                    skipped_count += 1
-                continue
-            if user.bounce_state == User.BounceState.PERMANENT:
-                if _mark_pending_terminal(
-                    delivery_id,
-                    state=CampaignDelivery.State.SKIPPED,
-                    reason=PERMANENT_BOUNCE_AT_SEND,
-                ):
-                    skipped_count += 1
-                continue
-
-        try:
-            monitored = (
-                campaign.audience_verification
-                == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-            )
-            if monitored:
-                message_body, message_type = monitored_message_parts(
-                    campaign, user=user,
-                )
-            else:
-                message_body, message_type = campaign.body, 'campaign'
-            prepared = prepare_campaign_message(
-                user,
-                campaign.subject,
-                message_body,
-                email_type=message_type,
-            )
-        except ObjectDoesNotExist:
-            if _mark_pending_terminal(
-                delivery_id,
-                state=CampaignDelivery.State.SKIPPED,
-                reason='user_missing_at_send',
-            ):
-                skipped_count += 1
-            continue
-        except Exception as exc:
-            if _mark_pending_terminal(
-                delivery_id,
-                state=CampaignDelivery.State.FAILED,
-                error=f'Local preparation failed: {type(exc).__name__}',
-            ):
-                failed_count += 1
-            continue
-        if prepared.skip_reason is not None:
-            if _mark_pending_terminal(
-                delivery_id,
-                state=CampaignDelivery.State.SKIPPED,
-                reason=prepared.skip_reason,
-            ):
-                if prepared.skip_reason != UNSUBSCRIBED_AT_SEND:
-                    skipped_count += 1
-            continue
-
-        if monitored:
-            claim_token, eligibility_skip = _claim_monitored_delivery(
-                delivery_id,
-                user_id=delivery.recipient_user_pk,
-                recipient_email=prepared.recipient,
-            )
-            if eligibility_skip is not None:
-                skipped_count += 1
-                continue
-        else:
-            claim_token = _claim_delivery(
-                delivery_id,
-                recipient_email=prepared.recipient,
-            )
-        if claim_token is None:
-            continue
-        try:
-            message_id = paced_campaign_send(
-                _send_campaign_transport,
-                delay_seconds=send_delay,
-                prepared=prepared,
-                campaign_id=campaign_id,
-                delivery_id=delivery_id,
-                user_pk=delivery.recipient_user_pk,
-            )
-        except RelayCampaignEdgeBlocked as exc:
-            logger.error(
-                'Relay edge blocked campaign %s dispatch (%s); pausing batch',
-                campaign_id,
-                exc,
-            )
-            _release_claim_to_pending(delivery_id, claim_token, error=str(exc))
-            break
-        except (RelayCampaignDeliveryRejected, RelayCampaignDeliveryAmbiguous) as exc:
-            state, diagnostic = _relay_transport_failure_state(exc)
-            logger.error(
-                'Failed to send campaign %s to %s via Relay: %s',
-                campaign_id,
-                prepared.recipient,
-                diagnostic,
-            )
-            if _mark_transport_outcome(
-                delivery_id,
-                claim_token,
-                state=state,
-                error=diagnostic,
-            ):
-                if state == CampaignDelivery.State.FAILED:
-                    failed_count += 1
-                else:
-                    ambiguous_count += 1
-            continue
-        except Exception as exc:
-            diagnostic = f'Unexpected post-claim failure: {type(exc).__name__}: {exc}'
-            logger.error(
-                'Failed to send campaign %s to %s: %s',
-                campaign_id,
-                prepared.recipient,
-                diagnostic,
-                exc_info=True,
-            )
-            if _mark_transport_outcome(
-                delivery_id,
-                claim_token,
-                state=CampaignDelivery.State.AMBIGUOUS,
-                error=diagnostic,
-            ):
-                ambiguous_count += 1
-            continue
-
-        if not message_id:
-            if _mark_transport_outcome(
-                delivery_id,
-                claim_token,
-                state=CampaignDelivery.State.AMBIGUOUS,
-                error='Relay returned no message ID; automatic retry suppressed.',
-            ):
-                ambiguous_count += 1
-            continue
-
-        if _finalize_delivery_sent(delivery_id, claim_token, message_id):
-            sent_count += 1
-    refresh_campaign_status(campaign_id)
-    return {
-        'campaign_id': campaign_id,
-        'batch_size': len(delivery_ids),
-        'sent_count': sent_count,
-        'skipped_count': skipped_count,
-        'unsubscribed_at_send_count': CampaignDelivery.objects.filter(
-            pk__in=delivery_ids,
-            skip_reason=UNSUBSCRIBED_AT_SEND,
-        ).count(),
-        'failed_count': failed_count,
-        'ambiguous_count': ambiguous_count,
-    }
+    error = RelayCampaignApiError(
+        "Campaign task has no native Relay campaign state; refusing transactional fallback."
+    )
+    campaign.relay_campaign_state = "failed"
+    campaign.relay_campaign_error = str(error)
+    campaign.save(update_fields=["relay_campaign_state", "relay_campaign_error"])
+    alert_relay_campaign_failure(campaign, "queue", error)
+    raise error
 
 
 def refresh_campaign_status(campaign_id):

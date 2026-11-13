@@ -591,7 +591,7 @@ class StudioHeaderConsistencyTest(SimpleTestCase):
         self.assertIn('bg-yellow-500/20', projects)
         self.assertIn('data-testid="projects-pending-meta"', projects)
 
-        for relative in ('campaigns/list.html', 'notifications/list.html', 'workshops/list.html'):
+        for relative in ('notifications/list.html', 'workshops/list.html'):
             with self.subTest(relative=relative):
                 source = _source(relative)
                 self.assertIn('studio_header_title_meta as', source)

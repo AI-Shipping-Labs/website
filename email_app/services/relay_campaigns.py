@@ -424,21 +424,35 @@ def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_id
     recipients = response.get("recipients")
     if not isinstance(recipients, list):
         raise RelayCampaignApiError("Relay campaign recipients response omitted recipients")
-    confirmed = {
-        str(recipient.get("client_recipient_key"))
-        for recipient in recipients
-        if isinstance(recipient, dict)
-        and recipient.get("client_recipient_key")
-        and recipient.get("status") not in {"skipped", "failed", "cancelled"}
-    }
-    expected = {str(delivery_id) for delivery_id in expected_delivery_ids}
+    expected_by_key = {str(delivery_id): delivery_id for delivery_id in expected_delivery_ids}
+    confirmed = set()
+    skipped_reasons = {}
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        key_str = str(recipient.get("client_recipient_key") or "")
+        if not key_str or key_str not in expected_by_key:
+            continue
+        status = recipient.get("status")
+        if status not in {"skipped", "failed", "cancelled"}:
+            confirmed.add(key_str)
+            continue
+        if status == "skipped":
+            reason = str(recipient.get("skip_reason") or "").strip()
+            if reason in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+                skipped_reasons[expected_by_key[key_str]] = f"relay_{reason}"[:100]
+                confirmed.add(key_str)
+    expected = set(expected_by_key)
     matched = expected & confirmed
     if matched != expected:
         missing = len(expected - matched)
         raise RelayCampaignApiError(
             f"Relay queued campaign recovery could not confirm {missing} local recipients."
         )
-    return [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched]
+    return (
+        [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched],
+        skipped_reasons,
+    )
 
 
 def queue_native_campaign(campaign, deliveries, *, external_key=None, session=None):
@@ -520,7 +534,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
     if existing and isinstance(existing.get("campaign"), dict):
         native = existing["campaign"]
         if native.get("status") in {"queued", "snapshotting", "sending", "sent"}:
-            confirmed_ids = _confirmed_delivery_ids_for_queued_campaign(
+            confirmed_ids, skipped_delivery_reasons = _confirmed_delivery_ids_for_queued_campaign(
                 key, scope, included_delivery_ids, session=session,
             )
             return {
@@ -530,6 +544,8 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
                 "recipient_count": native.get("recipient_count"),
                 "skipped_count": native.get("skipped_count"),
                 "included_delivery_ids": confirmed_ids,
+                "suppressed_skipped_count": len(skipped_delivery_reasons),
+                "skipped_delivery_reasons": skipped_delivery_reasons,
             }
         if native.get("status") != "draft":
             raise RelayCampaignApiError(

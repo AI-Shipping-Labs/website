@@ -83,7 +83,7 @@ class WorkshopReadyServiceTest(TestCase):
         self.assertFalse(
             Notification.objects.filter(user=self.unrelated).exists(),
         )
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
         kwargs = mock_send.call_args.kwargs
         self.assertEqual(len(kwargs['members']), 3)
         context = kwargs['context']
@@ -116,7 +116,7 @@ class WorkshopReadyServiceTest(TestCase):
             Notification.objects.filter(user=self.host_user).count(),
             1,
         )
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
         self.assertEqual(len(mock_send.call_args.kwargs['members']), 3)
 
     @patch(

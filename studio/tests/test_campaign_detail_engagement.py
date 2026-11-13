@@ -47,6 +47,7 @@ class CampaignDetailEngagementTest(TestCase):
         stats = {
             "sent_count": 83,
             "delivered_count": 82,
+            "pending_count": 10,
             "open_count": 50,
             "unique_open_count": 40,
             "click_count": 18,
@@ -74,6 +75,7 @@ class CampaignDetailEngagementTest(TestCase):
         self.assertContains(response, "Relay sent count")
         self.assertContains(response, "Sent: 83")
         self.assertContains(response, "Delivered: 82")
+        self.assertContains(response, "Pending: 10")
         self.assertContains(response, "Opens: 40 unique, 50 total")
         self.assertContains(response, "Clicks: 15 unique, 18 total")
         self.assertContains(response, "Unsubscribes: 2")

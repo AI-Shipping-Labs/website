@@ -95,6 +95,7 @@
           {% if relay_stats_available %}
           Sent: {{ relay_stats.sent_count }} /
           Delivered: {{ relay_stats.delivered_count }} /
+          Pending: {{ relay_stats.pending_count|default:0 }} /
           Opens: {{ relay_stats.unique_open_count }} unique, {{ relay_stats.open_count }} total /
           Clicks: {{ relay_stats.unique_click_count }} unique, {{ relay_stats.click_count }} total /
           Unsubscribes: {{ relay_stats.unsubscribe_count }} /

@@ -6,10 +6,8 @@ from django.db import transaction
 from django.utils.html import strip_tags
 from django.utils.text import Truncator
 
-from email_app.relay_transactional import (
-    recipient_template_context,
-    send_relay_transactional,
-)
+from email_app.relay_transactional import recipient_template_context
+from email_app.services.relay_campaigns import submit_transient_list
 from email_app.services.relay_templates import relay_template_subject
 from events.services.workshop_ready_recipients import (
     relay_recipient_identity as _relay_recipient_identity,
@@ -46,53 +44,77 @@ def assert_workshop_ready(event):
 
 
 def notify_workshop_ready(event):
-    """Send the workshop-ready broadcast to the event audience.
-
-    The service is synchronous because both Studio and the staff API need an
-    immediate per-recipient report. Individual recipient failures are captured
-    and do not stop the rest of the fan-out.
-    """
+    """Send the workshop-ready broadcast to the event audience in one Relay request."""
     workshop = assert_workshop_ready(event)
     recipients = resolve_workshop_ready_recipients(event)
 
     results = []
+    pending = []
     for recipient in recipients:
-        try:
-            result = _send_one(event, workshop, recipient)
-        except Exception as exc:
-            logger.exception(
-                'Failed to send %s for event %s to %s',
-                EMAIL_TYPE, event.pk, recipient.email,
+        if _already_sent(event, recipient):
+            results.append(_recipient_result(recipient, 'already_sent'))
+        else:
+            pending.append(recipient)
+
+    if not pending:
+        return _build_summary(event, workshop, results)
+
+    base_context = _build_context(event, workshop)
+    members = []
+    pending_meta = []
+    for recipient in pending:
+        user = _render_user(recipient)
+        member_ctx = recipient_template_context(user, base_context)
+        identity = _relay_recipient_identity(recipient)
+        members.append({
+            'email': recipient.email,
+            'source_object_key': identity,
+            'active': True,
+            'metadata': {'user_name': member_ctx['user_name']},
+        })
+        pending_meta.append((
+            recipient,
+            identity,
+            relay_template_subject(EMAIL_TYPE, member_ctx),
+        ))
+
+    try:
+        response = submit_transient_list(
+            list_key=f'{EMAIL_TYPE}:{event.pk}',
+            name=f'Workshop ready: {event.title}',
+            template_key=EMAIL_TYPE,
+            idempotency_key=f'{EMAIL_TYPE}:{event.pk}',
+            context=base_context,
+            members=members,
+            category=EMAIL_TYPE,
+        )
+    except Exception as exc:
+        logger.exception(
+            'Failed to submit %s batch for event %s',
+            EMAIL_TYPE, event.pk,
+        )
+        for recipient in pending:
+            results.append(
+                _recipient_result(
+                    recipient,
+                    'failed',
+                    reason=exc.__class__.__name__,
+                )
             )
-            result = _recipient_result(
-                recipient,
-                'failed',
-                reason=exc.__class__.__name__,
-            )
-        results.append(result)
+        return _build_summary(event, workshop, results)
+
+    queued_ids = list((response or {}).get('queued_message_ids') or [])
+    for idx, (recipient, identity, subject) in enumerate(pending_meta):
+        msg_id = str(queued_ids[idx]) if idx < len(queued_ids) else f'{EMAIL_TYPE}:{event.pk}:{identity}'
+        results.append(
+            _record_sent(event, workshop, recipient, identity, subject, msg_id)
+        )
 
     return _build_summary(event, workshop, results)
 
 
-def _send_one(event, workshop, recipient):
-    if _already_sent(event, recipient):
-        return _recipient_result(recipient, 'already_sent')
-
-    user = _render_user(recipient)
-    context = _build_context(event, workshop)
-    subject = relay_template_subject(
-        EMAIL_TYPE, recipient_template_context(user, context),
-    )
-    identity = _relay_recipient_identity(recipient)
+def _record_sent(event, workshop, recipient, identity, subject, message_id):
     dedupe_key = f'{EMAIL_TYPE}:{event.pk}:{identity}'
-    result = send_relay_transactional(
-        recipient.email,
-        EMAIL_TYPE,
-        recipient_template_context(user, context),
-        idempotency_key=dedupe_key,
-        safe_correlation=f'event={event.pk} recipient={identity}',
-    )
-
     with transaction.atomic():
         if _already_sent(event, recipient, for_update=True):
             return _recipient_result(recipient, 'already_sent')
@@ -107,7 +129,7 @@ def _send_one(event, workshop, recipient):
                 'recipient_email': recipient.email,
                 'email_type': EMAIL_TYPE,
                 'subject': subject,
-                'ses_message_id': result.message_id,
+                'ses_message_id': message_id,
             },
         )
         if not created:

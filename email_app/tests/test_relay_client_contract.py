@@ -10,8 +10,13 @@ class RelayClientContractTest(SimpleTestCase):
         # Note: email_app/tasks/send_campaign.py and send_campaign_delivery_to_relay
         # are legacy worker paths owned by intake 0d6cdd71; guard all other
         # services and studio views against looping over transactional sends.
-        for directory in (root / "studio", root / "email_app" / "services"):
-            for path in sorted(directory.rglob("*.py")):
+        for directory in (
+            root / "studio",
+            root / "email_app" / "services",
+            root / "events" / "services" / "workshop_ready_notification.py",
+        ):
+            paths = [directory] if directory.is_file() else sorted(directory.rglob("*.py"))
+            for path in paths:
                 if path.name == "relay_campaigns.py":
                     continue
                 tree = ast.parse(path.read_text(encoding="utf-8"))

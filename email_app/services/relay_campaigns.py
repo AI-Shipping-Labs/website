@@ -826,6 +826,37 @@ def get_native_campaign_stats(external_key, *, session=None, allow_not_found=Fal
     return campaign
 
 
+def submit_transient_list(
+    *,
+    list_key: str,
+    name: str,
+    template_key: str,
+    idempotency_key: str,
+    members: list[dict],
+    context: dict | None = None,
+    category: str = "",
+    audience: str = RELAY_CAMPAIGN_AUDIENCE,
+    session=None,
+) -> dict:
+    """Submit a transient recipient list and all members in ONE request to Relay."""
+    payload = {
+        "audience": audience,
+        "list": {"key": list_key, "name": name},
+        "template_key": template_key,
+        "idempotency_key": idempotency_key,
+        "context": context or {},
+        "members": members,
+    }
+    if category:
+        payload["category"] = category
+    return _campaign_api_request(
+        "POST",
+        "/api/transient-recipient-lists/transactional-send",
+        payload=payload,
+        session=session,
+    )
+
+
 def retry_native_campaign_delivery(external_key, delivery_id, *, session=None):
     """Retry one recipient through Relay's campaign recipient retry route."""
     from urllib.parse import urlencode

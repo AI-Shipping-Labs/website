@@ -228,8 +228,18 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         log = EmailLog.objects.get(event=event, email_type="event_recording_ready")
         self.assertEqual(log.ses_message_id, "relay-event_recording_ready-1")
 
-    @patch("email_app.relay_transactional.requests.post", side_effect=relay_response)
-    def test_workshop_ready_native_context_log_notification_and_dedupe(self, post):
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_workshop_ready_native_context_log_notification_and_dedupe(self, mock_request):
+        class _Resp:
+            status_code = 202
+            content = b'{"queued_message_ids": ["relay-event_workshop_ready-1"]}'
+            text = content.decode()
+            headers = {"content-type": "application/json"}
+
+            def json(self):
+                return {"queued_message_ids": ["relay-event_workshop_ready-1"]}
+
+        mock_request.return_value = _Resp()
         member = User.objects.create_user(email="relay-member@example.com", first_name="Lin")
         event = make_event("relay-workshop-ready", completed=True)
         EventRegistration.objects.create(event=event, user=member)
@@ -246,10 +256,15 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         second = notify_workshop_ready(event)
 
         self.assertEqual((first["emailed"], second["already_sent"]), (1, 1))
-        self.assertEqual(post.call_count, 1)
-        key = f"event_workshop_ready:{event.pk}:user:{member.pk}"
-        payload = self.assert_request(post.call_args, "event_workshop_ready", member.email, key)
-        self.assertNotIn("calendar_alternative", payload)
+        self.assertEqual(mock_request.call_count, 1)
+        method, url = mock_request.call_args.args[:2]
+        self.assertEqual(method, "POST")
+        self.assertTrue(url.endswith("/api/transient-recipient-lists/transactional-send"))
+        payload = mock_request.call_args.kwargs["json"]
+        self.assertEqual(payload["template_key"], "event_workshop_ready")
+        self.assertEqual(len(payload["members"]), 1)
+        self.assertEqual(payload["members"][0]["email"], member.email)
+        self.assertEqual(payload["members"][0]["source_object_key"], f"user:{member.pk}")
         self.assertEqual(payload["context"]["workshop_title"], workshop.title)
         self.assertEqual(payload["context"]["workshop_url"], f"https://aishippinglabs.test{workshop.get_absolute_url()}")
         log = EmailLog.objects.get(event=event, email_type="event_workshop_ready")

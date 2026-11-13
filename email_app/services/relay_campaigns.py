@@ -376,6 +376,44 @@ def validate_native_campaign_recipient_counts(
         )
 
 
+def _skipped_delivery_reasons_for_queued_campaign(
+    key, scope, expected_delivery_ids, expected_skipped_count, *, session,
+):
+    response = _campaign_api_request(
+        "GET",
+        f"/api/campaigns/{key}/recipients",
+        params={**scope, "status": "skipped"},
+        session=session,
+    )
+    recipients = response.get("recipients")
+    if not isinstance(recipients, list):
+        raise RelayCampaignApiError(
+            "Relay campaign skipped recipients response omitted recipients"
+        )
+    expected_by_key = {
+        str(delivery_id): delivery_id for delivery_id in expected_delivery_ids
+    }
+    skipped_reasons = {}
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        delivery_id = expected_by_key.get(str(recipient.get("client_recipient_key")))
+        if delivery_id is None:
+            continue
+        reason = str(recipient.get("skip_reason") or "").strip()
+        if reason not in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+            raise RelayCampaignApiError(
+                f"Relay campaign queued with unexpected skip reason {reason!r}."
+            )
+        skipped_reasons[delivery_id] = f"relay_{reason}"[:100]
+    if len(skipped_reasons) != expected_skipped_count:
+        raise RelayCampaignApiError(
+            f"Relay campaign queue reported {expected_skipped_count} skipped recipients, "
+            f"but recipients endpoint returned {len(skipped_reasons)}."
+        )
+    return skipped_reasons
+
+
 def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_ids, *, session):
     response = _campaign_api_request(
         "GET",
@@ -579,8 +617,18 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         stage="queue",
         allowed_skipped_count=suppressed_count,
     )
+    skipped_delivery_reasons = {}
+    if suppressed_count > 0:
+        skipped_delivery_reasons = _skipped_delivery_reasons_for_queued_campaign(
+            key,
+            scope,
+            included_delivery_ids,
+            suppressed_count,
+            session=session,
+        )
     queued["included_delivery_ids"] = included_delivery_ids
     queued["suppressed_skipped_count"] = suppressed_count
+    queued["skipped_delivery_reasons"] = skipped_delivery_reasons
     return queued
 
 

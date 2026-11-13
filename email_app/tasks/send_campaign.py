@@ -188,13 +188,17 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
         raise
 
     included_ids = set(result.get("included_delivery_ids", []))
+    skipped_reasons = result.get("skipped_delivery_reasons") or {}
     now = timezone.now()
+    sent_count = 0
+    skipped_count = 0
     for delivery in deliveries.select_related("user"):
-        if delivery.pk not in included_ids:
+        if delivery.pk not in included_ids or delivery.pk in skipped_reasons:
             delivery.state = CampaignDelivery.State.SKIPPED
-            delivery.skip_reason = "ineligible_at_relay_queue"
+            delivery.skip_reason = skipped_reasons.get(delivery.pk) or "ineligible_at_relay_queue"
             delivery.completed_at = now
             delivery.save(update_fields=["state", "skip_reason", "completed_at", "updated_at"])
+            skipped_count += 1
             continue
         log, _created = EmailLog.objects.get_or_create(
             campaign=campaign,
@@ -214,14 +218,15 @@ def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
         delivery.save(update_fields=[
             "state", "email_log", "resolution", "resolved_at", "completed_at", "updated_at",
         ])
+        sent_count += 1
 
     mark_native_queue_accepted(campaign, already_queued=bool(result.get("already_queued")))
     refresh_campaign_status(campaign.pk)
     return {
         "campaign_id": campaign.pk,
         "batch_size": len(delivery_ids),
-        "sent_count": len(included_ids),
-        "skipped_count": len(delivery_ids) - len(included_ids),
+        "sent_count": sent_count,
+        "skipped_count": skipped_count,
         "relay_campaign_key": external_key,
         "relay_queued": bool(result.get("queued", True)),
     }

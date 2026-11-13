@@ -261,6 +261,20 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
                 "skipped_count": 2,
                 "campaign": {"status": "queued"},
             }),
+            (200, {
+                "recipients": [
+                    {
+                        "client_recipient_key": str(extra_deliveries[0].pk),
+                        "status": "skipped",
+                        "skip_reason": "global_unsubscribe",
+                    },
+                    {
+                        "client_recipient_key": str(extra_deliveries[1].pk),
+                        "status": "skipped",
+                        "skip_reason": "hard_bounce",
+                    },
+                ],
+            }),
         ]:
             response = MagicMock()
             response.status_code = status
@@ -275,9 +289,22 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         )
 
         self.assertTrue(result["relay_queued"])
-        self.assertEqual(mock_request.call_count, 6)
+        self.assertEqual(result["sent_count"], 1)
+        self.assertEqual(result["skipped_count"], 2)
+        self.assertEqual(mock_request.call_count, 7)
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.relay_campaign_state, "queued")
+        self.delivery.refresh_from_db()
+        extra_deliveries[0].refresh_from_db()
+        extra_deliveries[1].refresh_from_db()
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
+        self.assertIsNotNone(self.delivery.email_log)
+        self.assertEqual(extra_deliveries[0].state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(extra_deliveries[0].skip_reason, "relay_global_unsubscribe")
+        self.assertIsNone(extra_deliveries[0].email_log)
+        self.assertEqual(extra_deliveries[1].state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(extra_deliveries[1].skip_reason, "relay_hard_bounce")
+        self.assertIsNone(extra_deliveries[1].email_log)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",

@@ -81,6 +81,16 @@ def _notice_candidates(event) -> list[tuple[str, str]]:
         candidates.append(("Workshop-ready broadcast", f"event-workshop-ready-{event.pk}"))
     if EmailLog.objects.filter(event=event, email_type="event_recording_ready").exists():
         candidates.append(("Recording-ready notice", f"event-recording-ready-{event.pk}"))
+    recap_keys = (
+        EmailLog.objects.filter(event=event, email_type="event_recap_ready")
+        .exclude(ses_message_id="")
+        .values_list("ses_message_id", flat=True)
+        .distinct()
+        .order_by("ses_message_id")
+    )
+    for external_key in recap_keys:
+        if external_key.startswith("event-recap-ready-"):
+            candidates.append(("Recap-ready notice", external_key))
     return candidates
 
 

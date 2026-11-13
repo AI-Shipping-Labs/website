@@ -12,27 +12,37 @@ The notice goes out automatically once, when a recap becomes ready (see
 command/API/Studio action. The per-user ``EventReminderLog`` markers make
 every path idempotent.
 
-The email channel goes through ``community_base.mail`` (A1.2 slice 3): a
-durable ``EmailDelivery`` under the ``event-recap-ready:{event}:{user}``
-idempotency key, transported by the worker. ``sent`` therefore means the
-durable delivery exists; the provider outcome lands on the delivery and
-the ``EmailLog`` audit row is written from the delivery worker, keeping
-its event FK via the delivery's ``related`` relation. The in-app channel
-is unchanged.
+The email channel is ONE Relay campaign submit for the whole resolved
+audience (same helper as the other event notices,
+``events.services.relay_event_notice``): Relay owns pacing, retries and
+dedup. ``emailed``/``sent`` means Relay accepted the campaign; the
+``EmailLog`` audit row and ``recap_email`` marker are written per user after
+acceptance, and sent/delivered/pending counts are read back from Relay
+(``relay`` key of the summary). The in-app channel is per user and unchanged.
 """
 
 import logging
 from dataclasses import dataclass
+from hashlib import sha256
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
 from email_app.models import EmailLog
-from email_app.package_mail import send_package_mail
+from email_app.relay_transactional import recipient_template_context
+from email_app.services.relay_templates import relay_template_subject
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
-from events.services.event_audience import email_skip_status, resolve_event_audience
+from events.services.event_audience import (
+    cohort_session_url,
+    email_skip_status,
+    resolve_event_audience,
+)
+from events.services.relay_event_notice import (
+    build_relay_recipient,
+    get_event_notice_statuses,
+    submit_event_notice_campaign,
+)
 from integrations.config import recap_auto_notify_enabled, site_base_url
 from notifications.models import EventReminderLog, Notification
 
@@ -46,6 +56,7 @@ INTERVAL_IN_APP = "recap_in_app"
 # Per-event guard (``user`` NULL) written when the automatic notice runs, so
 # the recap is announced automatically at most once per event.
 INTERVAL_AUTO_GUARD = "recap_auto"
+RECAP_NOTICE_LABEL = "Recap-ready notice"
 
 
 class EventRecapNotReady(ValueError):
@@ -296,65 +307,116 @@ def _email_already_sent(event, user_id):
     ).exists()
 
 
-def _deliver_email(event, user_id, signed_up):
+def _prepare_email(event, user_id, signed_up):
+    """Decide one user's email state before the batch submit.
+
+    Returns ``(state, user)``; ``state`` is None when the user must be
+    included in the Relay campaign.
+    """
     user, skipped = _current_active_user(user_id)
     if user is None:
-        return DeliveryState(skipped)
+        return DeliveryState(skipped), None
 
     if _email_already_sent(event, user.pk):
         log = EmailLog.objects.filter(
             dedupe_key=_dedupe_key(event, user),
         ).first()
-        return DeliveryState("already_sent", log.pk if log else None)
+        return DeliveryState("already_sent", log.pk if log else None), user
 
     skipped = email_skip_status(user, signed_up)
     if skipped:
-        return DeliveryState(skipped)
+        return DeliveryState(skipped), user
 
-    dedupe_key = _dedupe_key(event, user)
-    existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
+    existing_log = EmailLog.objects.filter(
+        dedupe_key=_dedupe_key(event, user),
+    ).first()
     if existing_log is not None:
-        # Pre-adoption row from the synchronous send era: adopt it
-        # into the marker set instead of sending a second recap email.
+        # Pre-adoption row from an earlier send era: adopt it into the
+        # marker set instead of sending a second recap email.
         try:
             _save_email_success(event, user, existing_log)
         except IntegrityError:
             pass
-        return DeliveryState("already_sent", existing_log.pk)
+        return DeliveryState("already_sent", existing_log.pk), user
+    return None, user
 
+
+def _campaign_key(event, users):
+    """Stable Relay key for this event and exact pending audience.
+
+    The same pending audience always maps to the same key (safe Relay-side
+    dedup on retry); a later run with newly eligible users gets a new key.
+    """
+    digest = sha256(
+        ",".join(str(pk) for pk in sorted(u.pk for u in users)).encode(),
+    ).hexdigest()[:10]
+    return f"event-recap-ready-{event.pk}-{digest}"
+
+
+def _recap_member_context(event, user, recap_url):
+    event_url = f"{site_base_url().rstrip('/')}{event.get_absolute_url()}"
+    context = {
+        "event_title": event.title,
+        # A cohort member reads the recap on the course session unit; everyone
+        # else gets the event recap.
+        "recap_url": cohort_session_url(event, user.pk) or recap_url,
+        "event_url": event_url,
+        # The recording plays on the canonical (access-gated) event page.
+        "recording_url": event_url if event.has_recording else "",
+    }
+    return recipient_template_context(user, context)
+
+
+def _submit_email_campaign(event, users, recap_url):
+    """Submit all pending users as ONE Relay campaign; return per-user states."""
+    members = []
+    subjects = {}
+    for user in users:
+        ctx = _recap_member_context(event, user, recap_url)
+        subjects[user.pk] = relay_template_subject(EMAIL_TYPE, ctx)
+        members.append(build_relay_recipient(user.email, f"user-{user.pk}", ctx))
+    external_key = _campaign_key(event, users)
     try:
-        delivery = send_package_mail(
-            user,
-            EMAIL_TYPE,
-            # Issue #1613: the worker rebuilds title and every link from
-            # the saved event; the durable context stays empty.
-            {},
-            idempotency_key=dedupe_key,
-            related=event,
+        submit_event_notice_campaign(
+            external_key=external_key,
+            subject=subjects[users[0].pk],
+            template_key=EMAIL_TYPE,
+            recipients=members,
+            context={"event_title": event.title},
+            metadata={"event_id": event.pk, "email_type": EMAIL_TYPE},
         )
     except Exception as exc:
         logger.warning(
-            "event_recap_ready_email_failed event_id=%s user_id=%s error=%s",
+            "event_recap_ready_campaign_failed event_id=%s recipients=%s error=%s",
             event.pk,
-            user_id,
+            len(users),
             exc.__class__.__name__,
             exc_info=True,
         )
-        return DeliveryState("failed")
+        return {user.pk: DeliveryState("failed") for user in users}
 
-    if delivery.state == EmailDelivery.State.SUPPRESSED:
-        return DeliveryState("skipped_email_policy")
-
-    try:
-        marker, created = _save_email_success(event, user)
-    except IntegrityError:
-        # A concurrent worker created the marker first; the durable
-        # delivery is shared, so this is the same send.
-        return DeliveryState("already_sent", delivery.pk)
-    return DeliveryState(
-        "sent" if created else "already_sent",
-        delivery.pk,
-    )
+    states = {}
+    for user in users:
+        dedupe_key = _dedupe_key(event, user)
+        log, _ = EmailLog.objects.get_or_create(
+            dedupe_key=dedupe_key,
+            defaults={
+                "user": user,
+                "event": event,
+                "recipient_email": user.email,
+                "email_type": EMAIL_TYPE,
+                "subject": subjects[user.pk],
+                "ses_message_id": external_key,
+            },
+        )
+        try:
+            _marker, created = _save_email_success(event, user)
+        except IntegrityError:
+            created = False
+        states[user.pk] = DeliveryState(
+            "sent" if created else "already_sent", log.pk,
+        )
+    return states
 
 
 def _deliver_in_app(event, user_id, recap_url):
@@ -421,24 +483,13 @@ def _deliver_in_app(event, user_id, recap_url):
     return DeliveryState("sent", notification.pk)
 
 
-def _recipient_result(event, member, recap_url):
-    """Deliver each channel independently for one audience member."""
+def _recipient_result(event, member, recap_url, email_state):
+    """Deliver the in-app channel and attach the batch email state."""
     user_id = member.user.pk
     result = {
         "user_id": user_id,
         "reasons": [reason.as_dict() for reason in member.reasons],
     }
-    try:
-        email_state = _deliver_email(event, user_id, member.signed_up)
-    except Exception as exc:  # noqa: BLE001 - one recipient cannot abort the fan-out
-        logger.warning(
-            "event_recap_ready_email_unhandled event_id=%s user_id=%s error=%s",
-            event.pk,
-            user_id,
-            exc.__class__.__name__,
-            exc_info=True,
-        )
-        email_state = DeliveryState("failed")
     result["email_status"] = email_state.status
     if email_state.identifier is not None:
         result["email_log_id"] = email_state.identifier
@@ -537,16 +588,60 @@ def notify_recap_ready(event, *, actor=None):
         locked_event = Event.objects.select_for_update().get(pk=event.pk)
         recap_path = assert_recap_ready(locked_event)
         recap_url = absolute_recap_url(locked_event, recap_path)
+        audience = list(resolve_recap_audience(locked_event))
+        email_states = {}
+        pending = []
+        for member in audience:
+            try:
+                state, user = _prepare_email(
+                    locked_event, member.user.pk, member.signed_up,
+                )
+            except Exception as exc:  # noqa: BLE001 - one recipient cannot abort the batch
+                logger.warning(
+                    "event_recap_ready_email_unhandled event_id=%s user_id=%s error=%s",
+                    locked_event.pk,
+                    member.user.pk,
+                    exc.__class__.__name__,
+                    exc_info=True,
+                )
+                state, user = DeliveryState("failed"), None
+            if state is None:
+                pending.append(user)
+            else:
+                email_states[member.user.pk] = state
+        if pending:
+            email_states.update(
+                _submit_email_campaign(locked_event, pending, recap_url),
+            )
         results = [
-            _recipient_result(locked_event, member, recap_url)
-            for member in resolve_recap_audience(locked_event)
+            _recipient_result(
+                locked_event, member, recap_url, email_states[member.user.pk],
+            )
+            for member in audience
         ]
-        return _build_summary(
+        summary = _build_summary(
             locked_event,
             recap_url,
             results,
             actor=actor,
         )
+        summary["relay"] = relay_recap_status(locked_event)
+        return summary
+
+
+def relay_recap_status(event):
+    """Sent/delivered/pending counts read from Relay for recap campaigns."""
+    return [
+        {
+            key: row[key]
+            for key in (
+                "external_key", "recipient_count", "sent_count",
+                "delivered_count", "pending_count",
+            )
+        }
+        for row in get_event_notice_statuses(event)
+        if row["label"] == RECAP_NOTICE_LABEL
+    ]
 
 
 def _reason_counts(reason_lists):

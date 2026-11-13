@@ -1,28 +1,25 @@
 """Explicit event-recap notification delivery (issue #1557).
 
-Since A1.2 slice 3 the email channel records a durable ``EmailDelivery``
-and the provider send happens from the delivery worker, so tests drain
-pending deliveries with :func:`email_app.testing.deliver_pending_mail`
-before asserting ``EmailLog`` rows.
+The email channel is one Relay campaign submit for the whole audience;
+tests stand in for Relay with :mod:`events.tests.recap_relay` (no network,
+no SES).
 """
 
 from datetime import timedelta
 from unittest.mock import patch
 
-from community_base.mail.models import EmailDelivery
-from community_base.mail.service import MailError
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
-from email_app.testing import deliver_pending_mail
 from events.models import Event, EventRegistration
 from events.services.event_recap_notification import (
     EventRecapNotReady,
     absolute_recap_url,
     notify_recap_ready,
 )
+from events.tests.recap_relay import start_recap_relay
 from notifications.models import EventReminderLog, Notification
 
 User = get_user_model()
@@ -62,6 +59,10 @@ class EventRecapNotificationServiceTest(TestCase):
         for user in (cls.member, cls.unsubscribed, cls.inactive):
             EventRegistration.objects.create(event=cls.event, user=user)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def test_sends_both_channels_to_active_exact_registrants(self):
         result = notify_recap_ready(self.event)
         recap_url = absolute_recap_url(self.event)
@@ -79,21 +80,17 @@ class EventRecapNotificationServiceTest(TestCase):
             {(item['email_status'], item['in_app_status']) for item in result['results']},
             {('sent', 'sent')},
         )
-        deliveries = EmailDelivery.objects.order_by('idempotency_key')
-        self.assertEqual(deliveries.count(), 2)
-        self.assertEqual(
-            {d.recipient_email for d in deliveries},
-            {self.member.email, self.unsubscribed.email},
+        # ONE Relay campaign for the whole audience.
+        self.assertEqual(len(self.relay.campaigns), 1)
+        campaign = self.relay.campaigns[0]
+        self.assertEqual(campaign['template_key'], 'event_recap_ready')
+        self.assertTrue(
+            campaign['external_key'].startswith(f'event-recap-ready-{self.event.pk}-'),
         )
-        for delivery in deliveries:
-            self.assertEqual(delivery.purpose, 'event_recap_ready')
-            self.assertEqual(
-                delivery.idempotency_key,
-                f'event-recap-ready:{self.event.pk}:{delivery.recipient_user_id}',
-            )
-            # Issue #1613: no URL is stored; the worker mints the links
-            # from the related event at delivery time.
-            self.assertEqual(delivery.context_data, {})
+        self.assertEqual(
+            self.relay.emails,
+            sorted([self.member.email, self.unsubscribed.email]),
+        )
         self.assertEqual(
             Notification.objects.filter(
                 notification_type='event_recap', url=recap_url,
@@ -117,49 +114,50 @@ class EventRecapNotificationServiceTest(TestCase):
                 event=self.event, user=self.unrelated,
             ).exists(),
         )
-
-        # The worker writes the audit rows after provider acceptance,
-        # keeping the event FK from the delivery's related relation.
-        deliver_pending_mail()
         email_logs = EmailLog.objects.filter(
             event=self.event, email_type='event_recap_ready',
         )
         self.assertEqual(email_logs.count(), 2)
         self.assertEqual(
-            {log.user_id for log in email_logs},
-            {self.member.pk, self.unsubscribed.pk},
+            {log.dedupe_key for log in email_logs},
+            {
+                f'event-recap-ready:{self.event.pk}:{self.member.pk}',
+                f'event-recap-ready:{self.event.pk}:{self.unsubscribed.pk}',
+            },
         )
         self.assertEqual(
-            {log.dedupe_key for log in email_logs},
-            {d.idempotency_key for d in deliveries},
+            {log.ses_message_id for log in email_logs},
+            {campaign['external_key']},
         )
 
-    def test_worker_mints_recap_links_from_related_event(self):
-        """Issue #1613: the stored context is empty; the rendered email
-        still carries the recap and event links after the drain."""
+    def test_summary_reports_relay_sent_delivered_pending(self):
+        result = notify_recap_ready(self.event)
 
+        self.assertEqual(len(result['relay']), 1)
+        row = result['relay'][0]
+        self.assertEqual(row['external_key'], self.relay.campaigns[0]['external_key'])
+        self.assertEqual(row['recipient_count'], 2)
+        self.assertEqual(row['sent_count'], 2)
+        self.assertEqual(row['delivered_count'], 1)
+        self.assertEqual(row['pending_count'], 0)
+
+    def test_campaign_carries_recap_and_event_links_per_recipient(self):
         notify_recap_ready(self.event)
-        deliveries = list(EmailDelivery.objects.all())
-        self.assertEqual(len(deliveries), 2)
-        self.assertTrue(all(d.context_data == {} for d in deliveries))
 
-        from email_app.testing import StubRelayClient
-
-        stub = StubRelayClient()
-        with patch(
-            'community_base.mail.backends.relay.configured_client',
-            return_value=stub,
-        ):
-            deliver_pending_mail()
-
-        self.assertEqual(len(stub.calls), 2)
         recap_url = absolute_recap_url(self.event)
         event_url = f'https://aishippinglabs.com{self.event.get_absolute_url()}'
-        for call in stub.calls:
-            context = call['context']
+        contexts = self.relay.contexts()
+        self.assertEqual(len(contexts), 2)
+        for context in contexts.values():
             self.assertEqual(context['recap_url'], recap_url)
             self.assertEqual(context['event_url'], event_url)
             self.assertEqual(context['recording_url'], '')
+            self.assertEqual(context['event_title'], self.event.title)
+
+    def test_never_uses_per_user_transactional_send(self):
+        with patch('email_app.package_mail.send_package_mail') as per_user:
+            notify_recap_ready(self.event)
+        per_user.assert_not_called()
 
     def test_complaint_suppresses_email_but_not_in_app(self):
         complaint_user = User.objects.create_user(
@@ -185,11 +183,10 @@ class EventRecapNotificationServiceTest(TestCase):
         self.assertEqual(complaint_result['in_app_status'], 'sent')
         self.assertEqual(result['emailed'], 2)
         self.assertEqual(result['notified'], 3)
-        self.assertEqual(EmailDelivery.objects.count(), 2)
+        self.assertNotIn(complaint_user.email, self.relay.emails)
 
     def test_repeat_is_idempotent_per_channel(self):
         first = notify_recap_ready(self.event)
-        deliver_pending_mail()
 
         second = notify_recap_ready(self.event)
 
@@ -200,8 +197,8 @@ class EventRecapNotificationServiceTest(TestCase):
         self.assertEqual(second['already_emailed'], 2)
         self.assertEqual(second['already_notified'], 2)
         self.assertEqual(second['already_sent'], 2)
-        # No second delivery, and the drain after the repeat adds no rows.
-        self.assertEqual(EmailDelivery.objects.count(), 2)
+        # No second campaign submit, and no extra audit rows.
+        self.assertEqual(len(self.relay.campaigns), 1)
         self.assertEqual(
             EmailLog.objects.filter(
                 event=self.event, email_type='event_recap_ready',
@@ -209,63 +206,39 @@ class EventRecapNotificationServiceTest(TestCase):
             2,
         )
 
-    def test_retry_only_delivers_the_failed_email_channel(self):
-        from email_app.package_mail import package_send as real_package_send
+    def test_failed_submit_marks_all_failed_and_retry_resubmits(self):
+        self.relay.fail = True
+        first = notify_recap_ready(self.event)
 
-        def fail_member(**kwargs):
-            if kwargs.get('to') == self.member.email:
-                raise MailError('provider unavailable')
-            return real_package_send(**kwargs)
+        self.assertEqual(first['failed'], 2)
+        self.assertEqual(first['emailed'], 0)
+        self.assertEqual(first['notified'], 2)
+        self.assertEqual(
+            {item['email_status'] for item in first['results']}, {'failed'},
+        )
+        self.assertFalse(
+            EventReminderLog.objects.filter(
+                event=self.event, interval='recap_email',
+            ).exists(),
+        )
 
-        with patch(
-            'email_app.package_mail.package_send',
-            side_effect=fail_member,
-        ):
-            first = notify_recap_ready(self.event)
-            deliver_pending_mail()
+        self.relay.fail = False
         second = notify_recap_ready(self.event)
-        deliver_pending_mail()
 
-        first_by_user = {
-            item['user_id']: item for item in first['results']
-        }
-        second_by_user = {
-            item['user_id']: item for item in second['results']
-        }
-        self.assertEqual(first_by_user[self.member.pk]['email_status'], 'failed')
-        self.assertEqual(
-            first_by_user[self.member.pk]['in_app_status'], 'sent',
-        )
-        self.assertEqual(
-            second_by_user[self.member.pk]['email_status'], 'sent',
-        )
-        self.assertEqual(
-            second_by_user[self.member.pk]['in_app_status'], 'already_sent',
-        )
-        self.assertEqual(second['emailed'], 1)
+        self.assertEqual(second['emailed'], 2)
         self.assertEqual(second['notified'], 0)
-        self.assertEqual(second['already_emailed'], 1)
         self.assertEqual(second['already_notified'], 2)
-        self.assertEqual(second['already_sent'], 1)
         self.assertEqual(second['failed'], 0)
-        self.assertEqual(EmailDelivery.objects.count(), 2)
-        self.assertEqual(
-            EmailLog.objects.filter(
-                event=self.event, email_type='event_recap_ready',
-            ).count(),
-            2,
-        )
+        self.assertEqual(len(self.relay.campaigns), 1)
 
     def test_rerun_reaches_a_registrant_added_after_the_first_send(self):
         first = notify_recap_ready(self.event)
-        deliver_pending_mail()
         later = User.objects.create_user(
             email='recap-later@test.com', email_verified=True,
         )
         EventRegistration.objects.create(event=self.event, user=later)
 
         second = notify_recap_ready(self.event)
-        deliver_pending_mail()
 
         later_result = next(
             item for item in second['results'] if item['user_id'] == later.pk
@@ -279,53 +252,29 @@ class EventRecapNotificationServiceTest(TestCase):
         self.assertEqual(second['already_sent'], 2)
         self.assertEqual(later_result['email_status'], 'sent')
         self.assertEqual(later_result['in_app_status'], 'sent')
-        self.assertEqual(EmailDelivery.objects.count(), 3)
+        self.assertEqual(len(self.relay.campaigns), 2)
+        keys = {c['external_key'] for c in self.relay.campaigns}
+        self.assertEqual(len(keys), 2)
         self.assertEqual(
             EmailLog.objects.filter(
                 event=self.event, email_type='event_recap_ready',
             ).count(),
             3,
         )
-
-    def test_one_failed_email_does_not_abort_other_channels_or_recipients(self):
-        from email_app.package_mail import package_send as real_package_send
-
-        def fail_member(**kwargs):
-            if kwargs.get('to') == self.member.email:
-                raise MailError('provider unavailable')
-            return real_package_send(**kwargs)
-
-        with patch(
-            'email_app.package_mail.package_send',
-            side_effect=fail_member,
-        ):
-            result = notify_recap_ready(self.event)
-
-        by_user = {item['user_id']: item for item in result['results']}
-        self.assertEqual(result['failed'], 1)
-        self.assertEqual(result['emailed'], 1)
-        self.assertEqual(result['notified'], 2)
-        self.assertEqual(by_user[self.member.pk]['email_status'], 'failed')
-        self.assertEqual(by_user[self.member.pk]['in_app_status'], 'sent')
-        self.assertEqual(by_user[self.unsubscribed.pk]['email_status'], 'sent')
-        self.assertEqual(EmailDelivery.objects.count(), 1)
+        self.assertEqual(len(second['relay']), 2)
 
     def test_user_deactivated_between_channels_is_skipped(self):
-        original_deliver_email = (
-            __import__(
-                'events.services.event_recap_notification', fromlist=['_deliver_email'],
-            )._deliver_email
-        )
+        from events.services import event_recap_notification as service
 
-        def deliver_email(event, user_id, recap_url):
-            state = original_deliver_email(event, user_id, recap_url)
-            if user_id == self.member.pk:
-                User.objects.filter(pk=user_id).update(is_active=False)
-            return state
+        original_submit = service._submit_email_campaign
 
-        with patch(
-            'events.services.event_recap_notification._deliver_email',
-            side_effect=deliver_email,
+        def submit_then_deactivate(event, users, recap_url):
+            states = original_submit(event, users, recap_url)
+            User.objects.filter(pk=self.member.pk).update(is_active=False)
+            return states
+
+        with patch.object(
+            service, '_submit_email_campaign', side_effect=submit_then_deactivate,
         ):
             result = notify_recap_ready(self.event)
 

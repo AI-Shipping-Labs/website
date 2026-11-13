@@ -8796,7 +8796,7 @@
     },
     "/api/events/{event_id}/notify-recap": {
       "post": {
-        "description": "Resolve the recap audience for the event by id: its registrants/attendees, members of cohorts whose event series is the event's series, and readers of a book club linked to the event (series or chapter link). Each person is emailed once (plus one in-app notification) with the recap link and, when the event has a recording, the watch link. Sends are idempotent per event and user: re-running only reaches people not yet emailed. Complaints, permanent bounces and invalid addresses are skipped; a newsletter unsubscribe only suppresses recipients with no explicit sign-up (book-club readers). With dry_run=true nothing is sent or written: the response lists every recipient with the reasons they are included and the predicted status, and reports the readiness guard instead of failing on it.",
+        "description": "Resolve the recap audience for the event by id: its registrants/attendees, members of cohorts whose event series is the event's series, and readers of a book club linked to the event (series or chapter link). Each person is emailed once through ONE Relay campaign submit for the whole audience (plus one in-app notification) with the recap link and, when the event has a recording, the watch link. Sends are idempotent per event and user: re-running only reaches people not yet emailed. The response includes Relay's sent/delivered/pending counts under 'relay'. Complaints, permanent bounces and invalid addresses are skipped; a newsletter unsubscribe only suppresses recipients with no explicit sign-up (book-club readers). With dry_run=true nothing is sent or written: the response lists every recipient with the reasons they are included and the predicted status, and reports the readiness guard instead of failing on it.",
         "parameters": [
           {
             "in": "path",
@@ -8912,6 +8912,30 @@
                     },
                     "recap_url": {
                       "type": "string"
+                    },
+                    "relay": {
+                      "description": "Relay campaign status for the recap email: ONE campaign per submitted audience batch. Counts are read from Relay (sent, delivered, pending); an empty list means nothing was submitted.",
+                      "items": {
+                        "properties": {
+                          "delivered_count": {
+                            "type": "integer"
+                          },
+                          "external_key": {
+                            "type": "string"
+                          },
+                          "pending_count": {
+                            "type": "integer"
+                          },
+                          "recipient_count": {
+                            "type": "integer"
+                          },
+                          "sent_count": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
                     },
                     "results": {
                       "items": {
@@ -9594,7 +9618,7 @@
     },
     "/api/events/{slug}/notify-recap-ready": {
       "post": {
-        "description": "After an operator verifies the anonymous public recap page, send one transactional email and one in-app notification to everyone interested in this event occurrence: its registrants/attendees, members of cohorts linked to its series, and readers of a linked book club. The action is explicit and idempotent per channel. Same service as POST /api/events/{event_id}/notify-recap.",
+        "description": "After an operator verifies the anonymous public recap page, submit ONE Relay campaign email (Relay owns pacing, retries, dedup) and send one in-app notification to everyone interested in this event occurrence: its registrants/attendees, members of cohorts linked to its series, and readers of a linked book club. The action is explicit and idempotent per channel. Same service as POST /api/events/{event_id}/notify-recap.",
         "parameters": [
           {
             "in": "path",
@@ -9680,6 +9704,30 @@
                     "recap_url": {
                       "format": "uri",
                       "type": "string"
+                    },
+                    "relay": {
+                      "description": "Relay campaign status for the recap email: ONE campaign per submitted audience batch. Counts are read from Relay (sent, delivered, pending); an empty list means nothing was submitted.",
+                      "items": {
+                        "properties": {
+                          "delivered_count": {
+                            "type": "integer"
+                          },
+                          "external_key": {
+                            "type": "string"
+                          },
+                          "pending_count": {
+                            "type": "integer"
+                          },
+                          "recipient_count": {
+                            "type": "integer"
+                          },
+                          "sent_count": {
+                            "type": "integer"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "type": "array"
                     },
                     "results": {
                       "items": {

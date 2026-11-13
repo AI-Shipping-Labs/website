@@ -10,7 +10,6 @@ import datetime
 from datetime import timedelta
 from unittest.mock import patch
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
@@ -21,6 +20,7 @@ from events.services.event_audience import resolve_event_audience
 from events.services.event_recap_notification import notify_recap_ready
 from events.tasks.complete_finished_events import complete_finished_events
 from events.tasks.notify_recap_auto import send_recap_auto_notify
+from events.tests.recap_relay import start_recap_relay
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -51,6 +51,10 @@ class RecapAutoNotifyTest(TestCase):
         CohortEnrollment.objects.create(cohort=cohort, user=cls.member)
         EventRegistration.objects.create(event=cls.event, user=cls.registrant)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def _save_recap(self, notes):
         event = Event.objects.get(pk=self.event.pk)
         event.recap_notes = notes
@@ -59,9 +63,7 @@ class RecapAutoNotifyTest(TestCase):
         return event
 
     def _recap_recipients(self):
-        return sorted(EmailDelivery.objects.filter(
-            purpose='event_recap_ready',
-        ).values_list('recipient_email', flat=True))
+        return self.relay.emails
 
     def test_recap_becoming_ready_announces_once_and_edits_never_resend(self):
         with patch(ENQUEUE) as enqueue:

@@ -234,6 +234,25 @@ _RECAP_AUDIENCE_REASON_SCHEMA = {
     "required": ["source", "label"],
     "additionalProperties": False,
 }
+_RECAP_RELAY_STATUS_SCHEMA = {
+    "type": "array",
+    "description": (
+        "Relay campaign status for the recap email: ONE campaign per "
+        "submitted audience batch. Counts are read from Relay (sent, "
+        "delivered, pending); an empty list means nothing was submitted."
+    ),
+    "items": {
+        "type": "object",
+        "properties": {
+            "external_key": {"type": "string"},
+            "recipient_count": {"type": "integer"},
+            "sent_count": {"type": "integer"},
+            "delivered_count": {"type": "integer"},
+            "pending_count": {"type": "integer"},
+        },
+    },
+}
+
 _RECAP_NOTIFICATION_OUTCOME_SCHEMA = {
     "type": "object",
     "properties": {
@@ -1942,7 +1961,7 @@ def event_notify_workshop_ready(request, slug):
             "summary": "Send recap-ready notification",
             "description": (
                 "After an operator verifies the anonymous public recap page, "
-                "send one transactional email and one in-app notification to "
+                "submit ONE Relay campaign email (Relay owns pacing, retries, dedup) and send one in-app notification to "
                 "everyone interested in this event occurrence: its "
                 "registrants/attendees, members of cohorts linked to its "
                 "series, and readers of a linked book club. The action is "
@@ -1970,6 +1989,7 @@ def event_notify_workshop_ready(request, slug):
                             "skipped_inactive": {"type": "integer"},
                             "skipped": {"type": "integer"},
                             "failed": {"type": "integer"},
+                            "relay": _RECAP_RELAY_STATUS_SCHEMA,
                             "results": {
                                 "type": "array",
                                 "items": _RECAP_NOTIFICATION_OUTCOME_SCHEMA,
@@ -2075,10 +2095,12 @@ _DRY_RUN_FALSE = {"", "0", "false", "no"}
                 "registrants/attendees, members of cohorts whose event "
                 "series is the event's series, and readers of a book club "
                 "linked to the event (series or chapter link). Each person "
-                "is emailed once (plus one in-app notification) with the "
+                "is emailed once through ONE Relay campaign submit for the "
+                "whole audience (plus one in-app notification) with the "
                 "recap link and, when the event has a recording, the watch "
                 "link. Sends are idempotent per event and user: re-running "
-                "only reaches people not yet emailed. Complaints, permanent "
+                "only reaches people not yet emailed. The response includes "
+                "Relay's sent/delivered/pending counts under 'relay'. Complaints, permanent "
                 "bounces and invalid addresses are skipped; a newsletter "
                 "unsubscribe only suppresses recipients with no explicit "
                 "sign-up (book-club readers). With dry_run=true nothing is "
@@ -2121,6 +2143,7 @@ _DRY_RUN_FALSE = {"", "0", "false", "no"}
                             "already_sent": {"type": "integer"},
                             "skipped": {"type": "integer"},
                             "failed": {"type": "integer"},
+                            "relay": _RECAP_RELAY_STATUS_SCHEMA,
                             "by_reason": {
                                 "type": "object",
                                 "additionalProperties": {"type": "integer"},

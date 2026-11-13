@@ -9,9 +9,7 @@ idempotency across the wider audience, and the recording link.
 import datetime
 from datetime import timedelta
 from io import StringIO
-from unittest.mock import patch
 
-from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 from django.test import TestCase, tag
@@ -19,12 +17,12 @@ from django.utils import timezone
 
 from bookclub.models import Book, Chapter, ChapterRead, Note
 from content.models import Cohort, CohortEnrollment, Course, Module, Unit
-from email_app.testing import StubRelayClient, deliver_pending_mail
 from events.models import Event, EventRegistration, EventSeries
 from events.services.event_recap_notification import (
     notify_recap_ready,
     preview_recap_audience,
 )
+from events.tests.recap_relay import start_recap_relay
 from notifications.models import EventReminderLog
 
 User = get_user_model()
@@ -109,6 +107,10 @@ class RecapAudienceTest(TestCase):
         ChapterRead.objects.create(chapter=chapter, user=cls.unsubscribed_reader)
         Note.objects.create(chapter=chapter, user=cls.note_writer, body='Takeaway.')
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def test_dry_run_lists_union_with_reasons_and_sends_nothing(self):
         preview = preview_recap_audience(self.event)
 
@@ -145,7 +147,7 @@ class RecapAudienceTest(TestCase):
             preview['by_reason'],
             {'attended': 1, 'book_club': 3, 'cohort': 2, 'registered': 2},
         )
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertEqual(self.relay.campaigns, [])
         self.assertFalse(EventReminderLog.objects.exists())
 
     def test_send_emails_each_person_once_and_rerun_never_double_emails(self):
@@ -155,9 +157,9 @@ class RecapAudienceTest(TestCase):
         self.assertEqual(result['eligible'], 7)
         self.assertEqual(result['emailed'], 6)
         self.assertEqual(result['failed'], 0)
-        recipients = list(
-            EmailDelivery.objects.values_list('recipient_email', flat=True),
-        )
+        # ONE Relay campaign for the whole audience, not per-user sends.
+        self.assertEqual(len(self.relay.campaigns), 1)
+        recipients = self.relay.emails
         self.assertEqual(len(recipients), 6)
         self.assertEqual(len(set(recipients)), 6)
         self.assertNotIn('unsubscribed-reader@test.com', recipients)
@@ -168,7 +170,7 @@ class RecapAudienceTest(TestCase):
         rerun = notify_recap_ready(self.event)
         self.assertEqual(rerun['emailed'], 0)
         self.assertEqual(rerun['already_emailed'], 6)
-        self.assertEqual(EmailDelivery.objects.count(), 6)
+        self.assertEqual(len(self.relay.campaigns), 1)
         preview = preview_recap_audience(self.event)
         self.assertEqual(preview['would_email'], 0)
         self.assertEqual(preview['already_emailed'], 6)
@@ -182,8 +184,10 @@ class RecapAudienceTest(TestCase):
         rerun = notify_recap_ready(self.event)
 
         self.assertEqual(rerun['emailed'], 1)
-        self.assertTrue(
-            EmailDelivery.objects.filter(recipient_email='late@test.com').exists(),
+        self.assertEqual(len(self.relay.campaigns), 2)
+        self.assertEqual(
+            [m['email'] for m in self.relay.campaigns[1]['recipients']],
+            ['late@test.com'],
         )
 
     def test_dry_run_reports_not_ready_instead_of_failing(self):
@@ -197,13 +201,7 @@ class RecapAudienceTest(TestCase):
         self.assertEqual(preview['eligible'], 7)
 
     def _resolved_contexts(self):
-        stub = StubRelayClient()
-        with patch(
-            'community_base.mail.backends.relay.configured_client',
-            return_value=stub,
-        ):
-            deliver_pending_mail()
-        return [call['context'] for call in stub.calls]
+        return list(self.relay.contexts().values())
 
     def test_email_links_recording_when_the_event_has_one(self):
         Event.objects.filter(pk=self.event.pk).update(
@@ -259,17 +257,12 @@ class RecapEmailLinkByAudienceTest(TestCase):
         CohortEnrollment.objects.create(cohort=cohort, user=cls.cohort_member)
         EventRegistration.objects.create(event=cls.event, user=cls.registrant)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def _contexts_by_recipient(self):
-        stub = StubRelayClient()
-        with patch(
-            'community_base.mail.backends.relay.configured_client',
-            return_value=stub,
-        ):
-            deliver_pending_mail()
-        contexts = {}
-        for call in stub.calls:
-            contexts[call['delivery'].recipient_email] = call['context']
-        return contexts
+        return self.relay.contexts()
 
     def test_cohort_member_gets_the_session_unit_and_registrant_the_event_recap(self):
         notify_recap_ready(self.event)
@@ -300,6 +293,10 @@ class NotifyRecapReadyCommandTest(TestCase):
         )
         EventRegistration.objects.create(event=cls.event, user=cls.member)
 
+    def setUp(self):
+        super().setUp()
+        self.relay = start_recap_relay(self)
+
     def test_dry_run_prints_audience_and_sends_nothing(self):
         out = StringIO()
         call_command('notify_recap_ready', str(self.event.pk), '--dry-run', stdout=out)
@@ -307,7 +304,7 @@ class NotifyRecapReadyCommandTest(TestCase):
         output = out.getvalue()
         self.assertIn('command-member@test.com\twould_send\tregistered', output)
         self.assertIn('eligible=1 would_email=1', output)
-        self.assertFalse(EmailDelivery.objects.exists())
+        self.assertEqual(self.relay.campaigns, [])
 
     def test_send_then_rerun_reports_already_sent(self):
         first, second = StringIO(), StringIO()
@@ -317,7 +314,7 @@ class NotifyRecapReadyCommandTest(TestCase):
         self.assertIn('emailed=1', first.getvalue())
         self.assertIn('emailed=0', second.getvalue())
         self.assertIn('already_sent=1', second.getvalue())
-        self.assertEqual(EmailDelivery.objects.count(), 1)
+        self.assertEqual(len(self.relay.campaigns), 1)
 
     def test_unknown_event_and_not_ready_event_fail(self):
         with self.assertRaisesMessage(CommandError, 'No event with id=999999'):

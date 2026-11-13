@@ -199,3 +199,12 @@ existing neutral overrides. A general `SES_FROM_EMAIL` value fills each
 missing From-address setting. The guarded email migration removes the legacy
 rows only after confirming there are no unpublished local template overrides,
 so a failed deploy can still roll back to code that reads the old keys.
+
+## Verified contacts for normal campaigns
+
+Relay's dispatch-time suppression recheck skips contacts that are unverified
+at Relay, and list upsert creates unverified contacts. `queue_native_campaign`
+therefore marks every locally `email_verified` recipient verified through
+`POST /api/contacts` before creating the Relay campaign, and aborts the queue
+(alerting staff) if any call fails. Without this, campaign 18 preflighted with
+47 recipients and 1335 skipped of 1382.

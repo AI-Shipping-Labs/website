@@ -187,6 +187,66 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         RELAY_BASE_URL="https://relay.test.datatalks.club",
         RELAY_API_KEY="test-relay-key-123",
     )
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_queued_retry_allows_suppression_only_skips_and_marks_skipped(
+        self, mock_request,
+    ):
+        self.campaign.relay_campaign_state = "pending"
+        self.campaign.save(update_fields=["relay_campaign_state"])
+        suppressed_user = create_user_with_membership(
+            email=f"suppressed-retry-{uuid.uuid4().hex[:8]}@test.com",
+            tier=self.free_tier,
+            email_verified=True,
+            unsubscribed=False,
+        )
+        suppressed_delivery = CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=suppressed_user,
+            recipient_user_pk=suppressed_user.pk,
+            recipient_email=suppressed_user.email,
+            state=CampaignDelivery.State.PENDING,
+        )
+        existing = MagicMock()
+        existing.status_code = 200
+        existing.json.return_value = {
+            "campaign": {"status": "queued", "recipient_count": 1, "skipped_count": 1},
+        }
+        recipients = MagicMock()
+        recipients.status_code = 200
+        recipients.json.return_value = {
+            "recipients": [
+                {
+                    "client_recipient_key": str(self.delivery.pk),
+                    "status": "pending",
+                },
+                {
+                    "client_recipient_key": str(suppressed_delivery.pk),
+                    "status": "skipped",
+                    "skip_reason": "global_unsubscribe",
+                },
+            ],
+        }
+        mock_request.side_effect = [existing, recipients]
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            delivery_ids=[self.delivery.pk, suppressed_delivery.pk],
+            send_delay=0,
+        )
+
+        self.assertEqual(result["sent_count"], 1)
+        self.assertEqual(result["skipped_count"], 1)
+        self.delivery.refresh_from_db()
+        suppressed_delivery.refresh_from_db()
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
+        self.assertEqual(suppressed_delivery.state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(suppressed_delivery.skip_reason, "relay_global_unsubscribe")
+        self.assertIsNone(suppressed_delivery.email_log)
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
     @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
     @patch("email_app.services.relay_campaigns.requests.Session.request")
     def test_relay_preflight_count_mismatch_fails_before_local_sent(
@@ -216,6 +276,147 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.relay_campaign_state, "failed")
         self.assertIn("preflight recipient count mismatch", self.campaign.relay_campaign_error)
+        self.assertEqual(mock_alert.call_count, 1)
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_relay_suppression_only_skips_pass_preflight_and_queue(self, mock_request):
+        self.campaign.relay_campaign_state = "pending"
+        self.campaign.save(update_fields=["relay_campaign_state"])
+        extra_deliveries = []
+        for idx in range(2):
+            u = create_user_with_membership(
+                email=f"suppressed-{idx}-{uuid.uuid4().hex[:8]}@test.com",
+                tier=self.free_tier,
+                email_verified=True,
+                unsubscribed=False,
+            )
+            extra_deliveries.append(
+                CampaignDelivery.objects.create(
+                    campaign=self.campaign,
+                    user=u,
+                    recipient_user_pk=u.pk,
+                    recipient_email=u.email,
+                    state=CampaignDelivery.State.PENDING,
+                )
+            )
+        delivery_ids = [self.delivery.pk, *(d.pk for d in extra_deliveries)]
+        responses = []
+        for status, document in [
+            (404, {}),
+            (200, {"recipient_list": {}}),
+            (200, {"recipient_list": {}}),
+            (201, {"campaign": {"status": "draft"}}),
+            (200, {
+                "recipient_count": 1,
+                "skipped_count": 2,
+                "skip_reason_counts": {"global_unsubscribe": 1, "hard_bounce": 1},
+            }),
+            (200, {
+                "queued": True,
+                "recipient_count": 1,
+                "skipped_count": 2,
+                "campaign": {"status": "queued"},
+            }),
+            (200, {
+                "recipients": [
+                    {
+                        "client_recipient_key": str(extra_deliveries[0].pk),
+                        "status": "skipped",
+                        "skip_reason": "global_unsubscribe",
+                    },
+                    {
+                        "client_recipient_key": str(extra_deliveries[1].pk),
+                        "status": "skipped",
+                        "skip_reason": "hard_bounce",
+                    },
+                ],
+            }),
+        ]:
+            response = MagicMock()
+            response.status_code = status
+            response.json.return_value = document
+            responses.append(response)
+        mock_request.side_effect = responses
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            delivery_ids=delivery_ids,
+            send_delay=0,
+        )
+
+        self.assertTrue(result["relay_queued"])
+        self.assertEqual(result["sent_count"], 1)
+        self.assertEqual(result["skipped_count"], 2)
+        self.assertEqual(mock_request.call_count, 7)
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.relay_campaign_state, "queued")
+        self.delivery.refresh_from_db()
+        extra_deliveries[0].refresh_from_db()
+        extra_deliveries[1].refresh_from_db()
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
+        self.assertIsNotNone(self.delivery.email_log)
+        self.assertEqual(extra_deliveries[0].state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(extra_deliveries[0].skip_reason, "relay_global_unsubscribe")
+        self.assertIsNone(extra_deliveries[0].email_log)
+        self.assertEqual(extra_deliveries[1].state, CampaignDelivery.State.SKIPPED)
+        self.assertEqual(extra_deliveries[1].skip_reason, "relay_hard_bounce")
+        self.assertIsNone(extra_deliveries[1].email_log)
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
+    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_relay_non_suppression_skip_reason_still_fails_preflight(
+        self, mock_request, mock_alert,
+    ):
+        self.campaign.relay_campaign_state = "pending"
+        self.campaign.save(update_fields=["relay_campaign_state"])
+        u2 = create_user_with_membership(
+            email=f"unverified-{uuid.uuid4().hex[:8]}@test.com",
+            tier=self.free_tier,
+            email_verified=True,
+            unsubscribed=False,
+        )
+        d2 = CampaignDelivery.objects.create(
+            campaign=self.campaign,
+            user=u2,
+            recipient_user_pk=u2.pk,
+            recipient_email=u2.email,
+            state=CampaignDelivery.State.PENDING,
+        )
+        responses = []
+        for status, document in [
+            (404, {}),
+            (200, {"recipient_list": {}}),
+            (200, {"recipient_list": {}}),
+            (201, {"campaign": {"status": "draft"}}),
+            (200, {
+                "recipient_count": 0,
+                "skipped_count": 2,
+                "skip_reason_counts": {"global_unsubscribe": 1, "unverified": 1},
+            }),
+        ]:
+            response = MagicMock()
+            response.status_code = status
+            response.json.return_value = document
+            responses.append(response)
+        mock_request.side_effect = responses
+
+        with self.assertRaisesRegex(RelayCampaignApiError, "preflight recipient count mismatch"):
+            send_campaign_batch(
+                self.campaign.pk,
+                delivery_ids=[self.delivery.pk, d2.pk],
+                send_delay=0,
+            )
+
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.relay_campaign_state, "failed")
         self.assertEqual(mock_alert.call_count, 1)
 
     @override_settings(

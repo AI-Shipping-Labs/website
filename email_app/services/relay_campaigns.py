@@ -325,19 +325,93 @@ def _member_batches(members):
         yield members[offset:offset + RELAY_CAMPAIGN_MEMBER_BATCH_SIZE]
 
 
-def validate_native_campaign_recipient_counts(expected_count, recipient_count, skipped_count, *, stage):
+ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS = frozenset({"global_unsubscribe", "hard_bounce"})
+
+
+def _relay_suppression_skip_count(recount):
+    """Return skipped count when all Relay skips are global suppressions, else 0."""
+    skipped_count = recount.get("skipped_count") if isinstance(recount, dict) else None
+    skip_reason_counts = recount.get("skip_reason_counts") if isinstance(recount, dict) else None
+    if (
+        not isinstance(skipped_count, int)
+        or isinstance(skipped_count, bool)
+        or skipped_count <= 0
+        or not isinstance(skip_reason_counts, dict)
+        or not skip_reason_counts
+    ):
+        return 0
+    total = 0
+    for reason, count in skip_reason_counts.items():
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            return 0
+        if count == 0:
+            continue
+        if reason not in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+            return 0
+        total += count
+    return skipped_count if total == skipped_count else 0
+
+
+def validate_native_campaign_recipient_counts(
+    expected_count,
+    recipient_count,
+    skipped_count,
+    *,
+    stage,
+    allowed_skipped_count=0,
+):
+    expected_sendable = expected_count - allowed_skipped_count
     if (
         not isinstance(recipient_count, int)
         or isinstance(recipient_count, bool)
         or not isinstance(skipped_count, int)
         or isinstance(skipped_count, bool)
-        or recipient_count != expected_count
-        or skipped_count != 0
+        or expected_sendable < 0
+        or recipient_count != expected_sendable
+        or skipped_count != allowed_skipped_count
     ):
         raise RelayCampaignApiError(
-            f"Relay campaign {stage} recipient count mismatch: expected {expected_count}, "
+            f"Relay campaign {stage} recipient count mismatch: expected {expected_sendable}, "
             f"Relay reported {recipient_count!r} recipients and {skipped_count!r} skipped."
         )
+
+
+def _skipped_delivery_reasons_for_queued_campaign(
+    key, scope, expected_delivery_ids, expected_skipped_count, *, session,
+):
+    response = _campaign_api_request(
+        "GET",
+        f"/api/campaigns/{key}/recipients",
+        params={**scope, "status": "skipped"},
+        session=session,
+    )
+    recipients = response.get("recipients")
+    if not isinstance(recipients, list):
+        raise RelayCampaignApiError(
+            "Relay campaign skipped recipients response omitted recipients"
+        )
+    expected_by_key = {
+        str(delivery_id): delivery_id for delivery_id in expected_delivery_ids
+    }
+    skipped_reasons = {}
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        delivery_id = expected_by_key.get(str(recipient.get("client_recipient_key")))
+        if delivery_id is None:
+            continue
+        reason = str(recipient.get("skip_reason") or "").strip()
+        if reason not in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+            raise RelayCampaignApiError(
+                f"Relay campaign queued with unexpected skip reason {reason!r}."
+            )
+        skipped_reasons[delivery_id] = f"relay_{reason}"[:100]
+    if len(skipped_reasons) != expected_skipped_count:
+        raise RelayCampaignApiError(
+            f"Relay campaign queue reported {expected_skipped_count} skipped recipients, "
+            f"but recipients endpoint returned {len(skipped_reasons)}."
+        )
+    return skipped_reasons
 
 
 def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_ids, *, session):
@@ -350,21 +424,35 @@ def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_id
     recipients = response.get("recipients")
     if not isinstance(recipients, list):
         raise RelayCampaignApiError("Relay campaign recipients response omitted recipients")
-    confirmed = {
-        str(recipient.get("client_recipient_key"))
-        for recipient in recipients
-        if isinstance(recipient, dict)
-        and recipient.get("client_recipient_key")
-        and recipient.get("status") not in {"skipped", "failed", "cancelled"}
-    }
-    expected = {str(delivery_id) for delivery_id in expected_delivery_ids}
+    expected_by_key = {str(delivery_id): delivery_id for delivery_id in expected_delivery_ids}
+    confirmed = set()
+    skipped_reasons = {}
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+        key_str = str(recipient.get("client_recipient_key") or "")
+        if not key_str or key_str not in expected_by_key:
+            continue
+        status = recipient.get("status")
+        if status not in {"skipped", "failed", "cancelled"}:
+            confirmed.add(key_str)
+            continue
+        if status == "skipped":
+            reason = str(recipient.get("skip_reason") or "").strip()
+            if reason in ALLOWED_RELAY_SUPPRESSION_SKIP_REASONS:
+                skipped_reasons[expected_by_key[key_str]] = f"relay_{reason}"[:100]
+                confirmed.add(key_str)
+    expected = set(expected_by_key)
     matched = expected & confirmed
     if matched != expected:
         missing = len(expected - matched)
         raise RelayCampaignApiError(
             f"Relay queued campaign recovery could not confirm {missing} local recipients."
         )
-    return [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched]
+    return (
+        [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched],
+        skipped_reasons,
+    )
 
 
 def queue_native_campaign(campaign, deliveries, *, external_key=None, session=None):
@@ -446,7 +534,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
     if existing and isinstance(existing.get("campaign"), dict):
         native = existing["campaign"]
         if native.get("status") in {"queued", "snapshotting", "sending", "sent"}:
-            confirmed_ids = _confirmed_delivery_ids_for_queued_campaign(
+            confirmed_ids, skipped_delivery_reasons = _confirmed_delivery_ids_for_queued_campaign(
                 key, scope, included_delivery_ids, session=session,
             )
             return {
@@ -456,6 +544,8 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
                 "recipient_count": native.get("recipient_count"),
                 "skipped_count": native.get("skipped_count"),
                 "included_delivery_ids": confirmed_ids,
+                "suppressed_skipped_count": len(skipped_delivery_reasons),
+                "skipped_delivery_reasons": skipped_delivery_reasons,
             }
         if native.get("status") != "draft":
             raise RelayCampaignApiError(
@@ -522,11 +612,13 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         payload=scope,
         session=session,
     )
+    suppressed_count = _relay_suppression_skip_count(recount)
     validate_native_campaign_recipient_counts(
         len(included_delivery_ids),
         recount.get("recipient_count"),
         recount.get("skipped_count"),
         stage="preflight",
+        allowed_skipped_count=suppressed_count,
     )
     queued = _campaign_api_request(
         "POST",
@@ -539,8 +631,20 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         queued.get("recipient_count"),
         queued.get("skipped_count"),
         stage="queue",
+        allowed_skipped_count=suppressed_count,
     )
+    skipped_delivery_reasons = {}
+    if suppressed_count > 0:
+        skipped_delivery_reasons = _skipped_delivery_reasons_for_queued_campaign(
+            key,
+            scope,
+            included_delivery_ids,
+            suppressed_count,
+            session=session,
+        )
     queued["included_delivery_ids"] = included_delivery_ids
+    queued["suppressed_skipped_count"] = suppressed_count
+    queued["skipped_delivery_reasons"] = skipped_delivery_reasons
     return queued
 
 

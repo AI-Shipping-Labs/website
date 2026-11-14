@@ -17,8 +17,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
+from email_app.services.email_buttons import prepare_campaign_body_markdown
 from email_app.services.email_classification import get_sender_for_email_type
-from email_app.services.email_images import size_markdown_images_for_email
 from email_app.services.relay_campaign_alerts import alert_relay_campaign_failure
 from email_app.services.relay_campaign_progress import (  # noqa: F401 - stable import path
     refresh_campaign_relay_stats,
@@ -177,7 +177,7 @@ def send_campaign_delivery_to_relay(
         recipient_email, template_key, template_version, idempotency_key, category,
         context={
             "subject": subject,
-            "body_markdown": size_markdown_images_for_email(body_markdown),
+            "body_markdown": prepare_campaign_body_markdown(body_markdown),
             "footer_note": footer_note or "",
             "verify_email_url": verify_email_url or "",
             "unsubscribe_url": unsubscribe_url or "",
@@ -610,7 +610,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         "template_version": DEFAULT_TEMPLATE_VERSION,
         "context": {
             "subject": campaign.subject,
-            "body_markdown": size_markdown_images_for_email(campaign.body),
+            "body_markdown": prepare_campaign_body_markdown(campaign.body),
             "footer_note": (
                 VERIFY_DEADLINE_CTA
                 if campaign.verify_deadline_days
@@ -845,7 +845,7 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
             "template_version": DEFAULT_TEMPLATE_VERSION,
             "context": {
                 "subject": f"[TEST] {campaign.subject}",
-                "body_markdown": size_markdown_images_for_email(campaign.body),
+                "body_markdown": prepare_campaign_body_markdown(campaign.body),
                 "footer_note": "Test-only Relay campaign tracking check.",
                 "verify_email_url": "",
                 "unsubscribe_url": "",

@@ -810,7 +810,6 @@ class StudioCampaignDetailPreviewTest(TestCase):
 
     def test_campaign_form_documents_email_btn_markup(self):
         response = self.client.get("/studio/campaigns/new")
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "{: .email-btn }")
 
     def test_preview_is_scoped_to_iframe_via_srcdoc(self):

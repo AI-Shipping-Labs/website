@@ -1,6 +1,6 @@
 """Periodic task that transitions finished events from `upcoming` to `completed`.
 
-Runs every 5 minutes via Django-Q (registered in
+Runs daily at 04:00 UTC via Django-Q (registered in
 `jobs.management.commands.setup_schedules`). Events keep `status` as the
 source of truth for `is_upcoming` / `is_past` and all dependent surfaces
 (listings, dashboard widgets, registration API, recap branching). When an
@@ -25,9 +25,7 @@ Studio "Send follow-up now" button is the documented escape hatch.
 """
 
 import logging
-from datetime import timedelta
 
-from django.db.models import Q
 from django.utils import timezone
 
 from events.tasks.send_post_event_followup import (
@@ -42,28 +40,18 @@ def complete_finished_events():
     """Flip `status` from `upcoming` to `completed` for finished events.
 
     Returns:
-        int: total number of rows updated across both branches.
+        int: number of rows updated.
     """
     from events.models import Event
+    from events.models.event import ended_upcoming_events_q
 
     now = timezone.now()
 
-    # Issue #712: DB-side mirror of ``Event.effective_end_datetime`` —
-    # ``end_datetime`` when set, otherwise ``start_datetime + 1h``. Both
-    # branches together encode the same "this event is over" contract
-    # that the join-redirect view, the .ics export, and the calendar
-    # deep-link builders consume via the Python property. Keep these in
-    # sync; a divergence here means cron and join-gate disagree on when
-    # an event ends.
-    explicit_end_filter = Q(
-        status='upcoming',
-        end_datetime__lte=now,
-    )
-    implicit_end_filter = Q(
-        status='upcoming',
-        end_datetime__isnull=True,
-        start_datetime__lte=now - timedelta(hours=1),
-    )
+    # Issue #712: DB-side mirror of ``Event.effective_end_datetime``.
+    # Shared with the read surfaces (API status, Studio) via
+    # ``ended_upcoming_events_q`` so cron and readers agree on when an
+    # event ends.
+    ended_filter = ended_upcoming_events_q(now)
 
     # Issue #680: capture the PKs of the rows that are about to flip
     # so we can enqueue post-event follow-ups for them. We resolve the
@@ -71,19 +59,12 @@ def complete_finished_events():
     # rows we just transitioned (an .update() returns a count, not a
     # queryset of touched rows).
     pre_flip_pks = list(
-        Event.objects
-        .filter(explicit_end_filter | implicit_end_filter)
-        .values_list('pk', flat=True),
+        Event.objects.filter(ended_filter).values_list('pk', flat=True),
     )
 
-    explicit_end_flipped = Event.objects.filter(explicit_end_filter).update(
-        status='completed',
-    )
-    implicit_end_flipped = Event.objects.filter(implicit_end_filter).update(
-        status='completed',
-    )
-
-    total = explicit_end_flipped + implicit_end_flipped
+    total = Event.objects.filter(pk__in=pre_flip_pks).filter(
+        ended_filter,
+    ).update(status='completed')
 
     if total:
         logger.info(

@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
@@ -102,6 +103,26 @@ def _effective_end_datetime(start_datetime, end_datetime):
     if start_datetime is None:
         return None
     return start_datetime + timedelta(hours=1)
+
+
+def ended_upcoming_events_q(now=None):
+    """Return a ``Q`` matching stored-``upcoming`` events that have ended.
+
+    DB-side mirror of ``Event.effective_end_datetime``: ``end_datetime``
+    when set, otherwise ``start_datetime + 1h``. The daily completion task
+    flips these rows to ``completed``; until it runs, read surfaces use
+    this filter (and ``Event.effective_status``) so a finished event never
+    reports ``upcoming``.
+    """
+    if now is None:
+        now = timezone.now()
+    return Q(status='upcoming') & (
+        Q(end_datetime__lte=now)
+        | Q(
+            end_datetime__isnull=True,
+            start_datetime__lte=now - timedelta(hours=1),
+        )
+    )
 
 
 # Issue #579: canonical list of supported third-party hosts for the
@@ -847,6 +868,18 @@ class Event(
         if self.status == 'draft':
             return False
         return timezone.now() >= self.effective_end_datetime
+
+    @property
+    def effective_status(self):
+        """Return the stored status with the time-based completion applied.
+
+        ``upcoming`` rows whose effective end has passed report
+        ``completed`` even before the daily completion task flips the
+        stored field. Every other status is returned unchanged.
+        """
+        if self.status == 'upcoming' and self.is_past:
+            return 'completed'
+        return self.status
 
     @property
     def registration_count(self):

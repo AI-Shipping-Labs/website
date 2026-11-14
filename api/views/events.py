@@ -14,7 +14,7 @@ from community_base.api.public_urls import public_url
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator, validate_email
 from django.db import IntegrityError, transaction
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -43,6 +43,7 @@ from events.models.event import (
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
     PUBLIC_EVENT_STATUSES,
+    ended_upcoming_events_q,
 )
 from events.services.calendar_lifecycle import (
     enqueue_cancellation_update,
@@ -402,7 +403,9 @@ def serialize_event(event, banner_status=None):
         "location": event.location,
         "tags": event.tags or [],
         "required_level": event.required_level,
-        "status": event.status,
+        # Time-derived: a finished event reports ``completed`` before the
+        # daily completion task flips the stored field.
+        "status": event.effective_status,
         "public_url": public_url(
             event,
             is_public=event.published and event.status in PUBLIC_EVENT_STATUSES,
@@ -1113,7 +1116,14 @@ def events_collection(request):
         if status_filter:
             if status_filter not in VALID_STATUSES:
                 return validation_response({"status": "Unknown status."})
-            qs = qs.filter(status=status_filter)
+            if status_filter == "upcoming":
+                qs = qs.filter(status="upcoming").exclude(
+                    ended_upcoming_events_q(),
+                )
+            elif status_filter == "completed":
+                qs = qs.filter(Q(status="completed") | ended_upcoming_events_q())
+            else:
+                qs = qs.filter(status=status_filter)
 
         origin_filter = request.GET.get("origin")
         if origin_filter:

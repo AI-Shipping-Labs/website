@@ -91,6 +91,9 @@ def _tool_install_environment() -> tuple[dict[str, str], Path]:
     environment = os.environ.copy()
     environment["UV_TOOL_DIR"] = str(prefix.parent)
     environment["UV_TOOL_BIN_DIR"] = str(executable.absolute().parent)
+    python_dir = prefix.parent.parent / "python"
+    if "UV_PYTHON_INSTALL_DIR" not in environment and python_dir.is_dir():
+        environment["UV_PYTHON_INSTALL_DIR"] = str(python_dir)
     return environment, executable.absolute()
 
 

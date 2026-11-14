@@ -156,3 +156,26 @@ def test_install_timeout_is_reported(monkeypatch):
 
     with pytest.raises(auto_update.UpdateError, match="timed out after 180 seconds"):
         auto_update._install_latest(MAIN_SHA, run=timed_out)
+
+
+def test_tool_install_environment_pins_shared_python_dir(monkeypatch, tmp_path):
+    uv_root = tmp_path / "uv"
+    tool_prefix = uv_root / "tools" / "asl-cli"
+    python_dir = uv_root / "python"
+    tool_prefix.mkdir(parents=True)
+    python_dir.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    asl_bin = bin_dir / "asl"
+    asl_bin.write_text("", encoding="utf-8")
+
+    monkeypatch.delenv("UV_PYTHON_INSTALL_DIR", raising=False)
+    monkeypatch.setattr(auto_update.sys, "prefix", str(tool_prefix))
+    monkeypatch.setattr(auto_update.sys, "argv", [str(asl_bin)])
+
+    environment, executable = auto_update._tool_install_environment()
+
+    assert executable == asl_bin
+    assert environment["UV_TOOL_DIR"] == str(uv_root / "tools")
+    assert environment["UV_TOOL_BIN_DIR"] == str(bin_dir)
+    assert environment["UV_PYTHON_INSTALL_DIR"] == str(python_dir)

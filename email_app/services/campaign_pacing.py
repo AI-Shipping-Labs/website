@@ -1,8 +1,6 @@
-"""Rate-limit campaign transport calls and stagger their scheduled batches."""
+"""Stagger scheduled campaign recovery batches."""
 
 import math
-import time
-from collections.abc import Callable
 
 from integrations.config import get_config
 
@@ -26,12 +24,3 @@ def get_campaign_batch_interval_seconds(batch_size):
         DEFAULT_BATCH_INTERVAL_SECONDS,
         safe_batch_duration,
     )
-
-
-def paced_campaign_send(send: Callable, *, delay_seconds, **kwargs):
-    """Apply the per-send gap after success or any transport failure."""
-    try:
-        return send(**kwargs)
-    finally:
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)

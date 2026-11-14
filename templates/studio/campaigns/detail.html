@@ -15,7 +15,6 @@
     {% if campaign.status == 'draft' %}<div class="border-t border-border"><form method="post" action="{% url 'studio_campaign_delete' campaign_id=campaign.pk %}" class="w-full" onsubmit="return confirm('Permanently delete draft campaign &quot;{{ campaign.subject|escapejs }}&quot;? This cannot be undone.');">{% csrf_token %}<button type="submit" data-testid="delete-campaign-btn" class="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Delete</button></form></div>{% endif %}
   {% endstudio_overflow_menu %}
 {% endstudio_header_actions %}
-{% worker_status_inline %}
 
 <div class="max-w-3xl space-y-6">
   {# Messages render once at the top of the studio main content area via studio/base.html (issue #347) #}

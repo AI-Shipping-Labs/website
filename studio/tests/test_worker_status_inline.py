@@ -3,8 +3,7 @@ redirect-to-worker behaviour after a job is submitted.
 
 Covers:
 - The indicator renders on /studio/sync/, /studio/sync/history/,
-  /studio/campaigns/, /studio/campaigns/<id>/, /studio/campaigns/new,
-  and /studio/notifications/ in both worker-up and worker-down states.
+  and /studio/notifications/ (not on campaign pages) in both worker-up and worker-down states.
 - The studio dashboard at /studio/ shows the prominent worker status panel
   in both states.
 - Sync trigger and Sync All redirect back to /studio/sync/ (the sync
@@ -110,8 +109,6 @@ class InlineIndicatorPresenceTest(TestCase):
     INDICATOR_PAGES = [
         '/studio/sync/',
         '/studio/sync/history/',
-        '/studio/campaigns/',
-        '/studio/campaigns/new',
         '/studio/notifications/',
     ]
 
@@ -128,7 +125,7 @@ class InlineIndicatorPresenceTest(TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
     def test_indicator_shows_running_state_with_queue_depth(self):
-        for path in self.INDICATOR_PAGES + [f'/studio/campaigns/{self.campaign.pk}/']:
+        for path in self.INDICATOR_PAGES:
             with self.subTest(path=path), \
                  patch('studio.worker_health.Stat.get_all', return_value=[_fake_cluster()]):
                 response = self.client.get(path)
@@ -139,13 +136,28 @@ class InlineIndicatorPresenceTest(TestCase):
                 self.assertContains(response, 'Queue: ')
 
     def test_indicator_shows_not_running_state(self):
-        for path in self.INDICATOR_PAGES + [f'/studio/campaigns/{self.campaign.pk}/']:
+        for path in self.INDICATOR_PAGES:
             with self.subTest(path=path), \
                  patch('studio.worker_health.Stat.get_all', return_value=[]):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200, path)
                 self.assertContains(response, 'data-testid="worker-status-inline"')
                 self.assertContains(response, 'Not running')
+
+    def test_campaign_pages_do_not_show_worker_indicator(self):
+        """Campaign sending runs through Relay; the generic django-q
+        indicator ("Worker: Running · Queue: N pending") is misleading there."""
+        paths = [
+            '/studio/campaigns/',
+            '/studio/campaigns/new',
+            f'/studio/campaigns/{self.campaign.pk}/',
+        ]
+        with patch('studio.worker_health.Stat.get_all', return_value=[_fake_cluster()]):
+            for path in paths:
+                with self.subTest(path=path):
+                    response = self.client.get(path)
+                    self.assertNotContains(response, 'data-testid="worker-status-inline"')
+                    self.assertNotContains(response, 'Queue: ')
 
     def test_indicator_links_to_worker_dashboard(self):
         with patch('studio.worker_health.Stat.get_all', return_value=[]):

@@ -1033,8 +1033,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_releases_one_safe_followup_wave",
         "playwright_tests/test_campaign_repermission_1594.py::"
         "test_staff_is_stopped_by_unsafe_feedback_and_can_open_evidence",
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_late_consent_skips_the_future_wave_delivery",
     })
 
     issue_1592_owners = frozenset({
@@ -2294,8 +2292,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2963)
-        self.assertEqual(len(inventory.owners), 2758)
+        self.assertEqual(inventory.item_count, 2962)
+        self.assertEqual(len(inventory.owners), 2757)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner, self.tag_cache_isolation_owner}

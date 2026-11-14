@@ -5,7 +5,6 @@
 
 {% block studio_content %}
 {% studio_header_title_meta as campaign_header_meta %}
-    {% worker_status_inline %}
 {% endstudio_header_title_meta %}
 {% studio_header_actions title="Email Campaigns" subtitle="Manage email campaigns and newsletters." title_meta=campaign_header_meta %}
   <a href="{% url 'studio_campaign_create' %}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">

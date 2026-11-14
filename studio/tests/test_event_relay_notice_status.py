@@ -1,6 +1,6 @@
 """Tests for Studio Relay event notice status panel and campaign stubs."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -14,7 +14,7 @@ from email_app.services.relay_campaigns import (
     submit_native_campaign,
 )
 from email_app.testing_relay_transactional import install_test_relay_transactional_transport
-from events.models import Event
+from events.models import Event, EventSeries
 
 User = get_user_model()
 
@@ -109,3 +109,54 @@ class StudioEventRelayNoticeStatusTest(TestCase):
         self.assertEqual(stats["sent_count"], 0)
         self.assertEqual(stats["delivered_count"], 0)
         self.assertEqual(stats["pending_count"], 2)
+
+
+@tag("core")
+class StudioSeriesRelayNoticeStatusTest(TestCase):
+    """Series update and cancellation campaigns appear in Relay notice status."""
+
+    def test_series_update_and_cancellation_campaigns_listed(self):
+        from events.services.relay_event_notice import get_event_notice_statuses
+
+        series = EventSeries.objects.create(name="Office Hours", start_time=time(18, 0))
+        start = datetime(2026, 11, 24, 17, 0, tzinfo=UTC)
+        event = Event.objects.create(
+            title="OH 1", slug="oh-1-series-notice", start_datetime=start,
+            end_datetime=start + timedelta(hours=1), event_series=series,
+            ics_sequence=3,
+        )
+        other = Event.objects.create(
+            title="OH 2", slug="oh-2-series-notice", start_datetime=start,
+            end_datetime=start + timedelta(hours=1), event_series=series,
+        )
+        user = User.objects.create_user(email="series-notice@test.com")
+        update_key = f"series-update-{series.pk}-event-{event.pk}-seq-3"
+        cancel_key = f"series-cancellation-{series.pk}-event-{event.pk}-seq-3"
+        other_key = f"series-update-{series.pk}-event-{other.pk}-seq-0"
+        for email_type, key in (
+            ("series_update", update_key),
+            ("series_cancellation", cancel_key),
+            ("series_update", other_key),
+        ):
+            EmailLog.objects.create(
+                user=user, email_type=email_type, ses_message_id=key,
+                dedupe_key=f"{email_type}:{key}", recipient_email=user.email,
+            )
+
+        stats = {
+            "sent_count": 1, "delivered_count": 1,
+            "pending_count": 0, "recipient_count": 1,
+        }
+        with patch(
+            "events.services.relay_event_notice.get_native_campaign_stats",
+            return_value=stats,
+        ):
+            rows = get_event_notice_statuses(event)
+
+        self.assertEqual(
+            [(r["label"], r["external_key"]) for r in rows],
+            [
+                ("Series update notice", update_key),
+                ("Series cancellation notice", cancel_key),
+            ],
+        )

@@ -91,6 +91,24 @@ def _notice_candidates(event) -> list[tuple[str, str]]:
     for external_key in recap_keys:
         if external_key.startswith("event-recap-ready-"):
             candidates.append(("Recap-ready notice", external_key))
+    series = getattr(event, "event_series", None)
+    if series is not None:
+        for label, email_type, prefix in (
+            ("Series update notice", "series_update", "series-update-"),
+            ("Series cancellation notice", "series_cancellation", "series-cancellation-"),
+        ):
+            key_prefix = f"{prefix}{series.pk}-event-{event.pk}-seq-"
+            series_keys = (
+                EmailLog.objects.filter(
+                    email_type=email_type,
+                    ses_message_id__startswith=key_prefix,
+                )
+                .values_list("ses_message_id", flat=True)
+                .distinct()
+                .order_by("ses_message_id")
+            )
+            for external_key in series_keys:
+                candidates.append((label, external_key))
     return candidates
 
 

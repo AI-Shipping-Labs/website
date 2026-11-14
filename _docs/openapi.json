@@ -9133,6 +9133,16 @@
               }
             },
             "description": "Send only: the public recap-ready guard failed. The stable code is recap_not_ready and details.reason identifies why."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Relay campaign submission or delivery failed. ``error`` carries the failure message and ``details`` contains the full delivery summary."
           }
         },
         "summary": "Send or preview the recap-ready notification",
@@ -9842,6 +9852,16 @@
               }
             },
             "description": "The public recap-ready guard failed. The stable code is recap_not_ready and details.reason identifies why."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Relay campaign submission or delivery failed. ``error`` carries the failure message and ``details`` contains the full delivery summary."
           }
         },
         "summary": "Send recap-ready notification",

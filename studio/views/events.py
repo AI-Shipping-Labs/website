@@ -1546,16 +1546,27 @@ def event_notify_recap_ready(request, event_id):
         messages.error(request, str(exc))
         return redirect(f"{event.get_studio_edit_url()}#recap-ready-panel")
 
-    messages.success(
-        request,
-        (
-            'Recap-ready notification complete: '
-            f"{result['emailed']} emailed, {result['notified']} in-app "
-            f"notifications, {result['already_sent']} already sent, "
-            f"{result['skipped_inactive']} inactive skipped, "
-            f"{result['failed']} failed."
-        ),
+    summary_text = (
+        f"{result['emailed']} emailed, {result['notified']} in-app "
+        f"notifications, {result['already_sent']} already sent, "
+        f"{result['skipped_inactive']} inactive skipped, "
+        f"{result['failed']} failed."
     )
+    if result.get('failed') or result.get('email_error'):
+        error_detail = (
+            result.get('email_error')
+            or result.get('in_app_error')
+            or 'One or more deliveries failed.'
+        )
+        messages.error(
+            request,
+            f"Recap-ready notification failed ({error_detail}): {summary_text}",
+        )
+    else:
+        messages.success(
+            request,
+            f"Recap-ready notification complete: {summary_text}",
+        )
     return redirect(f"{event.get_studio_edit_url()}#recap-ready-panel")
 
 

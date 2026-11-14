@@ -303,3 +303,30 @@ class EventNotifyRecapByIdApiTest(TestCase):
                 event=self.event, email_type='event_recap_ready',
             ).exists(),
         )
+
+    def test_relay_failure_returns_502_with_error_text_and_summary_details(self):
+        from email_app.services.relay_campaigns import RelayCampaignApiError
+
+        with (
+            patch(
+                SUBMIT_PATCH,
+                side_effect=RelayCampaignApiError(
+                    'Relay campaign API POST /api/campaigns/k/submit returned HTTP 404',
+                ),
+            ),
+            patch(
+                'events.services.event_recap_notification.alert_event_notice_failure',
+            ) as mock_alert,
+            patch(STATUSES_PATCH, return_value=[]),
+        ):
+            response = self._post()
+
+        self.assertEqual(response.status_code, 502)
+        body = response.json()
+        self.assertEqual(body['code'], 'recap_notification_failed')
+        self.assertIn('RelayCampaignApiError', body['error'])
+        self.assertIn('HTTP 404', body['error'])
+        self.assertEqual(body['details']['failed'], 2)
+        self.assertEqual(body['details']['emailed'], 0)
+        self.assertEqual(body['details']['notified'], 2)
+        self.assertEqual(mock_alert.call_count, 1)

@@ -2041,6 +2041,14 @@ def event_notify_workshop_ready(request, slug):
                         "details": {"reason": "missing_recap"},
                     },
                 },
+                502: {
+                    "description": (
+                        "Relay campaign submission or delivery failed. "
+                        "``error`` carries the failure message and ``details`` "
+                        "contains the full delivery summary."
+                    ),
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
             },
         },
     },
@@ -2063,6 +2071,22 @@ def event_notify_recap_ready(request, slug):
             "recap_not_ready",
             status=422,
             details={"reason": exc.reason},
+        )
+    return _recap_notify_response(result)
+
+
+def _recap_notify_response(result):
+    if result.get("email_error") or result.get("failed", 0) > 0:
+        message = (
+            result.get("email_error")
+            or result.get("in_app_error")
+            or f"{result['failed']} recipient(s) failed."
+        )
+        return error_response(
+            message,
+            "recap_notification_failed",
+            status=502,
+            details=result,
         )
     return JsonResponse(result, status=200)
 
@@ -2203,6 +2227,14 @@ _DRY_RUN_FALSE = {"", "0", "false", "no"}
                     ),
                     "schema": _ERROR_RESPONSE_SCHEMA,
                 },
+                502: {
+                    "description": (
+                        "Relay campaign submission or delivery failed. "
+                        "``error`` carries the failure message and ``details`` "
+                        "contains the full delivery summary."
+                    ),
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
             },
         },
     },
@@ -2231,7 +2263,7 @@ def event_notify_recap(request, event_id):
             status=422,
             details={"reason": exc.reason},
         )
-    return JsonResponse(result, status=200)
+    return _recap_notify_response(result)
 
 
 @token_required

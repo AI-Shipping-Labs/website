@@ -3,11 +3,11 @@
 from dataclasses import dataclass
 
 from accounts.utils.tokens import generate_user_action_token
+from email_app.services.email_buttons import prepare_campaign_body_markdown
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     classify_email_type,
 )
-from email_app.services.email_images import size_markdown_images_for_email
 from email_app.services.footer_context import (
     EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
     VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
@@ -54,7 +54,7 @@ def prepare_campaign_message(user, subject, body_markdown, *, email_type, footer
 def campaign_relay_context(message):
     return {
         "subject": message.subject,
-        "body_markdown": size_markdown_images_for_email(message.body_markdown),
+        "body_markdown": prepare_campaign_body_markdown(message.body_markdown),
         "footer_note": message.footer_note,
         "verify_email_url": message.verify_email_url,
         "unsubscribe_url": message.unsubscribe_url,

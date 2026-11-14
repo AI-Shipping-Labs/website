@@ -208,3 +208,21 @@ therefore marks every locally `email_verified` recipient verified through
 `POST /api/contacts` before creating the Relay campaign, and aborts the queue
 (alerting staff) if any call fails. Without this, campaign 18 preflighted with
 47 recipients and 1335 skipped of 1382.
+
+## Campaign CTA button markup
+
+Campaign bodies are Markdown rendered by Relay with `attr_list` enabled. To
+render a link as a visible CTA button instead of an underlined text link,
+append `{: .email-btn }` after the Markdown link:
+
+```markdown
+[Join the launch stream](https://luma.com/xey7h50c){: .email-btn }
+[Apply for free](https://example.com/apply){: .email-btn }
+```
+
+`email_app.services.email_buttons.prepare_campaign_body_markdown` applies
+inline button styling (`display:inline-block`, `#6b8e23` background, `#ffffff`
+text, padding, rounded corners) and container image sizing at render time for
+Studio preview, test sends, and campaign submission without mutating the stored
+Markdown. Standard Markdown links without `.email-btn` stay underlined text
+links, and `class="email-btn"` is allowed on `<a>` in `content.utils.markdown.sanitize_html`.

@@ -786,6 +786,33 @@ class StudioCampaignDetailPreviewTest(TestCase):
         campaign.refresh_from_db()
         self.assertEqual(campaign.body, body)
 
+    @patch("studio.views.campaigns.configured_template_client")
+    def test_preview_styles_email_btn_links_without_mutating_campaign(self, configured):
+        configured.return_value.preview.return_value = {
+            "subject": "S", "html_body": "<p>x</p>", "text_body": "x",
+        }
+        body = (
+            "Hi\n\n"
+            "[Join the launch stream](https://luma.com/xey7h50c){: .email-btn }\n\n"
+            "[Read more](https://example.com)\n"
+        )
+        campaign = EmailCampaign.objects.create(
+            subject="CTA", body=body, status="draft",
+        )
+
+        self.client.get(f"/studio/campaigns/{campaign.pk}/")
+
+        sent = configured.return_value.preview.call_args.args[1]["body_markdown"]
+        self.assertIn("background-color:#6b8e23", sent)
+        self.assertIn("[Read more](https://example.com)", sent)
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.body, body)
+
+    def test_campaign_form_documents_email_btn_markup(self):
+        response = self.client.get("/studio/campaigns/new")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "{: .email-btn }")
+
     def test_preview_is_scoped_to_iframe_via_srcdoc(self):
         """The response contains an <iframe ... srcdoc="..."> element
         carrying the rendered preview HTML."""

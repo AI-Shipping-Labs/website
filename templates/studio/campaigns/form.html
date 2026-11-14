@@ -28,6 +28,10 @@
       <label class="block text-sm font-medium text-foreground mb-1">Body (Markdown)</label>
       <textarea name="body" rows="16"
                 class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent font-mono">{{ campaign.body|default:'' }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1" data-testid="campaign-body-help">
+        To render a link as a CTA button, append <code>{: .email-btn }</code>:
+        <code>[Apply for free](https://example.com){: .email-btn }</code>.
+      </p>
     </div>
 
     {% comment %}

@@ -30,7 +30,9 @@ _SANITIZE_TAGS = {
     'strong', 'sub', 'summary', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'ul',
 }
 _SANITIZE_ATTRIBUTES = {
-    'a': {'href', 'title', 'target', 'rel'},
+    # ``class`` lets documented CTA button links (e.g. ``.email-btn``) survive
+    # sanitization without permitting arbitrary inline ``style`` attributes.
+    'a': {'href', 'title', 'target', 'rel', 'class'},
     # ``class`` and ``data-theme-figure`` carry the light/dark figure swap
     # emitted by the sync-time pairing pass (issue #1725). Workshop bodies
     # bypass ``sanitize_html`` today, but an allowlist that silently strips

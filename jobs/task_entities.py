@@ -31,6 +31,8 @@ EVENT_FUNCS = {
     "events.tasks.send_post_event_followup.send_post_event_followup_one",
     "events.tasks.notify_recap_auto.send_recap_auto_notify",
 }
+# Historical task rows from the removed in-app campaign send queue still resolve
+# to their campaign page.
 CAMPAIGN_FUNCS = {
     "email_app.tasks.send_campaign.send_campaign",
     "email_app.tasks.send_campaign.send_campaign_batch",

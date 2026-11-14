@@ -17,12 +17,7 @@ from accounts.utils.tags import list_all_tags, normalize_tags
 from email_app.models import CampaignDelivery, EmailCampaign
 from email_app.relay_versions import template_version_for
 from email_app.services.campaign_audience import campaign_recipient_count as recount
-from email_app.services.campaign_dispatch import (
-    CampaignDeliveryConflict,
-    assume_delivery_sent,
-    claim_and_enqueue_campaign,
-    retry_delivery,
-)
+from email_app.services.campaign_dispatch import claim_and_submit_campaign
 from email_app.services.campaign_message import (
     CampaignMessage,
     campaign_relay_context,
@@ -44,11 +39,6 @@ from email_app.services.campaign_test_send import (
 )
 from email_app.services.campaign_test_send import (
     send_test_campaign_delivery,
-)
-from email_app.services.campaign_waves import (
-    campaign_wave_summary,
-    refresh_campaign_waves,
-    release_next_wave,
 )
 from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
@@ -183,7 +173,6 @@ def _build_campaign_detail_context(
     *,
     test_recipients="",
     test_recipient_suggestions=None,
-    refresh_wave_stats=True,
 ):
     """Build the shared context for the campaign detail page."""
     relay_stats = campaign.relay_campaign_stats
@@ -192,13 +181,6 @@ def _build_campaign_detail_context(
         state: campaign.deliveries.filter(state=state).count()
         for state, _label in CampaignDelivery.State.choices
     }
-    wave_summary = None
-    if (
-        campaign.audience_verification
-        == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-    ):
-        wave_summary = campaign_wave_summary(campaign, refresh=refresh_wave_stats)
-        campaign.refresh_from_db()
     return {
         "campaign": campaign,
         "scheduled_display": localized_schedule_display(campaign),
@@ -228,8 +210,6 @@ def _build_campaign_detail_context(
         "ses_campaign_url": (
             f"{reverse('studio_ses_event_list')}?campaign={campaign.pk}"
         ),
-        "is_monitored_campaign": wave_summary is not None,
-        "wave_summary": wave_summary,
     }
 
 
@@ -649,13 +629,6 @@ def campaign_detail(request, campaign_id):
             campaign.refresh_from_db()
         except RelayCampaignError as error:
             messages.error(request, f"Relay campaign stats unavailable: {error}")
-    if campaign.audience_verification == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY:
-        try:
-            refresh_campaign_waves(campaign.pk)
-            campaign.refresh_from_db()
-        except Exception as error:
-            messages.error(request, f"Relay campaign wave stats unavailable: {error}")
-
     preview_body = (
         monitored_message_parts(campaign, preview=True)[0]
         if campaign.audience_verification
@@ -682,7 +655,6 @@ def campaign_detail(request, campaign_id):
     context = _build_campaign_detail_context(
         campaign,
         test_recipient_suggestions=_test_recipient_suggestions(request),
-        refresh_wave_stats=False,
     )
     context["preview_html"] = preview_html
     return render(request, "studio/campaigns/detail.html", context)
@@ -723,33 +695,6 @@ def campaign_recipients(request, campaign_id):
             ),
         },
     )
-
-
-@staff_required
-@require_POST
-def campaign_delivery_resolve(request, campaign_id, delivery_id):
-    """Apply one explicit, attributed recipient reconciliation decision."""
-    delivery = get_object_or_404(
-        CampaignDelivery,
-        pk=delivery_id,
-        campaign_id=campaign_id,
-    )
-    action = request.POST.get('action', '')
-    try:
-        if action == 'retry':
-            retry_delivery(delivery.pk, actor=request.user)
-            messages.success(request, f'Queued retry for {delivery.recipient_email}.')
-        elif action == 'assume_sent':
-            assume_delivery_sent(delivery.pk, actor=request.user)
-            messages.success(
-                request,
-                f'Marked {delivery.recipient_email} as assumed sent without resending.',
-            )
-        else:
-            messages.error(request, 'Choose a valid delivery resolution.')
-    except CampaignDeliveryConflict as exc:
-        messages.error(request, str(exc))
-    return redirect('studio_campaign_recipients', campaign_id=campaign_id)
 
 
 def _recipient_count_for_level(target_min_level):
@@ -808,25 +753,21 @@ def campaign_duplicate(request, campaign_id):
 @staff_required
 @require_POST
 def campaign_send(request, campaign_id):
-    """Enqueue a campaign for background sending from Studio."""
+    """Submit a campaign to Relay in one request; Relay owns the sending."""
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
 
     try:
-        result = claim_and_enqueue_campaign(
+        result = claim_and_submit_campaign(
             campaign.pk,
             source='Studio campaign detail',
-            actor=(
-                request.user
-                if campaign.audience_verification
-                == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-                else None
-            ),
+            actor=request.user,
         )
     except Exception:
-        logger.exception('Failed to claim and enqueue campaign %s', campaign.pk)
+        logger.exception('Failed to submit campaign %s to Relay', campaign.pk)
         messages.error(
             request,
-            f'Campaign "{campaign.subject}" could not be queued; it remains a draft.',
+            f'Campaign "{campaign.subject}" could not be submitted to Relay; '
+            'it remains a draft and can be sent again.',
         )
         return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
@@ -834,19 +775,20 @@ def campaign_send(request, campaign_id):
         messages.error(
             request,
             f'Campaign "{campaign.subject}" is already {result.campaign.status}; '
-            'no second send was queued.',
+            'no second send was submitted.',
         )
         return redirect("studio_campaign_detail", campaign_id=campaign.pk)
     logger.info(
-        "Enqueued campaign %s for sending from Studio (task_id=%s)",
+        "Submitted campaign %s to Relay from Studio (key=%s)",
         campaign.pk,
-        result.task_id,
+        result.relay_campaign_key,
     )
     messages.success(
         request,
-        f'Campaign "{campaign.subject}" queued for sending — watching it here.',
+        f'Campaign "{campaign.subject}" submitted to Relay. '
+        'Relay is sending it; status below comes from Relay.',
     )
-    return redirect("studio_worker")
+    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
 
 @staff_required
@@ -863,32 +805,4 @@ def campaign_unschedule(request, campaign_id):
         request,
         f'Scheduled send cancelled for "{campaign.subject}".',
     )
-    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
-
-
-@staff_required
-@require_POST
-def campaign_wave_release(request, campaign_id):
-    """Release one eligible monitored wave through a conflict-safe claim."""
-    campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
-    try:
-        result = release_next_wave(
-            campaign.pk,
-            actor=request.user,
-            source="Studio campaign wave release",
-        )
-    except Exception:
-        logger.exception("Failed to release campaign wave for %s", campaign.pk)
-        messages.error(request, "The next wave could not be released safely.")
-    else:
-        if result.released:
-            messages.success(
-                request,
-                f"Wave {result.wave.number} queued for monitored sending.",
-            )
-        else:
-            messages.error(
-                request,
-                f"The next wave is blocked: {result.blocking_reason.replace('_', ' ')}.",
-            )
     return redirect("studio_campaign_detail", campaign_id=campaign.pk)

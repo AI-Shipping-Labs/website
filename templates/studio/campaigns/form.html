@@ -146,7 +146,7 @@
       </p>
       {% elif campaign.audience_verification == 'unverified_only' %}
       <p class="text-xs mt-2 px-3 py-2 rounded border border-yellow-700/40 bg-yellow-900/20 text-yellow-200" data-testid="campaign-repermission-policy">
-        Re-permission campaigns send a 100-recipient pilot, then waves of at most 250. Each later wave requires 24 hours of monitoring, a bounce rate below 2%, and zero complaints.
+        Re-permission campaigns are submitted to Relay in one request. Relay owns sending, pacing and retries.
       </p>
       {% endif %}
     </div>

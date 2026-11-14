@@ -5,7 +5,7 @@ the UTC dispatch instant, ``scheduled_timezone`` as the IANA display name),
 so Studio and the API serialize it like any other campaign field. A
 recurring django-q schedule (``campaign-scheduled-dispatch``, every minute)
 calls :func:`dispatch_due_campaigns`, which claims due drafts through the
-same :func:`~email_app.services.campaign_dispatch.claim_and_enqueue_campaign`
+same :func:`~email_app.services.campaign_dispatch.claim_and_submit_campaign`
 path Studio's manual send uses — the claim is the single-send guarantee, and
 claiming also clears the schedule fields.
 """
@@ -219,7 +219,7 @@ def dispatch_due_campaigns(*, now=None):
     between the due scan and the claim (manual send, archive edit) are
     reported as skipped, never double-sent.
     """
-    from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
+    from email_app.services.campaign_dispatch import claim_and_submit_campaign
 
     now = now or timezone.now()
     due_ids = list(
@@ -234,7 +234,7 @@ def dispatch_due_campaigns(*, now=None):
     dispatched = []
     skipped = []
     for campaign_id in due_ids:
-        result = claim_and_enqueue_campaign(
+        result = claim_and_submit_campaign(
             campaign_id,
             source="Scheduled campaign dispatch",
             scheduled_due_by=now,

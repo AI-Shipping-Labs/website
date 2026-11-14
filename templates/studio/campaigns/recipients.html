@@ -57,7 +57,6 @@
           <th class="py-2 px-4 font-medium">Clicks</th>
           <th class="py-2 px-4 font-medium">Disposition</th>
           <th class="py-2 pl-4 font-medium">Diagnostic</th>
-          <th class="py-2 pl-4 font-medium">Actions</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-border">
@@ -106,24 +105,6 @@
             {% if row.resolution %}
             <div class="mt-1 text-xs text-muted-foreground">Resolved via {{ row.resolution }}{% if row.resolved_by_email %} by {{ row.resolved_by_email }}{% endif %}{% if row.resolved_at %} at {{ row.resolved_at|operator_datetime }}{% endif %}</div>
             {% endif %}
-          </td>
-          <td class="py-3 pl-4">
-            {% if row.delivery_state == "failed" or row.delivery_state == "ambiguous" %}
-            <div class="flex flex-wrap gap-2">
-              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}"{% if row.delivery_state == "ambiguous" %} onsubmit="return confirm('Relay may already have accepted this email. Retrying can send a duplicate. Retry anyway?');"{% endif %}>
-                {% csrf_token %}
-                <input type="hidden" name="action" value="retry">
-                <button type="submit" class="{% studio_action_class 'async' %}" data-testid="campaign-delivery-retry">Retry delivery</button>
-              </form>
-              {% if row.delivery_state == "ambiguous" %}
-              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}" onsubmit="return confirm('Mark this recipient as assumed delivered without sending again?');">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="assume_sent">
-                <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="campaign-delivery-assume">Assume delivered</button>
-              </form>
-              {% endif %}
-            </div>
-            {% else %}&mdash;{% endif %}
           </td>
         </tr>
         {% endfor %}

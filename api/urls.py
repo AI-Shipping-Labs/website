@@ -60,11 +60,8 @@ from api.views.campaign_verify import (
 )
 from api.views.campaigns import (
     campaign_detail,
-    campaign_recipient_assume_sent,
     campaign_recipient_count,
-    campaign_recipient_retry,
     campaign_recipients,
-    campaign_waves,
     campaigns_collection,
 )
 from api.views.checkpoints import (
@@ -528,11 +525,6 @@ urlpatterns = [
         campaign_deleted_users,
         name="api_campaign_deleted_users",
     ),
-    path(
-        "campaigns/<int:campaign_id>/waves",
-        campaign_waves,
-        name="api_campaign_waves",
-    ),
     # ---- Campaign dispatch actions (schedule/unschedule/send/test-send) --
     path(
         "campaigns/<int:campaign_id>/relay-proof/dry-run",
@@ -568,16 +560,6 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/test-send",
         campaign_test_send,
         name="api_campaign_test_send",
-    ),
-    path(
-        "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/retry",
-        campaign_recipient_retry,
-        name="api_campaign_recipient_retry",
-    ),
-    path(
-        "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/assume-sent",
-        campaign_recipient_assume_sent,
-        name="api_campaign_recipient_assume_sent",
     ),
     # ---- Articles ------------------------------------------------------
     path(

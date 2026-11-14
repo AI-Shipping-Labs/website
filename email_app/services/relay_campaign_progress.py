@@ -96,7 +96,24 @@ def read_campaign_relay_progress(campaign, *, session=None):
         campaign.relay_campaign_progress_at = now
         update_fields.append("relay_campaign_progress_at")
     campaign.save(update_fields=update_fields)
+    if campaign.status == "sending" and totals["status"] == "sent":
+        apply_relay_status(campaign, sent=True)
     return RelayProgressRead(totals=totals, per_key=tuple(per_key))
+
+
+def apply_relay_status(campaign, *, sent):
+    """Derive the local campaign status from Relay's status, never local sends."""
+    if campaign.in_relay_attention:
+        return
+    now = timezone.now()
+    if sent and campaign.status in ("sending", "needs_attention"):
+        campaign.status = "sent"
+        campaign.sent_at = campaign.sent_at or now
+        campaign.save(update_fields=["status", "sent_at"])
+    elif not sent and campaign.status == "needs_attention":
+        campaign.status = "sending"
+        campaign.sent_at = None
+        campaign.save(update_fields=["status", "sent_at"])
 
 
 def refresh_campaign_relay_stats(campaign, *, session=None):

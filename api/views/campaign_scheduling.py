@@ -8,11 +8,11 @@ which never reaches the audience):
 
 - ``POST /api/campaigns/<id>/schedule``   — set/replace the send time.
 - ``POST /api/campaigns/<id>/unschedule`` — clear it.
-- ``POST /api/campaigns/<id>/send``       — claim and enqueue immediately.
+- ``POST /api/campaigns/<id>/send``       — claim and submit to Relay immediately.
 - ``POST /api/campaigns/<id>/test-send``  — one explicit probe recipient.
 
 Immediate and scheduled sends both go through
-``email_app.services.campaign_dispatch.claim_and_enqueue_campaign``, the
+``email_app.services.campaign_dispatch.claim_and_submit_campaign``, the
 same exactly-once claim Studio uses. Test sends never change campaign
 status, mirroring Studio.
 """
@@ -35,7 +35,7 @@ from api.utils import (
 )
 from api.views.campaigns import _serialize_campaign
 from email_app.models import EmailCampaign
-from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
+from email_app.services.campaign_dispatch import claim_and_submit_campaign
 from email_app.services.campaign_scheduling import (
     CampaignScheduleConflict,
     CampaignScheduleValidationError,
@@ -211,7 +211,7 @@ _SEND_RESPONSE_EXAMPLE = {
     "campaign_id": 1,
     "claimed": True,
     "status": "sending",
-    "task_id": "purple-otter-delivers",
+    "relay_campaign_key": "aishl-campaign-1",
 }
 
 
@@ -225,8 +225,9 @@ _SEND_RESPONSE_EXAMPLE = {
             "summary": "Send a draft campaign now",
             "description": (
                 "Claims the draft (exactly-once, same path as Studio's send "
-                "button and the scheduled dispatcher) and enqueues the "
-                "fan-out. Any pending schedule is consumed. A campaign that "
+                "button and the scheduled dispatcher) and submits it to "
+                "Relay in one request; Relay owns sending. Any pending "
+                "schedule is consumed. A campaign that "
                 "is not a draft answers 409 ``campaign_not_draft`` with its "
                 "current status; clients should require explicit operator "
                 "confirmation (``asl campaigns send`` gates on ``--yes``)."
@@ -234,7 +235,7 @@ _SEND_RESPONSE_EXAMPLE = {
             "request_body": {"body_required": False, "properties": {}},
             "responses": {
                 200: {
-                    "description": "Campaign claimed and queued for sending.",
+                    "description": "Campaign claimed and submitted to Relay.",
                     "example": _SEND_RESPONSE_EXAMPLE,
                 },
                 401: {"description": "Missing or invalid staff token."},
@@ -261,17 +262,10 @@ def campaign_send(request, campaign_id):
     campaign, error = _load_campaign_or_error(campaign_id)
     if error is not None:
         return error
-    result = claim_and_enqueue_campaign(
+    result = claim_and_submit_campaign(
         campaign.pk,
         source="API campaign send",
-        # Studio attributes monitored-wave releases to the operator; the API
-        # mirrors that with the token's user.
-        actor=(
-            request.user
-            if campaign.audience_verification
-            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-            else None
-        ),
+        actor=request.user,
     )
     if not result.claimed:
         return error_response(
@@ -287,7 +281,7 @@ def campaign_send(request, campaign_id):
         "campaign_id": campaign.pk,
         "claimed": True,
         "status": result.campaign.status,
-        "task_id": result.task_id,
+        "relay_campaign_key": result.relay_campaign_key,
     }, status=200)
 
 

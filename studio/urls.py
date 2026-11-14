@@ -80,7 +80,6 @@ from studio.views.call_requests import (
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
-    campaign_delivery_resolve,
     campaign_detail,
     campaign_duplicate,
     campaign_edit,
@@ -91,7 +90,6 @@ from studio.views.campaigns import (
     campaign_send,
     campaign_test_send,
     campaign_unschedule,
-    campaign_wave_release,
 )
 from studio.views.certificates import certificate_revoke, certificate_unrevoke
 from studio.views.cohorts import (
@@ -821,11 +819,6 @@ urlpatterns = [
         name='studio_campaign_recipients',
     ),
     path(
-        'campaigns/<int:campaign_id>/deliveries/<int:delivery_id>/resolve',
-        campaign_delivery_resolve,
-        name='studio_campaign_delivery_resolve',
-    ),
-    path(
         'campaigns/<int:campaign_id>/edit',
         campaign_edit,
         name='studio_campaign_edit',
@@ -849,11 +842,6 @@ urlpatterns = [
         'campaigns/<int:campaign_id>/test-send',
         campaign_test_send,
         name='studio_campaign_test_send',
-    ),
-    path(
-        'campaigns/<int:campaign_id>/waves/release',
-        campaign_wave_release,
-        name='studio_campaign_wave_release',
     ),
     path(
         'campaigns/<int:campaign_id>/unschedule',

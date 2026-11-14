@@ -38,12 +38,6 @@ SCHEDULE_DEFINITIONS = (
         "health-check", "jobs.tasks.healthcheck.health_check", "*/15 * * * *", description="every 15 min"
     ),
     ScheduleDefinition(
-        "campaign-delivery-recovery",
-        "email_app.tasks.campaign_delivery_recovery.recover_campaign_deliveries",
-        "*/5 * * * *",
-        description="every 5 min",
-    ),
-    ScheduleDefinition(
         "relay-campaign-watchdog",
         "email_app.tasks.relay_campaign_watchdog.run_relay_campaign_watchdog",
         "*/5 * * * *",

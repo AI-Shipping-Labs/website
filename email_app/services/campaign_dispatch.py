@@ -1,35 +1,22 @@
-"""Transactional campaign claim and operator reconciliation commands."""
+"""Claim a draft campaign and hand it to Relay in one request.
+
+AISL does not send, pace, queue or track recipients. It submits the campaign
+(content plus recipient list) to Relay and reads status back from Relay's
+campaign status API.
+"""
 
 from dataclasses import dataclass
 
 from django.db import transaction
-from django.utils import timezone
 
-from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign
+from email_app.models import EmailCampaign
 
 
 @dataclass(frozen=True)
 class CampaignClaimResult:
     claimed: bool
     campaign: EmailCampaign
-    task_id: str | None = None
-
-
-class CampaignDeliveryConflict(Exception):
-    pass
-
-
-def claim_and_enqueue_campaign(
-    campaign_id, *, source, actor=None, scheduled_due_by=None,
-):
-    """Commit the campaign claim and ORM-broker enqueue together."""
-    with transaction.atomic():
-        campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
-        if not _campaign_can_be_claimed(campaign, scheduled_due_by):
-            return CampaignClaimResult(False, campaign)
-        _mark_campaign_sending(campaign)
-        task_id = _enqueue_campaign(campaign, actor=actor, source=source)
-        return CampaignClaimResult(True, campaign, task_id)
+    relay_campaign_key: str | None = None
 
 
 def _campaign_can_be_claimed(campaign, scheduled_due_by):
@@ -55,102 +42,21 @@ def _mark_campaign_sending(campaign):
     ])
 
 
-def _enqueue_campaign(campaign, *, actor, source):
-    from jobs.tasks import async_task, build_task_name
+def claim_and_submit_campaign(
+    campaign_id, *, source, actor=None, scheduled_due_by=None,
+):
+    """Claim a draft exactly once, then submit it to Relay in one request.
 
-    task_kwargs = {"campaign_id": campaign.pk}
-    if actor is not None:
-        task_kwargs["released_by_id"] = actor.pk
-    task_id = async_task(
-        'email_app.tasks.send_campaign.send_campaign',
-        **task_kwargs,
-        task_name=build_task_name(
-            'Send campaign',
-            f'#{campaign.pk} {campaign.subject}',
-            source,
-        ),
-    )
-    if task_id:
-        return str(task_id)
-    return None
-
-
-def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation"):
-    """Attribute and durably queue one explicit operator retry."""
-    from jobs.tasks import async_task, build_task_name
+    ``source`` and ``actor`` are kept for caller attribution in logs.
+    A failed submit puts the draft back with the error stored and alerted;
+    Relay's per-campaign key makes re-submitting safe.
+    """
+    from email_app.services.campaign_submit import submit_campaign_to_relay
 
     with transaction.atomic():
-        # ``of=('self',)``: ``wave`` is nullable, so ``select_related`` is a
-        # LEFT OUTER JOIN and PostgreSQL refuses FOR UPDATE on it.
-        delivery = (
-            CampaignDelivery.objects.select_for_update(of=('self',))
-            .select_related('campaign', 'wave')
-            .get(pk=delivery_id)
-        )
-        if delivery.state not in {
-            CampaignDelivery.State.FAILED,
-            CampaignDelivery.State.AMBIGUOUS,
-        }:
-            raise CampaignDeliveryConflict('Delivery is no longer retryable.')
-        prior_state = delivery.state
-        delivery.state = CampaignDelivery.State.PENDING
-        delivery.claim_token = None
-        delivery.claimed_at = None
-        delivery.claim_expires_at = None
-        delivery.completed_at = None
-        delivery.resolution = CampaignDelivery.Resolution.RETRY
-        delivery.resolved_at = timezone.now()
-        delivery.resolved_by = actor
-        delivery.last_error = (
-            f'{delivery.last_error} [operator retry from {prior_state}]'
-        )[:500]
-        delivery.save(update_fields=[
-            'state', 'claim_token', 'claimed_at', 'claim_expires_at',
-            'completed_at', 'resolution', 'resolved_at', 'resolved_by',
-            'last_error', 'updated_at',
-        ])
-        if delivery.wave_id:
-            CampaignWave.objects.filter(pk=delivery.wave_id).update(
-                state=CampaignWave.State.SENDING,
-                monitoring_started_at=None,
-                completed_at=None,
-            )
-        campaign = delivery.campaign
-        campaign.status = 'sending'
-        campaign.save(update_fields=['status'])
-        task_id = async_task(
-            'email_app.tasks.send_campaign.send_campaign_batch',
-            campaign_id=campaign.pk,
-            delivery_ids=[delivery.pk],
-            task_name=build_task_name(
-                'Retry campaign delivery',
-                f'#{campaign.pk} delivery {delivery.pk}',
-                source,
-            ),
-        )
-        return delivery, str(task_id) if task_id else None
-
-
-def assume_delivery_sent(delivery_id, *, actor):
-    """Resolve an ambiguous outcome without another external side effect."""
-    from email_app.tasks.send_campaign import refresh_campaign_status
-
-    with transaction.atomic():
-        delivery = (
-            CampaignDelivery.objects.select_for_update()
-            .select_related('campaign')
-            .get(pk=delivery_id)
-        )
-        if delivery.state != CampaignDelivery.State.AMBIGUOUS:
-            raise CampaignDeliveryConflict('Delivery is no longer ambiguous.')
-        delivery.state = CampaignDelivery.State.ASSUMED_SENT
-        delivery.resolution = CampaignDelivery.Resolution.ASSUME_SENT
-        delivery.resolved_at = timezone.now()
-        delivery.resolved_by = actor
-        delivery.completed_at = timezone.now()
-        delivery.save(update_fields=[
-            'state', 'resolution', 'resolved_at', 'resolved_by',
-            'completed_at', 'updated_at',
-        ])
-        refresh_campaign_status(delivery.campaign_id)
-        return delivery
+        campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
+        if not _campaign_can_be_claimed(campaign, scheduled_due_by):
+            return CampaignClaimResult(False, campaign)
+        _mark_campaign_sending(campaign)
+    key = submit_campaign_to_relay(campaign, source=source, actor=actor)
+    return CampaignClaimResult(True, campaign, key)

@@ -12,11 +12,12 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.models import EmailCampaign
 from email_app.services.campaign_attention_alerts import (
     alert_unalerted_attention_and_stuck_campaigns,
 )
 from email_app.services.relay_campaign_progress import (
+    apply_relay_status,
     campaign_relay_keys,
     read_campaign_relay_progress,
     stored_relay_sent_total,
@@ -26,7 +27,6 @@ from email_app.services.relay_campaigns import (
     RelayCampaignError,
     alert_relay_campaign_failure,
 )
-from email_app.tasks.send_campaign import refresh_campaign_status
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -63,14 +63,8 @@ def stall_timeout_minutes():
 
 
 def _watched_campaigns():
-    released = Q(deliveries__wave__isnull=True) | Q(deliveries__wave__released_at__isnull=False)
-    failed_with_work = Q(
-        released,
-        relay_campaign_state="failed",
-        deliveries__state=CampaignDelivery.State.PENDING,
-    )
     active = Q(relay_campaign_state__in=["pending", "queued", *EmailCampaign.RELAY_ATTENTION_STATES])
-    return list(EmailCampaign.objects.filter(active | failed_with_work).distinct())
+    return list(EmailCampaign.objects.filter(active))
 
 
 def _transition(campaign, **fields):
@@ -151,7 +145,7 @@ def _raise_relay_failed(campaign, read, now):
 
 
 def _settle(campaign, state):
-    """Leave attention or tracking and let deliveries decide the status again."""
+    """Leave attention or tracking; Relay's status decides the campaign status."""
     settled = _transition(
         campaign,
         relay_campaign_state=state,
@@ -159,7 +153,7 @@ def _settle(campaign, state):
         relay_campaign_attention_sent_count=None,
     )
     if settled:
-        refresh_campaign_status(campaign.pk)
+        apply_relay_status(campaign, sent=(state == "sent"))
 
 
 def _read_relay(campaign):

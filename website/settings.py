@@ -576,12 +576,6 @@ BOOKING_CALENDLY_EVENT_URL = (
     else 'https://calendly.com/dtc-alexey/ai-shipping-labs-call'
 )
 
-# Email campaign chunking: number of recipients per chunked send_campaign_batch task.
-# At ~0.05s/email + Relay network latency, a 200-recipient batch finishes in roughly
-# 10-30s, well under the 300s Q_CLUSTER worker timeout, while keeping the queue
-# row count manageable (5000 recipients => 25 chunks).
-EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
-
 # GitHub App authentication for private repo access
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
 GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')

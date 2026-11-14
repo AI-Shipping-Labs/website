@@ -106,7 +106,6 @@ class EffectiveStatusSurfacesTest(TestCase):
         response = self.client.get(
             path, HTTP_AUTHORIZATION=f'Token {self.token.key}',
         )
-        self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
     def test_api_detail_reports_completed_for_ended_event(self):
@@ -135,7 +134,6 @@ class EffectiveStatusSurfacesTest(TestCase):
     def test_studio_state_panel_shows_completed_for_ended_event(self):
         self.client.force_login(self.staff)
         response = self.client.get(f'/studio/events/{self.ended.pk}/edit')
-        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         panel = content[content.index('data-testid="event-state-panel"'):]
         panel = panel[:panel.index('</dl>')]

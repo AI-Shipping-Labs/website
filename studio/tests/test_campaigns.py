@@ -766,6 +766,26 @@ class StudioCampaignDetailPreviewTest(TestCase):
         self.assertEqual(call.args[1]["body_markdown"], "# Pipeline body")
         self.assertEqual(call.kwargs["version"], 2)
 
+    @patch("studio.views.campaigns.configured_template_client")
+    def test_preview_sizes_markdown_images_without_mutating_campaign(self, configured):
+        configured.return_value.preview.return_value = {
+            "subject": "S", "html_body": "<p>x</p>", "text_body": "x",
+        }
+        body = "Hi\n\n![Hero](https://cdn.jsdelivr.net/x/social-preview.png)\n"
+        campaign = EmailCampaign.objects.create(
+            subject="Hero", body=body, status="draft",
+        )
+
+        self.client.get(f"/studio/campaigns/{campaign.pk}/")
+
+        sent = configured.return_value.preview.call_args.args[1]["body_markdown"]
+        self.assertIn(
+            "social-preview.png){: style=max-width:100%;height:auto width=536 }",
+            sent,
+        )
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.body, body)
+
     def test_preview_is_scoped_to_iframe_via_srcdoc(self):
         """The response contains an <iframe ... srcdoc="..."> element
         carrying the rendered preview HTML."""

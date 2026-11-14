@@ -81,11 +81,20 @@ def read_campaign_relay_progress(campaign, *, session=None):
     previous_sent = stored_relay_sent_total(campaign)
     totals = dict.fromkeys(_AGGREGATE_FIELDS, 0)
     per_key = []
+    allow_missing_key = len(keys) > 1 or campaign.relay_campaign_state in _ERROR_OWNING_STATES
     for key in keys:
-        native = get_native_campaign_stats(key, session=session)
+        native = get_native_campaign_stats(
+            key,
+            session=session,
+            allow_not_found=allow_missing_key,
+        )
+        if native is None:
+            continue
         per_key.append((key, native))
         for field in _AGGREGATE_FIELDS:
             totals[field] += native[field]
+    if not per_key:
+        return None
     totals["status"] = _aggregate_status([native.get("status", "unknown") for _key, native in per_key])
     now = timezone.now()
     campaign.relay_campaign_stats = totals

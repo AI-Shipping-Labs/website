@@ -111,6 +111,7 @@ def _queue_native_campaign_batch(
                 result.get("recipient_count"),
                 result.get("skipped_count"),
                 stage="queue",
+                max_skipped=result.get("allowed_skipped_count", 0),
             )
         if result.get("already_queued"):
             for delivery in deliveries.filter(resolution=CampaignDelivery.Resolution.RETRY):
@@ -121,11 +122,16 @@ def _queue_native_campaign_batch(
         raise
 
     included_ids = set(result.get("included_delivery_ids", []))
+    suppressed_emails = {str(email).strip().lower() for email in result.get("suppressed_emails", [])}
     now = timezone.now()
     for delivery in deliveries.select_related("user"):
-        if delivery.pk not in included_ids:
+        is_suppressed = delivery.recipient_email.strip().lower() in suppressed_emails
+        if delivery.pk not in included_ids or is_suppressed:
             delivery.state = CampaignDelivery.State.SKIPPED
-            delivery.skip_reason = "ineligible_at_relay_queue"
+            if is_suppressed:
+                delivery.skip_reason = "suppressed_at_relay"
+            else:
+                delivery.skip_reason = "ineligible_at_relay_queue"
             delivery.completed_at = now
             delivery.save(update_fields=["state", "skip_reason", "completed_at", "updated_at"])
             continue

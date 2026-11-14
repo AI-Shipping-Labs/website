@@ -2642,6 +2642,51 @@
         ]
       }
     },
+    "/api/campaigns/{campaign_id}/resume": {
+      "post": {
+        "description": "Reconciles against prior Relay campaign keys and queues only deliveries still in ``pending`` state under a fresh Relay key. Already-sent deliveries are never touched.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 18,
+                  "external_key": "aishl-campaign-18-resume-1",
+                  "pending_count": 1200,
+                  "resumed": true,
+                  "status": "sending",
+                  "task_id": "task-uuid"
+                }
+              }
+            },
+            "description": "Pending deliveries enqueued for resume."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "Campaign cannot be resumed in its current state."
+          }
+        },
+        "summary": "Resume pending deliveries for a partial campaign",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/campaigns/{campaign_id}/schedule": {
       "post": {
         "description": "Sets the dispatch time on a draft campaign. The server claims and sends the campaign at that time via the every-minute scheduled dispatcher; the schedule is cleared when the send is claimed (by the dispatcher or a manual Studio send). ``scheduled_at`` accepts an ISO 8601 datetime; a naive value is interpreted in ``scheduled_timezone`` (required then), an aware value may carry ``scheduled_timezone`` for display when the offset matches. Rescheduling an already-scheduled draft simply overwrites the fields.",

@@ -468,6 +468,8 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         if user.email_verified:
             verified_emails.append(delivery.recipient_email)
 
+    if session is None:
+        session = requests.Session()
     scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
     existing = _campaign_api_request(
         "GET",
@@ -710,6 +712,8 @@ def queue_native_test_campaign(campaign, *, campaign_key=None, session=None):
     plan = preview_native_test_campaign(campaign, campaign_key=campaign_key)
     recipients = plan["_recipients"]
     key = plan["campaign_key"]
+    if session is None:
+        session = requests.Session()
     scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
     list_defaults = {"type": "custom", "name": f"AISHL test campaign {campaign.pk}"}
     list_key = key
@@ -903,6 +907,8 @@ def retry_native_campaign_delivery(external_key, delivery_id, *, session=None):
     """Retry one recipient through Relay's campaign recipient retry route."""
     from urllib.parse import urlencode
 
+    if session is None:
+        session = requests.Session()
     scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
     query = urlencode(scope)
     response = _campaign_api_request(

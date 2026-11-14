@@ -47,6 +47,7 @@ from api.views.campaign_relay_proof import (
     campaign_relay_proof_dry_run,
     campaign_relay_proof_stats,
 )
+from api.views.campaign_resume import campaign_resume
 from api.views.campaign_scheduling import (
     campaign_schedule,
     campaign_send,
@@ -563,6 +564,11 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/send",
         campaign_send,
         name="api_campaign_send",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/resume",
+        campaign_resume,
+        name="api_campaign_resume",
     ),
     path(
         "campaigns/<int:campaign_id>/test-send",

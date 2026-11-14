@@ -79,14 +79,17 @@ def _chunk(items, size):
         yield items[index:index + size]
 
 
-def _queue_native_campaign_batch(campaign, delivery_ids, *, wave_id=None):
+def _queue_native_campaign_batch(
+    campaign, delivery_ids, *, wave_id=None, external_key=None,
+):
     """Queue a frozen local snapshot through Relay's native campaign worker."""
     deliveries = CampaignDelivery.objects.filter(
         campaign=campaign,
         pk__in=delivery_ids,
         state=CampaignDelivery.State.PENDING,
     )
-    external_key = f"aishl-campaign-{campaign.pk}"
+    if not external_key:
+        external_key = f"aishl-campaign-{campaign.pk}"
     wave = None
     if wave_id:
         wave = CampaignWave.objects.get(pk=wave_id, campaign=campaign)
@@ -425,6 +428,7 @@ def send_campaign_batch(
     user_ids=None,
     send_delay=None,
     wave_id=None,
+    external_key=None,
 ):
     """Process durable deliveries; legacy user-id schedules fail closed."""
     if send_delay is None:
@@ -439,6 +443,7 @@ def send_campaign_batch(
             campaign,
             delivery_ids or [],
             wave_id=wave_id,
+            external_key=external_key,
         )
     if campaign.status == "needs_attention":
         _alert_legacy_quarantined_campaign_once(campaign_id)

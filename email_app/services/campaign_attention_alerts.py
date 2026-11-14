@@ -10,7 +10,7 @@ which previously bypassed the watchdog without raising any alert.
 import logging
 from datetime import timedelta
 
-from django.db.models import Count
+from django.db.models import Count, Max, Q
 
 from email_app.models import CampaignDelivery, EmailCampaign
 from email_app.services.relay_campaign_alerts import alert_relay_campaign_failure
@@ -131,11 +131,86 @@ def _check_stuck_sending(now, stall_minutes):
     return checked, failures
 
 
+def _partial_needs_alert(campaign, now, stall_minutes):
+    if campaign.status == "sending":
+        cutoff = now - timedelta(minutes=stall_minutes)
+        if campaign.deliveries.filter(updated_at__gt=cutoff).exists():
+            return False
+        if campaign.relay_campaign_progress_at and campaign.relay_campaign_progress_at > cutoff:
+            return False
+    if campaign.relay_campaign_attention_alerted_at is None:
+        return True
+    if campaign.latest_sent_at is None:
+        return False
+    return campaign.relay_campaign_attention_alerted_at < campaign.latest_sent_at
+
+
+def _alert_stuck_partial_one(campaign, now):
+    summary = _delivery_summary(campaign)
+    detail = campaign.relay_campaign_error or summary
+    message = f"Stuck partial campaign ({summary}): {detail}"
+    accepted = alert_relay_campaign_failure(
+        campaign,
+        "stuck partial send",
+        RelayCampaignApiError(message),
+        bypass_cooldown=True,
+        also_email_dev=True,
+    )
+    if accepted:
+        EmailCampaign.objects.filter(pk=campaign.pk).update(
+            relay_campaign_attention_alerted_at=now,
+        )
+    return accepted
+
+
+def _stuck_partial_candidates():
+    return list(
+        EmailCampaign.objects.filter(
+            is_archived=False,
+            status__in=("needs_attention", "sending"),
+        )
+        .annotate(
+            sent_deliveries=Count(
+                "deliveries",
+                filter=Q(deliveries__state=CampaignDelivery.State.SENT),
+            ),
+            pending_deliveries=Count(
+                "deliveries",
+                filter=Q(deliveries__state=CampaignDelivery.State.PENDING),
+            ),
+            latest_sent_at=Max(
+                "deliveries__updated_at",
+                filter=Q(deliveries__state=CampaignDelivery.State.SENT),
+            ),
+        )
+        .filter(sent_deliveries__gt=0, pending_deliveries__gt=0)
+        .order_by("pk")
+    )
+
+
+def _check_stuck_partial(now, stall_minutes):
+    campaigns = _stuck_partial_candidates()
+    checked = 0
+    failures = 0
+    for campaign in campaigns:
+        if not _partial_needs_alert(campaign, now, stall_minutes):
+            continue
+        try:
+            _alert_stuck_partial_one(campaign, now)
+            checked += 1
+        except Exception:
+            # Broad on purpose: one campaign alert failure must not block others.
+            logger.exception("Stuck-partial alert failed campaign=%s", campaign.pk)
+            failures += 1
+    return checked, failures
+
+
 def alert_unalerted_attention_and_stuck_campaigns(*, now, stall_minutes):
     """Alert once on unalerted needs_attention and stuck sending campaigns."""
+    partial_checked, partial_failed = _check_stuck_partial(now, stall_minutes)
     att_checked, att_failed = _check_unalerted_needs_attention(now)
     stuck_checked, stuck_failed = _check_stuck_sending(now, stall_minutes)
     return {
-        "checked": att_checked + stuck_checked,
-        "failed": att_failed + stuck_failed,
+        "checked": partial_checked + att_checked + stuck_checked,
+        "failed": partial_failed + att_failed + stuck_failed,
     }

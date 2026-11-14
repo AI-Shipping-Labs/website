@@ -102,16 +102,18 @@ def _post_alert_to_slack(campaign, operation, subject, body):
     return False
 
 
-def _deliver_alert(campaign, operation, error, relay_key):
+def _deliver_alert(campaign, operation, error, relay_key, *, also_email_dev=False):
     subject = f"AISHL campaign {operation} failed: {campaign.pk}"
     body = (
         f"AISHL campaign {campaign.pk} Relay {operation} failed.\n"
         f"Relay key: {relay_key or campaign.relay_campaign_key or '(not assigned)'}\n"
         f"Error: {type(error).__name__}: {error}"
     )
-    if _post_alert_to_slack(campaign, operation, subject, body):
+    slack_ok = _post_alert_to_slack(campaign, operation, subject, body)
+    if slack_ok and not also_email_dev:
         return True
-    if _send_alert_email(campaign, operation, subject, body):
+    email_ok = _send_alert_email(campaign, operation, subject, body)
+    if slack_ok or email_ok:
         return True
     logger.error(
         "Every alert route failed for AISHL campaign Relay %s failure campaign=%s",
@@ -122,7 +124,13 @@ def _deliver_alert(campaign, operation, error, relay_key):
 
 
 def alert_relay_campaign_failure(
-    campaign, operation, error, *, relay_key=None, bypass_cooldown=False,
+    campaign,
+    operation,
+    error,
+    *,
+    relay_key=None,
+    bypass_cooldown=False,
+    also_email_dev=False,
 ):
     """Alert operators on staff Slack, falling back to email; never raises.
 
@@ -134,7 +142,13 @@ def alert_relay_campaign_failure(
     try:
         if not bypass_cooldown and not _claim_cooldown(campaign, operation):
             return False
-        return _deliver_alert(campaign, operation, error, relay_key)
+        return _deliver_alert(
+            campaign,
+            operation,
+            error,
+            relay_key,
+            also_email_dev=also_email_dev,
+        )
     except Exception:
         # Broad on purpose: an alert failure must never mask the original error.
         logger.exception(

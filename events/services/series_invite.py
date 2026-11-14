@@ -71,7 +71,13 @@ def _log_send(user, email_type, subject, ses_message_id, dedupe_key):
 
 
 def send_series_registration_invite(user, series, events):
-    """Send one multi-event registration invite for a series lifecycle."""
+    """Send one multi-event registration invite for a series lifecycle.
+
+    By design this is a transactional single-recipient send, not a fan-out:
+    it fires once for the one user who just registered, through Relay's
+    transactional API with an idempotency key (Relay owns delivery and
+    retries). Update/cancellation fan-outs use one Relay campaign instead.
+    """
     registration = series.series_registrations.only('pk').get(user=user)
     dedupe_key = (
         f'series-registration:{series.pk}:{user.pk}:{registration.pk}'

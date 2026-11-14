@@ -154,6 +154,23 @@ class RelayCampaignApi403Tests(TierSetupMixin, TestCase):
         self.assertEqual(self.campaign.relay_campaign_error, "RelayCampaignApiError: HTTP 403")
 
     @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_timed_out_prequeue_campaign_404_does_not_fail_stats_read(self, mock_request):
+        self.campaign.status = "needs_attention"
+        self.campaign.relay_campaign_state = "timed_out"
+        self.campaign.relay_campaign_key = f"aishl-campaign-{self.campaign.pk}"
+        self.campaign.relay_campaign_keys = [f"aishl-campaign-{self.campaign.pk}"]
+        self.campaign.relay_campaign_error = "No progress for 30 minutes. Last Relay status: not queued, 0 sent."
+        self.campaign.save()
+        mock_request.return_value = _mock_response(404, json_body={})
+
+        self.assertIsNone(refresh_campaign_relay_stats_loud(self.campaign))
+        self.campaign.refresh_from_db()
+        self.assertEqual(
+            self.campaign.relay_campaign_error,
+            "No progress for 30 minutes. Last Relay status: not queued, 0 sent.",
+        )
+
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
     def test_queued_campaign_404_still_raises_stats_error(self, mock_request):
         self.campaign.relay_campaign_state = "queued"
         self.campaign.relay_campaign_key = f"aishl-campaign-{self.campaign.pk}"

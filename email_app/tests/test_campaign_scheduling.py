@@ -8,7 +8,6 @@ campaign is claimed for sending.
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
-from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -23,6 +22,7 @@ from email_app.services.campaign_scheduling import (
     schedule_campaign,
     unschedule_campaign,
 )
+from email_app.testing_campaign_submit import stub_relay_submit
 
 
 def _in_hours(hours):
@@ -242,13 +242,15 @@ class DispatchDueCampaignsTest(TestCase):
             subject="Unscheduled", body="body", status="draft",
         )
 
-    @patch("jobs.tasks.async_task", return_value="dispatch-task")
-    def test_dispatches_due_draft_and_clears_schedule(self, mock_async):
-        result = dispatch_due_campaigns()
+    def test_dispatches_due_draft_and_clears_schedule(self):
+        with stub_relay_submit() as mock_async:
+            result = dispatch_due_campaigns()
         self.assertEqual(result["due"], 1)
         self.assertEqual(result["dispatched"], [self.due.pk])
         self.assertEqual(result["skipped"], [])
-        self.assertEqual(mock_async.call_args.kwargs["campaign_id"], self.due.pk)
+        self.assertEqual(
+            mock_async.call_args.kwargs["external_key"], f"aishl-campaign-{self.due.pk}",
+        )
         self.due.refresh_from_db()
         self.assertEqual(self.due.status, "sending")
         self.assertIsNone(self.due.scheduled_at)
@@ -276,16 +278,16 @@ class DispatchDueCampaignsTest(TestCase):
 class ClaimConsumesScheduleTest(TestCase):
     """Manual sends (Studio or API) consume any pending schedule."""
 
-    def test_claim_and_enqueue_clears_schedule_fields(self):
-        from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
+    def test_claim_and_submit_clears_schedule_fields(self):
+        from email_app.services.campaign_dispatch import claim_and_submit_campaign
 
         campaign = EmailCampaign.objects.create(
             subject="Claimed", body="body", status="draft",
             scheduled_at=timezone.now() + timedelta(hours=1),
             scheduled_timezone="Europe/Berlin",
         )
-        with patch("jobs.tasks.async_task", return_value="task-id") as mock_async:
-            result = claim_and_enqueue_campaign(
+        with stub_relay_submit() as mock_async:
+            result = claim_and_submit_campaign(
                 campaign.pk, source="Studio campaign detail",
             )
         self.assertTrue(result.claimed)
@@ -293,4 +295,6 @@ class ClaimConsumesScheduleTest(TestCase):
         self.assertEqual(campaign.status, "sending")
         self.assertIsNone(campaign.scheduled_at)
         self.assertIsNone(campaign.scheduled_timezone)
-        self.assertEqual(mock_async.call_args.kwargs["campaign_id"], campaign.pk)
+        self.assertEqual(
+            mock_async.call_args.kwargs["external_key"], f"aishl-campaign-{campaign.pk}",
+        )

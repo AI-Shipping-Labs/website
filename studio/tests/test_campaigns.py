@@ -11,7 +11,7 @@ from django.urls import reverse
 
 from email_app.models import EmailCampaign
 from email_app.services.campaign_test_send import TEST_EMAIL_FOOTER_NOTE
-from jobs.tasks import build_task_name
+from email_app.testing_campaign_submit import stub_relay_submit
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -343,41 +343,57 @@ class StudioCampaignDetailTest(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch("jobs.tasks.async_task", return_value="task-id-123")
-    def test_send_campaign_queues_job_and_redirects_to_worker(self, mock_async_task):
-        response = self.client.post(
-            f"/studio/campaigns/{self.campaign.pk}/send",
-            follow=True,
-        )
+    def test_send_campaign_submits_to_relay_and_stays_on_campaign(self):
+        with stub_relay_submit() as mock_submit:
+            response = self.client.post(
+                f"/studio/campaigns/{self.campaign.pk}/send",
+                follow=True,
+            )
 
-        self.assertRedirects(response, "/studio/worker/")
-        self.assertContains(response, "queued for sending")
-        mock_async_task.assert_called_once_with(
-            "email_app.tasks.send_campaign.send_campaign",
-            campaign_id=self.campaign.pk,
-            task_name=build_task_name(
-                "Send campaign",
-                f"#{self.campaign.pk} {self.campaign.subject}",
-                "Studio campaign detail",
-            ),
+        self.assertRedirects(
+            response,
+            reverse("studio_campaign_detail", args=[self.campaign.pk]),
         )
+        self.assertContains(response, "submitted to Relay")
+        self.assertNotContains(response, "Queue:")
+        mock_submit.assert_called_once()
+        self.assertEqual(
+            mock_submit.call_args.kwargs["external_key"],
+            f"aishl-campaign-{self.campaign.pk}",
+        )
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "sending")
 
-    @patch("jobs.tasks.async_task")
-    def test_send_campaign_non_draft_shows_error(self, mock_async_task):
+    def test_failed_submit_returns_campaign_to_draft_with_error(self):
+        with stub_relay_submit(side_effect=RuntimeError("relay down")), patch(
+            "email_app.services.campaign_submit.alert_relay_campaign_failure",
+        ):
+            response = self.client.post(
+                f"/studio/campaigns/{self.campaign.pk}/send",
+                follow=True,
+            )
+
+        self.assertContains(response, "remains a draft")
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.status, "draft")
+        self.assertIn("relay down", self.campaign.relay_campaign_error)
+
+    def test_send_campaign_non_draft_shows_error(self):
         self.campaign.status = "sent"
         self.campaign.save(update_fields=["status"])
 
-        response = self.client.post(
-            f"/studio/campaigns/{self.campaign.pk}/send",
-            follow=True,
-        )
+        with stub_relay_submit() as mock_submit:
+            response = self.client.post(
+                f"/studio/campaigns/{self.campaign.pk}/send",
+                follow=True,
+            )
 
         self.assertRedirects(
             response,
             reverse("studio_campaign_detail", args=[self.campaign.pk]),
         )
         self.assertContains(response, "is already sent")
-        mock_async_task.assert_not_called()
+        mock_submit.assert_not_called()
 
 
 class StudioCampaignCreateFormTest(TestCase):

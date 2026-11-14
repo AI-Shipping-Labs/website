@@ -2338,142 +2338,6 @@
         ]
       }
     },
-    "/api/campaigns/{campaign_id}/recipients/{delivery_id}/assume-sent": {
-      "post": {
-        "description": "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without calling Relay or fabricating an ``EmailLog``. Matches Studio assume-sent semantics; a stale action returns 409 ``delivery_conflict``.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "in": "path",
-            "name": "delivery_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "campaign_status": "sent",
-                  "delivery_id": 12,
-                  "delivery_state": "assumed_sent",
-                  "email": "alice@example.com",
-                  "sent_count": 0
-                }
-              }
-            },
-            "description": "Recipient marked assumed sent."
-          },
-          "401": {
-            "description": "Missing or invalid staff token."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "unknown_delivery",
-                  "error": "Delivery not found"
-                }
-              }
-            },
-            "description": "Campaign or delivery not found."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "delivery_conflict",
-                  "error": "Delivery is no longer ambiguous."
-                }
-              }
-            },
-            "description": "Delivery is no longer ambiguous."
-          }
-        },
-        "summary": "Assume a campaign recipient was sent",
-        "tags": [
-          "Campaigns"
-        ]
-      }
-    },
-    "/api/campaigns/{campaign_id}/recipients/{delivery_id}/retry": {
-      "post": {
-        "description": "Queues an operator retry for a ``failed`` or ``ambiguous`` delivery. Matches Studio retry semantics: the row returns to ``pending`` with operator attribution, and a stale action returns 409 ``delivery_conflict``. Never retries a campaign send as a whole.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          },
-          {
-            "in": "path",
-            "name": "delivery_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "campaign_status": "sending",
-                  "delivery_id": 12,
-                  "delivery_state": "pending",
-                  "email": "alice@example.com",
-                  "sent_count": 0
-                }
-              }
-            },
-            "description": "Recipient queued for retry."
-          },
-          "401": {
-            "description": "Missing or invalid staff token."
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "unknown_delivery",
-                  "error": "Delivery not found"
-                }
-              }
-            },
-            "description": "Campaign or delivery not found."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "delivery_conflict",
-                  "error": "Delivery is no longer retryable."
-                }
-              }
-            },
-            "description": "Delivery is no longer retryable."
-          }
-        },
-        "summary": "Retry a campaign recipient",
-        "tags": [
-          "Campaigns"
-        ]
-      }
-    },
     "/api/campaigns/{campaign_id}/relay-proof/confirm": {
       "post": {
         "description": "Queues the proof to the configured internal list only. The key must come from dry-run and the list must be unchanged.",
@@ -2746,7 +2610,7 @@
     },
     "/api/campaigns/{campaign_id}/send": {
       "post": {
-        "description": "Claims the draft (exactly-once, same path as Studio's send button and the scheduled dispatcher) and enqueues the fan-out. Any pending schedule is consumed. A campaign that is not a draft answers 409 ``campaign_not_draft`` with its current status; clients should require explicit operator confirmation (``asl campaigns send`` gates on ``--yes``).",
+        "description": "Claims the draft (exactly-once, same path as Studio's send button and the scheduled dispatcher) and submits it to Relay in one request; Relay owns sending. Any pending schedule is consumed. A campaign that is not a draft answers 409 ``campaign_not_draft`` with its current status; clients should require explicit operator confirmation (``asl campaigns send`` gates on ``--yes``).",
         "parameters": [
           {
             "in": "path",
@@ -2775,12 +2639,12 @@
                 "example": {
                   "campaign_id": 1,
                   "claimed": true,
-                  "status": "sending",
-                  "task_id": "purple-otter-delivers"
+                  "relay_campaign_key": "aishl-campaign-1",
+                  "status": "sending"
                 }
               }
             },
-            "description": "Campaign claimed and queued for sending."
+            "description": "Campaign claimed and submitted to Relay."
           },
           "401": {
             "description": "Missing or invalid staff token."
@@ -3074,81 +2938,6 @@
           }
         },
         "summary": "Delete accounts that ignored a verify-or-delete campaign",
-        "tags": [
-          "Campaigns"
-        ]
-      }
-    },
-    "/api/campaigns/{campaign_id}/waves": {
-      "get": {
-        "description": "Returns read-only per-wave and cumulative delivery feedback. Wave release remains a CSRF-protected Studio action.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "campaign_id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "blocking_reason": "observation_window",
-                  "campaign_id": 1,
-                  "can_release_next": false,
-                  "cumulative": {
-                    "bounce_rate": 1.0101,
-                    "bounces": 1,
-                    "complaint_rate": 0.0,
-                    "complaints": 0,
-                    "confirmed_sent": 99,
-                    "failed_ambiguous": 0,
-                    "skipped": 1
-                  },
-                  "thresholds": {
-                    "bounce_stop_percent": 2.0,
-                    "complaint_stop_count": 1,
-                    "observation_hours": 24
-                  },
-                  "waves": [
-                    {
-                      "bounce_rate": 1.0101,
-                      "bounces": 1,
-                      "complaint_rate": 0.0,
-                      "complaints": 0,
-                      "completed_at": null,
-                      "confirmed_sent": 99,
-                      "earliest_next_release": "2026-09-12T09:05:00+00:00",
-                      "failed_ambiguous": 0,
-                      "id": 1,
-                      "monitoring_started_at": "2026-09-11T09:05:00+00:00",
-                      "number": 1,
-                      "recipient_count": 100,
-                      "released_at": "2026-09-11T09:00:00+00:00",
-                      "skipped": 1,
-                      "state": "monitoring"
-                    }
-                  ]
-                }
-              }
-            },
-            "description": "Wave monitoring summary."
-          },
-          "401": {
-            "description": "Missing or invalid staff token."
-          },
-          "404": {
-            "description": "Campaign not found."
-          },
-          "409": {
-            "description": "Campaign is not monitored."
-          }
-        },
-        "summary": "Monitor re-permission campaign waves",
         "tags": [
           "Campaigns"
         ]

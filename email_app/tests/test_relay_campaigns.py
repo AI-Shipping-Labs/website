@@ -1,6 +1,5 @@
 """Unit and integration tests for Relay campaign and newsletter delivery (Path B)."""
 
-import json
 import re
 import uuid
 from io import StringIO
@@ -19,9 +18,6 @@ from email_app.services.relay_campaigns import (
     alert_relay_campaign_failure,
     preview_native_test_campaign,
     queue_native_test_campaign,
-)
-from email_app.tasks.send_campaign import (
-    send_campaign_batch,
 )
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
@@ -56,243 +52,11 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
             state=CampaignDelivery.State.PENDING,
         )
 
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-        PUBLIC_BASE_URL="https://aishippinglabs.test",
-    )
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_pending_campaign_queues_exact_snapshot_through_relay_campaign_api(self, mock_request):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.body = "large campaign body " * 5_000
-        self.campaign.save(update_fields=["relay_campaign_state", "body"])
-        responses = []
-        for status, document in [
-            (404, {}),
-            (200, {"recipient_list": {}}),
-            (200, {"recipient_list": {}}),
-            (200, {"contact": {}}),
-            (201, {"campaign": {"status": "draft"}}),
-            (200, {"recipient_count": 1, "skipped_count": 0}),
-            (200, {"queued": True, "recipient_count": 1, "skipped_count": 0,
-                   "campaign": {"status": "queued"}}),
-        ]:
-            response = MagicMock()
-            response.status_code = status
-            response.json.return_value = document
-            responses.append(response)
-        mock_request.side_effect = responses
 
-        result = send_campaign_batch(
-            self.campaign.pk,
-            delivery_ids=[self.delivery.pk],
-            send_delay=0,
-        )
 
-        self.assertEqual(result["relay_campaign_key"], f"aishl-campaign-{self.campaign.pk}")
-        self.assertTrue(result["relay_queued"])
-        self.assertEqual(mock_request.call_count, 7)
-        # Regression (campaign 18): list upsert makes unverified Relay contacts,
-        # and Relay skips those at preflight; locally verified members must be
-        # marked verified at Relay before the campaign is created.
-        verify_call = mock_request.call_args_list[3]
-        self.assertTrue(verify_call.args[1].endswith("/api/contacts"))
-        self.assertEqual(verify_call.kwargs["json"]["email"], self.user.email)
-        self.assertIs(verify_call.kwargs["json"]["verified"], True)
-        clear_call = mock_request.call_args_list[1]
-        self.assertTrue(clear_call.args[1].endswith("/members/reconcile"))
-        self.assertEqual(clear_call.kwargs["json"]["members"], [])
-        list_call = mock_request.call_args_list[2]
-        self.assertTrue(list_call.args[1].endswith("/members/bulk-upsert"))
-        member = list_call.kwargs["json"]["members"][0]
-        self.assertEqual(member["source_object_key"], f"website-user-{self.user.pk}")
-        self.assertTrue(member["subscribe_if_missing"])
-        recipient_context = member["metadata"]["relay_campaign_context"]
-        self.assertEqual(set(recipient_context), {"verify_email_url", "client_recipient_key"})
-        self.assertNotIn(self.campaign.body, json.dumps(list_call.kwargs["json"]))
-        self.assertLess(len(json.dumps(list_call.kwargs["json"])), 2_000)
-        campaign_call = mock_request.call_args_list[4]
-        self.assertEqual(campaign_call.kwargs["json"]["template_key"], "campaign-broadcast")
-        self.assertEqual(campaign_call.kwargs["json"]["recipient_list_key"], f"aishl-campaign-{self.campaign.pk}")
-        self.assertEqual(campaign_call.kwargs["json"]["allow_unverified"], False)
-        campaign_context = campaign_call.kwargs["json"]["context"]
-        self.assertEqual(campaign_context["body_markdown"], self.campaign.body)
-        self.assertEqual(json.dumps(campaign_call.kwargs["json"]).count(self.campaign.body), 1)
-        self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
-        self.assertEqual(self.delivery.email_log.ses_message_id, "")
 
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_contact_verification_failure_aborts_queue_and_alerts(self, mock_request, mock_alert):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-        responses = []
-        for status, document in [
-            (404, {}),
-            (200, {"recipient_list": {}}),
-            (200, {"recipient_list": {}}),
-            (500, {}),
-        ]:
-            response = MagicMock()
-            response.status_code = status
-            response.json.return_value = document
-            responses.append(response)
-        mock_request.side_effect = responses
 
-        with self.assertRaises(RelayCampaignApiError):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk], send_delay=0)
 
-        self.assertEqual(mock_request.call_count, 4)
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertEqual(mock_alert.call_count, 1)
-
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_retry_after_partial_local_persistence_confirms_recipient_key(self, mock_request):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-        existing = MagicMock()
-        existing.status_code = 200
-        existing.json.return_value = {
-            "campaign": {"status": "queued", "recipient_count": 1377, "skipped_count": 0},
-        }
-        recipients = MagicMock()
-        recipients.status_code = 200
-        recipients.json.return_value = {
-            "recipients": [{
-                "client_recipient_key": str(self.delivery.pk),
-                "status": "pending",
-            }],
-        }
-        mock_request.side_effect = [existing, recipients]
-
-        result = send_campaign_batch(
-            self.campaign.pk,
-            delivery_ids=[self.delivery.pk],
-            send_delay=0,
-        )
-
-        self.assertEqual(result["sent_count"], 1)
-        self.assertEqual(mock_request.call_count, 2)
-        self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
-
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_queued_retry_missing_recipient_key_fails_without_marking_sent(
-        self, mock_request, mock_alert,
-    ):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-        existing = MagicMock()
-        existing.status_code = 200
-        existing.json.return_value = {
-            "campaign": {"status": "queued", "recipient_count": 1377, "skipped_count": 0},
-        }
-        recipients = MagicMock()
-        recipients.status_code = 200
-        recipients.json.return_value = {"recipients": []}
-        mock_request.side_effect = [existing, recipients]
-
-        with self.assertRaisesRegex(RelayCampaignApiError, "could not confirm 1 local recipients"):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk], send_delay=0)
-
-        self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertEqual(mock_alert.call_count, 1)
-
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_relay_preflight_count_mismatch_fails_before_local_sent(
-        self, mock_request, mock_alert,
-    ):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-        responses = []
-        for status, document in [
-            (404, {}),
-            (200, {"recipient_list": {}}),
-            (200, {"recipient_list": {}}),
-            (200, {"contact": {}}),
-            (201, {"campaign": {"status": "draft"}}),
-            (200, {"recipient_count": 0, "skipped_count": 1}),
-        ]:
-            response = MagicMock()
-            response.status_code = status
-            response.json.return_value = document
-            responses.append(response)
-        mock_request.side_effect = responses
-
-        with self.assertRaisesRegex(RelayCampaignApiError, "preflight recipient count mismatch"):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk], send_delay=0)
-
-        self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertIn("preflight recipient count mismatch", self.campaign.relay_campaign_error)
-        self.assertEqual(mock_alert.call_count, 1)
-
-    @override_settings(
-        RELAY_BASE_URL="https://relay.test.datatalks.club",
-        RELAY_API_KEY="test-relay-key-123",
-    )
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_cancelled_relay_campaign_fails_without_changing_delivery(
-        self, mock_request, mock_alert,
-    ):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-        responses = []
-        for terminal_status in ("cancelled", "failed"):
-            response = MagicMock()
-            response.status_code = 200
-            response.json.return_value = {"campaign": {"status": terminal_status}}
-            responses.append(response)
-        mock_request.side_effect = responses
-
-        for terminal_status in ("cancelled", "failed"):
-            self.campaign.relay_campaign_state = "pending"
-            self.campaign.save(update_fields=["relay_campaign_state"])
-            with self.subTest(status=terminal_status):
-                with self.assertRaisesRegex(
-                    RelayCampaignApiError,
-                    f"terminal state '{terminal_status}'",
-                ):
-                    send_campaign_batch(
-                        self.campaign.pk,
-                        delivery_ids=[self.delivery.pk],
-                        send_delay=0,
-                    )
-            self.delivery.refresh_from_db()
-            self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
-            self.campaign.refresh_from_db()
-            self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertEqual(mock_alert.call_count, 2)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",
@@ -466,82 +230,9 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
 
         self.assertEqual(str(original), "Relay request timed out")
 
-    @patch(
-        "email_app.services.relay_campaign_alerts.send_mail",
-        side_effect=RuntimeError("alert unavailable"),
-    )
-    @patch(
-        "email_app.tasks.send_campaign.queue_native_campaign",
-        side_effect=RelayCampaignApiError("Relay request timed out"),
-    )
-    def test_queue_failure_propagates_when_alert_delivery_fails(
-        self, _mock_queue, _mock_send_mail,
-    ):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
 
-        with self.assertRaisesRegex(RelayCampaignApiError, "Relay request timed out"):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk])
 
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertIn("Relay request timed out", self.campaign.relay_campaign_error)
 
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch(
-        "email_app.tasks.send_campaign.queue_native_campaign",
-        side_effect=RelayCampaignApiError("Relay request timed out after 30s"),
-    )
-    def test_native_queue_failure_marks_campaign_needs_attention_and_alerts(
-        self, mock_queue, mock_alert,
-    ):
-        self.campaign.relay_campaign_state = "pending"
-        self.campaign.save(update_fields=["relay_campaign_state"])
-
-        with self.assertRaisesRegex(RelayCampaignApiError, "timed out after 30s"):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk])
-
-        self.campaign.refresh_from_db()
-        self.delivery.refresh_from_db()
-        self.assertEqual(self.campaign.status, "needs_attention")
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
-        self.assertIn("timed out after 30s", self.campaign.relay_campaign_error)
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.PENDING)
-        self.assertEqual(mock_queue.call_count, 1)
-        self.assertEqual(mock_alert.call_count, 1)
-
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    def test_first_stale_quarantined_task_persists_error_and_alerts_once(self, mock_alert):
-        campaign = EmailCampaign.objects.create(
-            subject="Legacy campaign",
-            body="Old campaign body",
-            status="needs_attention",
-            audience_snapshotted_at=timezone.now(),
-            relay_campaign_state="",
-        )
-
-        first = send_campaign_batch(campaign.pk, user_ids=[self.user.pk])
-        second = send_campaign_batch(campaign.pk, user_ids=[self.user.pk])
-
-        self.assertTrue(first["legacy_quarantined"])
-        self.assertTrue(second["legacy_quarantined"])
-        campaign.refresh_from_db()
-        self.assertIn("pre-Relay send state cannot be reconstructed", campaign.relay_campaign_error)
-        self.assertEqual(campaign.status, "needs_attention")
-        self.assertEqual(mock_alert.call_count, 1)
-
-    @override_settings(TESTING=False)
-    @patch("email_app.tasks.send_campaign.alert_relay_campaign_failure")
-    @patch("email_app.services.relay_campaigns.requests.Session.request")
-    def test_production_campaign_without_native_state_fails_without_transactional_fallback(
-        self, mock_request, _mock_alert,
-    ):
-        with self.assertRaisesRegex(RelayCampaignApiError, "refusing transactional fallback"):
-            send_campaign_batch(self.campaign.pk, delivery_ids=[self.delivery.pk])
-
-        mock_request.assert_not_called()
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.relay_campaign_state, "failed")
 
 
 

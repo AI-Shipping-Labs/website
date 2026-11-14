@@ -17,9 +17,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
+from email_app.models import EmailCampaign, EmailLog
 from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, create_user_with_membership, set_membership
 
@@ -510,328 +508,8 @@ class CampaignFormTagPersistTest(TierSetupMixin, TestCase):
         self.assertGreaterEqual(content.count('—'), 2)
 
 
-@tag('core')
-class SendCampaignFanOutTest(TierSetupMixin, TestCase):
-    """Test the snapshot and single Relay queue task for a campaign send."""
-
-    def setUp(self):
-        # Create eligible users
-        self.user1 = create_user_with_membership(
-            email='user1@test.com', tier=self.free_tier,
-            email_verified=True, unsubscribed=False,
-        )
-        self.user2 = create_user_with_membership(
-            email='user2@test.com', tier=self.basic_tier,
-            email_verified=True, unsubscribed=False,
-        )
-        # Ineligible user (unsubscribed)
-        self.user3 = create_user_with_membership(
-            email='user3@test.com', tier=self.free_tier,
-            email_verified=True, unsubscribed=True,
-        )
-        self.inactive_user = create_user_with_membership(
-            email='inactive@test.com', tier=self.free_tier,
-            email_verified=True, unsubscribed=False, is_active=False,
-        )
-
-        self.campaign = EmailCampaign.objects.create(
-            subject='Test Campaign',
-            body='# Hello\n\nThis is a test.',
-            target_min_level=0,
-            status='draft',
-        )
-
-    def _batch_schedules(self):
-        """Return the send_campaign_batch Schedule rows ordered by next_run."""
-        from django_q.models import Schedule
-        return list(
-            Schedule.objects.filter(
-                func='email_app.tasks.send_campaign.send_campaign_batch',
-            ).order_by('next_run')
-        )
-
-    @staticmethod
-    def _kwargs(sched):
-        """Decode a Schedule's kwargs (stored as a Python-literal string)."""
-        import ast
-        return ast.literal_eval(sched.kwargs)
-
-    def test_send_campaign_schedules_one_relay_batch_with_all_recipients(self):
-        """The local app queues the full frozen audience as one Relay campaign."""
-        for i in range(5):
-            create_user_with_membership(
-                email=f'extra{i}@test.com', tier=self.free_tier,
-                email_verified=True, unsubscribed=False,
-            )
-
-        from email_app.tasks.send_campaign import send_campaign
-        result = send_campaign(self.campaign.pk, batch_size=3)
-
-        # Relay controls bulk throughput; local batch_size does not split the audience.
-        self.assertEqual(result['total'], 7)
-        self.assertEqual(result['batch_count'], 1)
-        self.assertEqual(result['status'], 'sending')
-
-        schedules = self._batch_schedules()
-        self.assertEqual(len(schedules), 1)
-
-        # The one-off task contains every persisted delivery, never raw user ids.
-        from django_q.models import Schedule
-        sched = schedules[0]
-        kwargs = self._kwargs(sched)
-        self.assertEqual(sched.schedule_type, Schedule.ONCE)
-        self.assertEqual(sched.repeats, 1)
-        self.assertEqual(kwargs['campaign_id'], self.campaign.pk)
-        self.assertNotIn('user_ids', kwargs)
-        self.assertEqual(len(kwargs['delivery_ids']), 7)
-        self.assertEqual(
-            set(kwargs['delivery_ids']),
-            set(self.campaign.deliveries.values_list('pk', flat=True)),
-        )
-
-    def test_send_campaign_ignores_local_pacing_settings(self):
-        """Legacy pacing settings cannot delay or split the Relay bulk queue."""
-        for i in range(5):
-            create_user_with_membership(
-                email=f'extra{i}@test.com', tier=self.free_tier,
-                email_verified=True, unsubscribed=False,
-            )
-
-        before = timezone.now()
-        from email_app.tasks.send_campaign import send_campaign
-        with override_settings(
-            CAMPAIGN_BATCH_INTERVAL_SECONDS=600,
-            EMAIL_BATCH_SIZE=1,
-        ):
-            result = send_campaign(self.campaign.pk, batch_size=2)
-        after = timezone.now()
-
-        schedules = self._batch_schedules()
-        self.assertEqual(result['batch_count'], 1)
-        self.assertEqual(len(schedules), 1)
-        scheduled = schedules[0]
-        first_run = scheduled.next_run
-        self.assertGreaterEqual(first_run, before)
-        self.assertLessEqual(first_run, after)
-        self.assertEqual(len(self._kwargs(scheduled)['delivery_ids']), 7)
-
-    def test_send_campaign_batch_schedule_name_is_descriptive(self):
-        """The queued Relay campaign task has a descriptive task name."""
-        from email_app.tasks.send_campaign import send_campaign
-        send_campaign(self.campaign.pk, batch_size=1)
-
-        schedules = self._batch_schedules()
-        self.assertEqual(len(schedules), 1)
-        sched = schedules[0]
-        self.assertIn('Queue Relay campaign', sched.name)
-        self.assertIn('campaign fan-out', sched.name)
-        self.assertEqual(self._kwargs(sched)['q_options']['task_name'], sched.name)
-
-    def test_send_campaign_transitions_to_sending(self):
-        """Fan-out transitions campaign from draft -> sending."""
-        self.assertEqual(self.campaign.status, 'draft')
-
-        from email_app.tasks.send_campaign import send_campaign
-        send_campaign(self.campaign.pk)
-
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.status, 'sending')
-        # sent_at is not set yet — only set when last batch finishes
-        self.assertIsNone(self.campaign.sent_at)
-
-    def test_send_campaign_excludes_ineligible_recipients_from_snapshot(self):
-        """Unsubscribed and inactive users never enter the durable snapshot."""
-        from email_app.tasks.send_campaign import send_campaign
-
-        expected_count = self.campaign.get_recipient_count()
-        result = send_campaign(self.campaign.pk)
-
-        delivery_users = set(
-            self.campaign.deliveries.values_list('recipient_user_pk', flat=True)
-        )
-        self.assertIn(self.user1.pk, delivery_users)
-        self.assertIn(self.user2.pk, delivery_users)
-        # Unsubscribed user MUST NOT be chunked.
-        self.assertNotIn(self.user3.pk, delivery_users)
-        self.assertNotIn(self.inactive_user.pk, delivery_users)
-        self.assertEqual(result['total'], expected_count)
-        self.assertEqual(self.campaign.deliveries.count(), expected_count)
-        schedule_kwargs = self._kwargs(self._batch_schedules()[0])
-        self.assertEqual(
-            set(schedule_kwargs['delivery_ids']),
-            set(self.campaign.deliveries.values_list('pk', flat=True)),
-        )
-        self.assertFalse(
-            self.campaign.deliveries.filter(
-                recipient_user_pk=self.inactive_user.pk,
-            ).exists(),
-        )
-
-    def test_send_campaign_no_recipients_marks_sent(self):
-        """A campaign with zero eligible recipients goes straight to sent."""
-        # Campaign targets Premium only — no Premium users exist.
-        empty_campaign = EmailCampaign.objects.create(
-            subject='Premium Only',
-            body='Hi',
-            target_min_level=30,
-            status='draft',
-        )
-
-        from email_app.tasks.send_campaign import send_campaign
-        result = send_campaign(empty_campaign.pk)
-
-        self.assertEqual(result['total'], 0)
-        self.assertEqual(result['batch_count'], 0)
-        self.assertEqual(result['status'], 'sent')
-
-        empty_campaign.refresh_from_db()
-        self.assertEqual(empty_campaign.status, 'sent')
-        self.assertIsNotNone(empty_campaign.sent_at)
-        # No batch tasks scheduled.
-        self.assertEqual(self._batch_schedules(), [])
-
-    def test_send_campaign_not_found_raises_error(self):
-        """Sending a non-existent campaign raises ValueError."""
-        from email_app.tasks.send_campaign import send_campaign
-
-        with self.assertRaises(ValueError) as ctx:
-            send_campaign(99999)
-        self.assertIn('not found', str(ctx.exception))
-
-    def test_send_campaign_not_draft_raises_error(self):
-        """Sending a campaign that is not draft raises ValueError."""
-        self.campaign.status = 'sent'
-        self.campaign.save()
-
-        from email_app.tasks.send_campaign import send_campaign
-
-        with self.assertRaises(ValueError) as ctx:
-            send_campaign(self.campaign.pk)
-        self.assertIn("status 'sent'", str(ctx.exception))
-
-    def test_send_campaign_uses_one_native_batch_with_db_batch_setting(self):
-        """The legacy batch-size setting cannot split a native Relay campaign."""
-        IntegrationSetting.objects.create(
-            key='EMAIL_BATCH_SIZE', value='1', group='ses',
-        )
-        clear_config_cache()
-        self.addCleanup(clear_config_cache)
-
-        from email_app.tasks.send_campaign import send_campaign
-        result = send_campaign(self.campaign.pk)
-
-        self.assertEqual(result['batch_count'], 1)
-        schedules = self._batch_schedules()
-        self.assertEqual(len(schedules), 1)
-        self.assertEqual(len(self._kwargs(schedules[0])['delivery_ids']), 2)
-
-    def test_invalid_runtime_batch_sizes_fall_back_to_200(self):
-        from email_app.tasks.send_campaign import _get_batch_size
-
-        for value in ('0', '-2', 'not-a-number'):
-            with self.subTest(value=value):
-                IntegrationSetting.objects.update_or_create(
-                    key='EMAIL_BATCH_SIZE', defaults={
-                        'value': value, 'group': 'ses',
-                    },
-                )
-                clear_config_cache()
-                with self.assertLogs(
-                    'email_app.tasks.send_campaign', 'WARNING',
-                ):
-                    self.assertEqual(_get_batch_size(), 200)
-        self.addCleanup(clear_config_cache)
 
 
-@tag('core')
-class SendCampaignBatchTest(TierSetupMixin, TestCase):
-    """Test the chunked send_campaign_batch task."""
-
-    def setUp(self):
-        self.user1 = create_user_with_membership(
-            email='user1@test.com', tier=self.free_tier,
-            email_verified=True, unsubscribed=False,
-        )
-        self.user2 = create_user_with_membership(
-            email='user2@test.com', tier=self.basic_tier,
-            email_verified=True, unsubscribed=False,
-        )
-        self.user3 = create_user_with_membership(
-            email='user3@test.com', tier=self.free_tier,
-            email_verified=True, unsubscribed=True,
-        )
-        self.campaign = EmailCampaign.objects.create(
-            subject='Test Campaign',
-            body='# Hello\n\nThis is a test.',
-            target_min_level=0,
-            status='sending',  # Already in sending state when batch runs
-        )
-
-
-
-
-
-
-
-
-    def test_batch_not_found_raises_error(self):
-        """Batch on a missing campaign raises ValueError."""
-        from email_app.tasks.send_campaign import send_campaign_batch
-
-        with self.assertRaises(ValueError) as ctx:
-            send_campaign_batch(99999, user_ids=[1], send_delay=0)
-        self.assertIn('not found', str(ctx.exception))
-
-
-
-
-
-
-
-
-    def test_stale_batch_instances_converge_from_delivery_ledger(self):
-        from email_app.tasks.send_campaign import _refresh_campaign_status
-
-        worker_one = EmailCampaign.objects.get(pk=self.campaign.pk)
-        worker_two = EmailCampaign.objects.get(pk=self.campaign.pk)
-        log_one = EmailLog.objects.create(
-            campaign=self.campaign,
-            user=self.user1,
-            email_type='campaign',
-            ses_message_id='one',
-        )
-        CampaignDelivery.objects.create(
-            campaign=self.campaign,
-            user=self.user1,
-            recipient_user_pk=self.user1.pk,
-            recipient_email=self.user1.email,
-            state=CampaignDelivery.State.SENT,
-            attempt_count=1,
-            email_log=log_one,
-            ses_message_id='one',
-        )
-        _refresh_campaign_status(worker_one)
-        log_two = EmailLog.objects.create(
-            campaign=self.campaign,
-            user=self.user2,
-            email_type='campaign',
-            ses_message_id='two',
-        )
-        CampaignDelivery.objects.create(
-            campaign=self.campaign,
-            user=self.user2,
-            recipient_user_pk=self.user2.pk,
-            recipient_email=self.user2.email,
-            state=CampaignDelivery.State.SENT,
-            attempt_count=1,
-            email_log=log_two,
-            ses_message_id='two',
-        )
-        _refresh_campaign_status(worker_two)
-
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.campaign.sent_count, 2)
-        self.assertEqual(self.campaign.status, 'sent')
 
 
 @tag('core')
@@ -877,77 +555,6 @@ class EmailLogUniquenessTest(TierSetupMixin, TestCase):
         self.assertEqual(EmailLog.objects.filter(user=user).count(), 2)
 
 
-class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
-    """End-to-end: snapshot + one Relay native campaign queue task."""
-
-    @patch('email_app.tasks.send_campaign.queue_native_campaign')
-    def test_full_pipeline_queues_one_native_campaign_and_completes(self, mock_queue):
-        """All snapshotted recipients reach Relay in one native campaign call."""
-        users = [
-            create_user_with_membership(
-                email=f'eu{i}@test.com', tier=self.free_tier,
-                email_verified=True, unsubscribed=False,
-            )
-            for i in range(7)
-        ]
-        campaign = EmailCampaign.objects.create(
-            subject='Pipeline', body='Hi', target_min_level=0,
-            status='draft',
-        )
-
-        from email_app.tasks.send_campaign import (
-            send_campaign,
-            send_campaign_batch,
-        )
-        send_campaign(campaign.pk, batch_size=3)
-
-        # The fan-out schedules one immediate task for the complete snapshot.
-        import ast
-
-        from django_q.models import Schedule
-        chunks_to_run = [
-            ast.literal_eval(sched.kwargs)
-            for sched in Schedule.objects.filter(
-                func='email_app.tasks.send_campaign.send_campaign_batch',
-            ).order_by('next_run')
-        ]
-        self.assertEqual(len(chunks_to_run), 1)
-
-        delivery_ids = chunks_to_run[0]['delivery_ids']
-
-        queued_delivery_ids = []
-
-        def queue_campaign(_campaign, deliveries, *, external_key):
-            queued_delivery_ids.extend(deliveries.values_list('pk', flat=True))
-            return {
-                'queued': True,
-                'included_delivery_ids': delivery_ids,
-                'recipient_count': len(delivery_ids),
-                'skipped_count': 0,
-            }
-
-        mock_queue.side_effect = queue_campaign
-
-        send_campaign_batch(
-            chunks_to_run[0]['campaign_id'],
-            delivery_ids=delivery_ids,
-        )
-
-        self.assertEqual(mock_queue.call_count, 1)
-        self.assertEqual(set(queued_delivery_ids), set(delivery_ids))
-
-        campaign.refresh_from_db()
-        self.assertEqual(campaign.status, 'sent')
-        self.assertEqual(campaign.sent_count, 7)
-        self.assertIsNotNone(campaign.sent_at)
-        # Every user has exactly one EmailLog.
-        for user in users:
-            self.assertEqual(
-                EmailLog.objects.filter(
-                    campaign=campaign, user=user,
-                ).count(),
-                1,
-            )
 
 
 class CampaignAdminTest(TierSetupMixin, TestCase):
@@ -987,31 +594,6 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         self.assertContains(list_response, self.campaign.subject)
         self.assertContains(change_response, 'name="subject"')
 
-@tag('core')
-class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
-    """Issue #450: per-recipient verify-email footer CTA on campaigns.
-
-    The footer renders ABOVE the unsubscribe block when the recipient
-    is unverified at SEND time. ``send_campaign_batch`` already
-    re-fetches each user from the DB inside its loop, so a recipient
-    who verifies between enqueue and send sees no CTA — same model as
-    the existing ``unsubscribed`` handling.
-
-    Note: ``EmailCampaign.get_eligible_recipients`` excludes unverified
-    users, so in normal operator flow no campaign reaches an unverified
-    recipient. These tests drive ``send_campaign_batch`` directly with
-    explicit ``user_ids`` to exercise the footer hook itself, which
-    must hold even when callers bypass the eligibility filter (e.g. a
-    future relaxation of the include rule, or an internal preview send).
-    """
-
-    def setUp(self):
-        self.campaign = EmailCampaign.objects.create(
-            subject='Hello there',
-            body='# Body\n\nbody copy',
-            target_min_level=0,
-            status='sending',
-        )
 
 
 
@@ -1024,7 +606,7 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
     Moved from playwright_tests/test_email_campaigns.py Scenario 8.
     """
 
-    @patch('email_app.tasks.send_campaign.queue_native_campaign')
+    @patch('email_app.services.campaign_submit.submit_native_campaign')
     def test_campaign_send_respects_tier_verification_and_subscription(
         self, mock_queue,
     ):
@@ -1076,37 +658,15 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
             status='draft',
         )
 
-        # Drive the fan-out + native Relay queue task inline.
-        import ast
-
-        from django_q.models import Schedule
-
-        from email_app.tasks.send_campaign import (
-            send_campaign,
-            send_campaign_batch,
-        )
-        send_campaign(campaign.pk)
-
-        captured = [
-            ast.literal_eval(sched.kwargs)
-            for sched in Schedule.objects.filter(
-                func='email_app.tasks.send_campaign.send_campaign_batch',
-            ).order_by('next_run')
-        ]
-        self.assertEqual(len(captured), 1)
-        delivery_ids = captured[0]['delivery_ids']
-        mock_queue.return_value = {
-            'queued': True,
-            'included_delivery_ids': delivery_ids,
-            'recipient_count': len(delivery_ids),
-            'skipped_count': 0,
-        }
-        send_campaign_batch(captured[0]['campaign_id'], delivery_ids=delivery_ids)
+        from email_app.services.campaign_dispatch import claim_and_submit_campaign
+        mock_queue.return_value = {'queued': True}
+        claim_and_submit_campaign(campaign.pk, source='test')
         self.assertEqual(mock_queue.call_count, 1)
+        recipients = mock_queue.call_args.kwargs['recipients']
+        self.assertEqual(len(recipients), 3)
 
         campaign.refresh_from_db()
-        self.assertEqual(campaign.sent_count, 3)
-        self.assertEqual(campaign.status, 'sent')
+        self.assertEqual(campaign.status, 'sending')
 
         logs = EmailLog.objects.filter(campaign=campaign)
         self.assertEqual(logs.count(), 3)

@@ -55,7 +55,6 @@ class EntrypointRegistersSchedulesTest(TestCase):
         names = set(Schedule.objects.values_list('name', flat=True))
         expected = {
             'health-check',
-            'campaign-delivery-recovery',
             'campaign-scheduled-dispatch',
             'clear-expired-sessions',
             'cleanup-webhook-logs',
@@ -223,7 +222,7 @@ class EntrypointScheduleFailureIsSwallowedTest(TestCase):
         self.assertEqual(Schedule.objects.count(), 1)
         state = caches["django_q"].get(SCHEDULE_RECONCILIATION_CACHE_KEY)
         self.assertEqual(state["status"], "degraded")
-        self.assertIn("campaign-delivery-recovery", state["missing_names"])
+        self.assertIn("relay-campaign-watchdog", state["missing_names"])
 
     def test_exception_does_not_propagate(self):
         with mock.patch(

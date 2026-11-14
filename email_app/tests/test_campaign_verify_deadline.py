@@ -19,7 +19,7 @@ from email_app.services.campaign_repermission import (
     monitored_message_parts,
     verify_deadline_url_for_user,
 )
-from email_app.tasks.send_campaign import send_campaign
+from email_app.services.campaign_submit import build_campaign_recipients
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
@@ -122,7 +122,7 @@ class VerifyDeadlineMessageTest(TierSetupMixin, TestCase):
         self.assertEqual(email_type, "campaign_repermission")
         self.assertIn("verify-and-subscribe", body)
 
-    def test_deadline_campaign_sends_everyone_as_one_released_wave(self):
+    def test_deadline_campaign_submits_everyone_in_one_recipient_list(self):
         for index in range(130):
             create_user_with_membership(
                 email=f"bulk-{index}@example.com",
@@ -131,16 +131,13 @@ class VerifyDeadlineMessageTest(TierSetupMixin, TestCase):
             )
         campaign = self.make_campaign(status="sending")
 
-        result = send_campaign(campaign.pk)
+        recipients, users = build_campaign_recipients(campaign)
 
-        waves = list(campaign.waves.all())
-        self.assertEqual(result["wave_count"], 1)
-        self.assertEqual(len(waves), 1)
-        self.assertIsNotNone(waves[0].released_at)
-        self.assertEqual(
-            waves[0].deliveries.count(), campaign.deliveries.count(),
-        )
-        self.assertGreater(campaign.deliveries.count(), 100)
+        self.assertGreater(len(recipients), 100)
+        self.assertEqual(len(recipients), len(users))
+        for recipient in recipients:
+            context = recipient["metadata"]["relay_campaign_context"]
+            self.assertIn("/api/verify-email?token=", context["verify_email_url"])
 
 
 @tag("core")

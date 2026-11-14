@@ -7,7 +7,7 @@ here — every other behaviour is covered by Django TestCases in
 
 Scenarios:
 1. Staff author aborts a Send (confirm Cancel) — no navigation, still draft.
-2. Staff author confirms a Send (confirm OK)  — navigates to /studio/worker/.
+2. Staff author confirms a Send (confirm OK)  — stays on the campaign page; Relay owns sending.
 3. Staff author aborts a Delete (confirm Cancel) — no navigation, record kept.
 4. Staff author confirms a Delete (confirm OK)   — lands on /studio/campaigns/,
    campaign no longer listed.
@@ -30,7 +30,6 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
-from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -159,7 +158,7 @@ class TestStaffAbortsSend:
 
 @pytest.mark.django_db(transaction=True)
 class TestStaffConfirmsSend:
-    """Clicking OK on the Send confirm dialog queues the send."""
+    """Clicking OK on the Send confirm dialog submits the campaign to Relay."""
 
     def test_confirm_send_navigates_to_worker(self, django_server, browser):
         _ensure_tiers()
@@ -186,20 +185,21 @@ class TestStaffConfirmsSend:
         detail_url = f"{django_server}/studio/campaigns/{campaign.pk}/"
         page.goto(detail_url, wait_until="domcontentloaded")
 
-        # Intercept async_task so the E2E test does not actually enqueue
-        # work into the real django-q cluster. The view just needs the
-        # call to return a task id.
+        # Stub the single Relay submit so the E2E test never calls Relay.
         with mock.patch(
-            "jobs.tasks.async_task", return_value="task-e2e",
-        ) as mock_async_task:
+            "email_app.services.campaign_submit.submit_native_campaign",
+            return_value={"queued": True},
+        ) as mock_submit:
             page.locator('[data-testid="send-campaign-btn"]').click()
             page.wait_for_load_state("domcontentloaded")
 
-        # After the send flow, the worker page is the destination.
-        assert "/studio/worker/" in page.url
+        # Relay owns sending: no worker page, no queue line.
+        assert f"/studio/campaigns/{campaign.pk}/" in page.url
+        assert "/studio/worker/" not in page.url
+        assert "Queue:" not in page.content()
         campaign.refresh_from_db()
         assert campaign.status == "sending"
-        assert mock_async_task.call_count == 1
+        assert mock_submit.call_count == 1
 
 
 # ---------------------------------------------------------------
@@ -284,407 +284,4 @@ class TestStaffConfirmsDelete:
         # And the record is really gone.
         from email_app.models import EmailCampaign
         assert not EmailCampaign.objects.filter(pk=campaign.pk).exists()
-        connection.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffReconcilesAmbiguousDelivery:
-    @pytest.mark.core
-    @browser_journey
-    def test_duplicate_risk_confirmations_gate_retry_and_assume_sent(
-        self,
-        django_server,
-        browser,
-    ):
-        _ensure_tiers()
-        _clear_campaigns()
-        _create_staff_user("admin@test.com")
-        campaign, delivery = _create_ambiguous_delivery("Retry Ambiguous")
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        recipients_url = (
-            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1"
-        )
-        page.goto(recipients_url, wait_until="domcontentloaded")
-
-        dismissed = []
-
-        def dismiss_retry(dialog):
-            dismissed.append(dialog.message)
-            dialog.dismiss()
-
-        page.once("dialog", dismiss_retry)
-        page.locator('[data-testid="campaign-delivery-retry"]').click()
-        assert dismissed == [
-            "Relay may already have accepted this email. Retrying can send a duplicate. Retry anyway?"
-        ]
-        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
-            "Ambiguous",
-            exact=True,
-        ).is_visible()
-
-        accepted = []
-
-        def accept_retry(dialog):
-            accepted.append(dialog.message)
-            dialog.accept()
-
-        page.once("dialog", accept_retry)
-        page.locator('[data-testid="campaign-delivery-retry"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        assert accepted == dismissed
-        assert page.get_by_text(
-            f"Queued retry for {delivery.recipient_email}.",
-            exact=True,
-        ).is_visible()
-        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
-            "Pending",
-            exact=True,
-        ).is_visible()
-
-        assume_campaign, assume_delivery = _create_ambiguous_delivery(
-            "Assume Ambiguous",
-        )
-        page.goto(
-            f"{django_server}/studio/campaigns/{assume_campaign.pk}/recipients?attention=1",
-            wait_until="domcontentloaded",
-        )
-        assume_messages = []
-
-        def accept_assume(dialog):
-            assume_messages.append(dialog.message)
-            dialog.accept()
-
-        page.once("dialog", accept_assume)
-        page.locator('[data-testid="campaign-delivery-assume"]').click()
-        page.wait_for_load_state("domcontentloaded")
-        assert assume_messages == [
-            "Mark this recipient as assumed delivered without sending again?"
-        ]
-        assert page.get_by_text(
-            f"Marked {assume_delivery.recipient_email} as assumed sent without resending.",
-            exact=True,
-        ).is_visible()
-        assert page.get_by_test_id("campaign-delivery-state").get_by_text(
-            "Assumed sent",
-            exact=True,
-        ).is_visible()
-        connection.close()
-
-
-def _create_snapshotted_delivery(email, *, state, subject, unsubscribed=False):
-    from django.utils import timezone
-
-    from email_app.models import CampaignDelivery, EmailCampaign
-
-    recipient = _create_user(
-        email,
-        tier_slug="free",
-        email_verified=True,
-        unsubscribed=unsubscribed,
-        is_staff=False,
-    )
-    campaign = EmailCampaign.objects.create(
-        subject=subject,
-        body="Body content",
-        status="needs_attention",
-        audience_snapshotted_at=timezone.now(),
-    )
-    delivery = CampaignDelivery.objects.create(
-        campaign=campaign,
-        user=recipient,
-        recipient_user_pk=recipient.pk,
-        recipient_email=recipient.email,
-        state=state,
-        attempt_count=1,
-        last_error="Needs operator review.",
-        completed_at=timezone.now(),
-    )
-    connection.close()
-    return campaign, delivery, recipient
-
-
-def _reject_campaign_batch(campaign):
-    from email_app.models import CampaignDelivery
-    from email_app.services.relay_campaigns import RelayCampaignApiError
-    from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
-
-    send_campaign(campaign.pk)
-    delivery_ids = list(
-        CampaignDelivery.objects.filter(campaign=campaign)
-        .values_list("pk", flat=True)
-    )
-    with mock.patch(
-        "email_app.tasks.send_campaign.queue_native_campaign",
-        side_effect=RelayCampaignApiError("Relay request timed out after 30s"),
-    ), mock.patch("email_app.tasks.send_campaign.alert_relay_campaign_failure"):
-        with pytest.raises(RelayCampaignApiError, match="timed out after 30s"):
-            send_campaign_batch(campaign.pk, delivery_ids, send_delay=0)
-    connection.close()
-
-
-def _assert_relay_queue_failure_ui(page, django_server, campaign):
-    page.goto(
-        f"{django_server}/studio/campaigns/{campaign.pk}/",
-        wait_until="domcontentloaded",
-    )
-    assert page.get_by_text("Needs attention", exact=True).is_visible()
-    assert page.get_by_text("Sending", exact=True).count() == 0
-    error = page.get_by_test_id("relay-campaign-error")
-    assert error.is_visible()
-    assert "Relay request timed out after 30s" in error.inner_text()
-    counts = page.get_by_test_id("campaign-delivery-counts")
-    assert counts.get_by_text("Pending: 1", exact=True).is_visible()
-    assert counts.get_by_text("Failed: 0", exact=True).is_visible()
-    assert page.get_by_test_id("campaign-attention-link").count() == 0
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffSeesNeedsAttentionAfterRelayQueueFailure:
-    @pytest.mark.core
-    @browser_journey
-    def test_relay_queue_timeout_leaves_needs_attention_not_sending(
-        self,
-        django_server,
-        browser,
-    ):
-        _ensure_tiers()
-        _clear_campaigns()
-        staff = _create_staff_user("admin@test.com")
-        staff.unsubscribed = True
-        staff.save(update_fields=["unsubscribed"])
-        _seed_one_eligible_recipient("hard-fail@test.com")
-        campaign = _create_campaign("Hard Rejection", status="draft")
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        page.on("dialog", lambda dialog: dialog.accept())
-
-        with mock.patch("jobs.tasks.async_task", return_value="task-e2e"):
-            page.goto(
-                f"{django_server}/studio/campaigns/{campaign.pk}/",
-                wait_until="domcontentloaded",
-            )
-            page.locator('[data-testid="send-campaign-btn"]').click()
-            page.wait_for_load_state("domcontentloaded")
-
-        _reject_campaign_batch(campaign)
-        with mock.patch("studio.views.campaigns.refresh_campaign_relay_stats_loud"):
-            _assert_relay_queue_failure_ui(page, django_server, campaign)
-        context.close()
-
-
-def _queue_failed_retry(page, recipients_url):
-    with mock.patch("jobs.tasks.async_task", return_value="retry-task"):
-        page.goto(recipients_url, wait_until="domcontentloaded")
-        page.locator('[data-testid="campaign-delivery-retry"]').click()
-        page.wait_for_load_state("domcontentloaded")
-    assert page.get_by_text(
-        "Queued retry for retry-me@test.com.", exact=True,
-    ).is_visible()
-
-
-def _complete_failed_retry(campaign, delivery):
-    from email_app.models import EmailCampaign
-    from email_app.tasks.send_campaign import send_campaign_batch
-
-    EmailCampaign.objects.filter(pk=campaign.pk).update(
-        status="sending", relay_campaign_state="pending",
-    )
-    with mock.patch(
-        "email_app.tasks.send_campaign.queue_native_campaign",
-        return_value={
-            "included_delivery_ids": [delivery.pk],
-            "recipient_count": 1,
-            "skipped_count": 0,
-            "queued": True,
-        },
-    ):
-        send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-    connection.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffRetriesFailedRecipient:
-    @pytest.mark.core
-    @browser_journey
-    def test_retry_failed_recipient_can_finish_the_campaign(
-        self, django_server, browser,
-    ):
-        from email_app.models import CampaignDelivery
-        _ensure_tiers()
-        _clear_campaigns()
-        _create_staff_user("admin@test.com")
-        campaign, delivery, _recipient = _create_snapshotted_delivery(
-            "retry-me@test.com",
-            state=CampaignDelivery.State.FAILED,
-            subject="Retry Failed",
-        )
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        recipients_url = (
-            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1"
-        )
-        _queue_failed_retry(page, recipients_url)
-        _complete_failed_retry(campaign, delivery)
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_text("Sent", exact=True).is_visible()
-        assert page.get_by_test_id("campaign-delivery-counts").get_by_text(
-            "Failed: 0",
-            exact=True,
-        ).is_visible()
-        connection.close()
-        context.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffAssumesAmbiguousWithoutResend:
-    @pytest.mark.core
-    @browser_journey
-    def test_assume_delivered_does_not_create_email_log(
-        self,
-        django_server,
-        browser,
-    ):
-        from email_app.models import CampaignDelivery, EmailLog
-
-        _ensure_tiers()
-        _clear_campaigns()
-        _create_staff_user("admin@test.com")
-        campaign, delivery, _recipient = _create_snapshotted_delivery(
-            "assume-me@test.com",
-            state=CampaignDelivery.State.AMBIGUOUS,
-            subject="Assume Ambiguous 1506",
-        )
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        page.on("dialog", lambda dialog: dialog.accept())
-
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/recipients?attention=1",
-            wait_until="domcontentloaded",
-        )
-        page.locator('[data-testid="campaign-delivery-assume"]').click()
-        page.wait_for_load_state("domcontentloaded")
-
-        assert page.get_by_text(
-            "Marked assume-me@test.com as assumed sent without resending.",
-            exact=True,
-        ).is_visible()
-
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/",
-            wait_until="domcontentloaded",
-        )
-        campaign.refresh_from_db()
-        assert campaign.status == "sent"
-        assert campaign.sent_count == 0
-        assert not EmailLog.objects.filter(
-            campaign=campaign,
-            recipient_email=delivery.recipient_email,
-        ).exists()
-        assert page.get_by_text("Sent", exact=True).is_visible()
-        connection.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffSeesFrozenAudience:
-    @pytest.mark.core
-    @browser_journey
-    def test_late_joiner_is_not_listed_on_recipients(
-        self,
-        django_server,
-        browser,
-    ):
-        from email_app.models import CampaignDelivery
-
-        _ensure_tiers()
-        _clear_campaigns()
-        _create_staff_user("admin@test.com")
-        campaign, _delivery, _recipient = _create_snapshotted_delivery(
-            "first@test.com",
-            state=CampaignDelivery.State.PENDING,
-            subject="Frozen Audience",
-        )
-        _create_user(
-            "late-joiner@test.com",
-            tier_slug="free",
-            email_verified=True,
-            unsubscribed=False,
-            is_staff=False,
-        )
-        connection.close()
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/recipients",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_text("first@test.com").is_visible()
-        assert page.get_by_text("late-joiner@test.com").count() == 0
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_test_id("eligible-recipients").get_by_text(
-            "1",
-            exact=True,
-        ).is_visible()
-        connection.close()
-
-
-@pytest.mark.django_db(transaction=True)
-class TestStaffSeesSkippedSnapshotAsSent:
-    @pytest.mark.core
-    @browser_journey
-    def test_unsubscribed_snapshot_completes_as_sent(
-        self,
-        django_server,
-        browser,
-    ):
-        from email_app.models import CampaignDelivery
-        from email_app.tasks.send_campaign import send_campaign_batch
-
-        _ensure_tiers()
-        _clear_campaigns()
-        _create_staff_user("admin@test.com")
-        campaign, delivery, recipient = _create_snapshotted_delivery(
-            "skipped@test.com",
-            state=CampaignDelivery.State.PENDING,
-            subject="Skipped Snapshot",
-        )
-        recipient.unsubscribed = True
-        recipient.save(update_fields=["unsubscribed"])
-        EmailCampaign = campaign.__class__
-        EmailCampaign.objects.filter(pk=campaign.pk).update(
-            status="sending", relay_campaign_state="pending",
-        )
-        with mock.patch(
-            "email_app.tasks.send_campaign.queue_native_campaign",
-            return_value={
-                "included_delivery_ids": [],
-                "recipient_count": 0,
-                "skipped_count": 0,
-                "queued": True,
-            },
-        ):
-            send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
-        connection.close()
-
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/campaigns/{campaign.pk}/",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_text("Sent", exact=True).is_visible()
-        counts = page.get_by_test_id("campaign-delivery-counts")
-        assert counts.get_by_text("Skipped: 1", exact=True).is_visible()
-        assert counts.get_by_text("Sent: 0", exact=True).is_visible()
-        assert counts.get_by_text("Pending: 0", exact=True).is_visible()
-        assert page.get_by_test_id("campaign-attention-link").count() == 0
         connection.close()

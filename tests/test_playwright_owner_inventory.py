@@ -738,11 +738,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
     tag_cache_isolation_owner = (
         "playwright_tests/test_status_contrast_1279.py::test_visitor_gets_not_found_for_unknown_tag"
     )
-    campaign_owner = (
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffReconcilesAmbiguousDelivery::"
-        "test_duplicate_risk_confirmations_gate_retry_and_assume_sent"
-    )
     issue_1528_owners = frozenset({
         "playwright_tests/test_member_plan_edit.py::"
         "TestMemberOpensOwnPlan::"
@@ -805,23 +800,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_adds_labelled_custom_question_to_only_one_member",
         "playwright_tests/test_questionnaire_accessibility_1531.py::"
         "test_keyboard_user_selects_choice_and_submits",
-    })
-    issue_1506_owners = frozenset({
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffSeesNeedsAttentionAfterRelayQueueFailure::"
-        "test_relay_queue_timeout_leaves_needs_attention_not_sending",
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffRetriesFailedRecipient::"
-        "test_retry_failed_recipient_can_finish_the_campaign",
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffAssumesAmbiguousWithoutResend::"
-        "test_assume_delivered_does_not_create_email_log",
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffSeesFrozenAudience::"
-        "test_late_joiner_is_not_listed_on_recipients",
-        "playwright_tests/test_studio_campaigns.py::"
-        "TestStaffSeesSkippedSnapshotAsSent::"
-        "test_unsubscribed_snapshot_completes_as_sent",
     })
     issue_1551_owners = frozenset({
         "playwright_tests/test_articles_blog.py::TestBlogBrowserSmoke::"
@@ -1022,18 +1000,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_tampered_opt_in_link_fails_safely",
     })
 
-    issue_1594_owners = frozenset({
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_staff_targets_unverified_users_and_reviews_the_safety_policy",
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_staff_proves_the_controlled_consent_action_before_release",
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_staff_starts_only_the_pilot_and_repeat_submission_is_idempotent",
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_staff_releases_one_safe_followup_wave",
-        "playwright_tests/test_campaign_repermission_1594.py::"
-        "test_staff_is_stopped_by_unsafe_feedback_and_can_open_evidence",
-    })
 
     issue_1592_owners = frozenset({
         "playwright_tests/test_operator_comments_1592.py::"
@@ -2292,11 +2258,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2962)
-        self.assertEqual(len(inventory.owners), 2757)
+        self.assertEqual(inventory.item_count, 2951)
+        self.assertEqual(len(inventory.owners), 2746)
         self.assertEqual(
             inventory.declared_owners,
-            {self.migrated_owner, self.campaign_owner, self.tag_cache_isolation_owner}
+            {self.migrated_owner, self.tag_cache_isolation_owner}
             | self.issue_1528_owners | self.issue_1529_owners
             | self.issue_1530_owners | self.issue_1531_owners
             | self.issue_1815_owners | self.issue_1837_owners
@@ -2347,7 +2313,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners
-            | self.issue_1506_owners
             | self.issue_1515_owners
             | self.issue_1516_owners
             | self.issue_1565_owners
@@ -2362,7 +2327,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_2009_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
-            | self.issue_1594_owners
             | self.issue_1592_owners
             | self.issue_1597_owners
             | self.issue_1539_owners
@@ -2398,14 +2362,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             load_live_manifest()["LEGACY_DECLARED_BROWSER"],
         )
         self.assertIn(self.migrated_owner, LEGACY_DECLARED_BROWSER_CEILING)
-        self.assertNotIn(
-            self.campaign_owner,
-            load_live_manifest()["LEGACY_DECLARED_BROWSER"],
-        )
-        self.assertNotIn(self.campaign_owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in (
-            self.issue_1506_owners
-            | self.issue_1515_owners
+            self.issue_1515_owners
             | self.issue_1516_owners
             | self.issue_1565_owners
             | self.issue_1566_owners
@@ -2418,7 +2376,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_2009_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
-            | self.issue_1594_owners
             | self.issue_1592_owners
             | self.issue_1597_owners
             | self.issue_1542_owners

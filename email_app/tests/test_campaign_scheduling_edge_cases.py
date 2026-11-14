@@ -13,6 +13,7 @@ from email_app.services.campaign_scheduling import (
     dispatch_due_campaigns,
     parse_scheduled_time,
 )
+from email_app.testing_campaign_submit import stub_relay_submit
 
 
 class CampaignScheduleTimeEdgeCasesTest(TestCase):
@@ -61,17 +62,17 @@ class ScheduledDispatchRaceTest(TestCase):
         )
 
     def _dispatch_after_schedule_change(self, scheduled_at, scheduled_timezone):
-        from email_app.services.campaign_dispatch import claim_and_enqueue_campaign
+        from email_app.services.campaign_dispatch import claim_and_submit_campaign
 
         def change_then_claim(campaign_id, **kwargs):
             EmailCampaign.objects.filter(pk=campaign_id).update(
                 scheduled_at=scheduled_at,
                 scheduled_timezone=scheduled_timezone,
             )
-            return claim_and_enqueue_campaign(campaign_id, **kwargs)
+            return claim_and_submit_campaign(campaign_id, **kwargs)
 
         with patch(
-            "email_app.services.campaign_dispatch.claim_and_enqueue_campaign",
+            "email_app.services.campaign_dispatch.claim_and_submit_campaign",
             side_effect=change_then_claim,
         ):
             return dispatch_due_campaigns()
@@ -87,16 +88,16 @@ class ScheduledDispatchRaceTest(TestCase):
         self.due.refresh_from_db()
         self.assertEqual(self.due.status, "draft")
 
-    @patch("jobs.tasks.async_task", return_value="dispatch-task")
-    def test_unschedule_after_due_scan_skips_dispatch(self, mock_async):
-        self._assert_schedule_change_skipped(mock_async)
+    def test_unschedule_after_due_scan_skips_dispatch(self):
+        with stub_relay_submit() as mock_async:
+            self._assert_schedule_change_skipped(mock_async)
         self.assertIsNone(self.due.scheduled_at)
         self.assertIsNone(self.due.scheduled_timezone)
 
-    @patch("jobs.tasks.async_task", return_value="dispatch-task")
-    def test_reschedule_to_future_after_due_scan_skips_dispatch(self, mock_async):
+    def test_reschedule_to_future_after_due_scan_skips_dispatch(self):
         future_time = timezone.now() + timedelta(days=1)
-        result = self._dispatch_after_schedule_change(future_time, "UTC")
+        with stub_relay_submit() as mock_async:
+            result = self._dispatch_after_schedule_change(future_time, "UTC")
         self.assertEqual(result["dispatched"], [])
         self.assertEqual(result["skipped"], [{
             "campaign_id": self.due.pk,

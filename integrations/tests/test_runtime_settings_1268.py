@@ -10,7 +10,6 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
-from email_app.tasks.send_campaign import _get_batch_size
 from integrations.config import clear_config_cache
 from integrations.services.llm.backends import _resolve_max_retries
 from integrations.settings_registry import get_group_by_name
@@ -86,10 +85,8 @@ class RuntimeSettingsStudioTest(TestCase):
         self.assertTrue(Setting.objects.filter(key="STRIPE_PAYMENT_LINKS").exists())
         self.assertEqual(get_stripe_payment_links(), LINKS)
 
-        package_set("EMAIL_BATCH_SIZE", 17, actor_ref="test:1268")
         package_set("LLM_MAX_RETRIES", 2, actor_ref="test:1268")
         clear_config_cache()
-        self.assertEqual(_get_batch_size(), 17)
         self.assertEqual(_resolve_max_retries(), 2)
 
 

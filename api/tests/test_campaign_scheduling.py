@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import EmailCampaign
+from email_app.testing_campaign_submit import stub_relay_submit
 
 User = get_user_model()
 
@@ -297,14 +298,17 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
         self.draft.scheduled_at = FUTURE_UTC
         self.draft.scheduled_timezone = "Europe/Berlin"
         self.draft.save(update_fields=["scheduled_at", "scheduled_timezone"])
-        with patch("jobs.tasks.async_task", return_value="send-task") as mock_async:
+        with stub_relay_submit() as mock_async:
             response = self.client.post(
                 f"/api/campaigns/{self.draft.pk}/send", **self._auth(),
             )
         body = response.json()
         self.assertTrue(body["claimed"])
         self.assertEqual(body["status"], "sending")
-        self.assertEqual(mock_async.call_args.kwargs["campaign_id"], self.draft.pk)
+        self.assertEqual(
+            mock_async.call_args.kwargs["external_key"], f"aishl-campaign-{self.draft.pk}",
+        )
+        self.assertEqual(body["relay_campaign_key"], f"aishl-campaign-{self.draft.pk}")
         self.draft.refresh_from_db()
         self.assertEqual(self.draft.status, "sending")
         # Claiming consumes the schedule.
@@ -312,7 +316,7 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
         self.assertIsNone(self.draft.scheduled_timezone)
 
     def test_send_non_draft_409(self):
-        with patch("jobs.tasks.async_task", return_value="send-task"):
+        with stub_relay_submit():
             response = self.client.post(
                 f"/api/campaigns/{self.sent.pk}/send", **self._auth(),
             )
@@ -321,7 +325,7 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
         self.assertEqual(body["code"], "campaign_not_draft")
         self.assertEqual(body["details"]["status"], "sent")
 
-    def test_send_monitored_campaign_attributes_actor(self):
+    def test_send_monitored_campaign_submits_once(self):
         monitored = EmailCampaign.objects.create(
             subject="Re-permission Send",
             body="body",
@@ -330,14 +334,12 @@ class SendEndpointTest(CampaignSchedulingApiTestBase):
                 EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
             ),
         )
-        with patch("jobs.tasks.async_task", return_value="send-task") as mock_async:
+        with stub_relay_submit() as mock_async:
             response = self.client.post(
                 f"/api/campaigns/{monitored.pk}/send", **self._auth(),
             )
         self.assertEqual(response.json()["status"], "sending")
-        self.assertEqual(
-            mock_async.call_args.kwargs["released_by_id"], self.staff.pk,
-        )
+        self.assertEqual(mock_async.call_count, 1)
 
     def test_send_unknown_campaign_404(self):
         response = self.client.post(

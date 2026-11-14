@@ -26,7 +26,7 @@ These variables are read at process start, before the DB is reachable, used dire
 | `WEB_DB_STATEMENT_TIMEOUT_MS` | optional | Postgres `statement_timeout` for the gunicorn web process only (issue #1854). Default 10000 (10 s); `0` disables. A malformed or negative value logs a warning and falls back to 10000. Applied by the entrypoint right before the gunicorn handoff, so migrations, the django-q worker, and management commands keep no limit. A web request whose query runs longer fails with a 500 instead of holding a request slot. SQLite is unaffected. |
 | `IP_HASH_SALT` | optional | Salt for SHA-256 hashing client IPs in `CampaignVisit.ip_hash`. Empty leaves `ip_hash` blank. |
 | `ANALYTICS_COOKIE_DOMAIN` | optional | Scope analytics cookies to a domain. Defaults to `SESSION_COOKIE_DOMAIN`. |
-| `EMAIL_BATCH_SIZE` | optional | Recipients per chunked `send_campaign_batch` task. Default 200. |
+| `EMAIL_BATCH_SIZE` | deprecated | Unused: campaigns are submitted to Relay in one request. |
 | `IMPORT_WELCOME_EMAILS_PER_HOUR` | optional | Rate limit for imported-user welcome emails. Default 50. |
 | `LOGIN_API_SLOW_MS` | optional | Slow-login instrumentation threshold in milliseconds. Default 750. |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | optional | Path to a PEM file. Takes precedence over the `GITHUB_APP_PRIVATE_KEY` env var. The app falls back to the Studio-configured AWS Secrets Manager secret path if neither is set. |

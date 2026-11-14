@@ -70,7 +70,19 @@ class RelayCampaignDeliveryAmbiguous(RelayCampaignError):
         super().__init__(message)
 
 
-class RelayCampaignEdgeBlocked(RelayCampaignError):
+class RelayCampaignConfigError(RelayCampaignError):
+    """Missing or invalid Relay configuration."""
+
+
+class RelayCampaignApiError(RelayCampaignError):
+    """Relay campaign API failed or returned an invalid response."""
+
+    def __init__(self, message: str, *, status_code: int | None = None):
+        self.status_code = status_code
+        super().__init__(message)
+
+
+class RelayCampaignEdgeBlocked(RelayCampaignApiError):
     """The edge (CDN/WAF) refused the call with a non-Relay 403 page.
 
     Relay answers its own rejections with JSON. An HTML 403 means the request
@@ -78,16 +90,7 @@ class RelayCampaignEdgeBlocked(RelayCampaignError):
     """
 
     def __init__(self, message: str, *, status_code: int = 403):
-        self.status_code = status_code
-        super().__init__(message)
-
-
-class RelayCampaignConfigError(RelayCampaignError):
-    """Missing or invalid Relay configuration."""
-
-
-class RelayCampaignApiError(RelayCampaignError):
-    """Relay campaign API failed or returned an invalid response."""
+        super().__init__(message, status_code=status_code)
 
 
 class RelayProofRejected(RelayCampaignApiError):
@@ -375,14 +378,14 @@ def _campaign_api_request(
         if 200 <= response.status_code < 300:
             break
         if attempt + 1 < max_attempts and _is_retryable_campaign_api_response(method, response):
-            _is_edge, detail = _response_diagnostic_summary(response)
+            is_edge, detail = _response_diagnostic_summary(response)
             logger.warning(
                 "Retrying Relay campaign API %s %s after HTTP %s (attempt %s/%s): %s",
                 method, path, response.status_code, attempt + 1, max_attempts, detail,
             )
             time.sleep(_campaign_api_retry_delay(attempt, response))
             continue
-        _is_edge, detail = _response_diagnostic_summary(response)
+        is_edge, detail = _response_diagnostic_summary(response)
         logger.warning(
             "Relay campaign API %s %s failed with HTTP %s: %s",
             method, path, response.status_code, detail,
@@ -390,8 +393,14 @@ def _campaign_api_request(
         suffix = ""
         if detail:
             suffix = f" ({detail})"
+        if is_edge:
+            raise RelayCampaignEdgeBlocked(
+                f"Relay campaign API {method} {path} hit an edge HTML 403{suffix}",
+                status_code=403,
+            )
         raise RelayCampaignApiError(
-            f"Relay campaign API {method} {path} returned HTTP {response.status_code}{suffix}"
+            f"Relay campaign API {method} {path} returned HTTP {response.status_code}{suffix}",
+            status_code=response.status_code,
         )
     try:
         return response.json()
@@ -406,15 +415,26 @@ def _member_batches(members):
         yield members[offset:offset + RELAY_CAMPAIGN_MEMBER_BATCH_SIZE]
 
 
-def validate_native_campaign_recipient_counts(expected_count, recipient_count, skipped_count, *, stage):
-    if (
-        not isinstance(recipient_count, int)
-        or isinstance(recipient_count, bool)
-        or not isinstance(skipped_count, int)
-        or isinstance(skipped_count, bool)
-        or recipient_count != expected_count
-        or skipped_count != 0
-    ):
+def validate_native_campaign_recipient_counts(
+    expected_count,
+    recipient_count,
+    skipped_count,
+    *,
+    stage,
+    max_skipped=0,
+):
+    valid_ints = (
+        isinstance(recipient_count, int)
+        and not isinstance(recipient_count, bool)
+        and isinstance(skipped_count, int)
+        and not isinstance(skipped_count, bool)
+    )
+    if not valid_ints or skipped_count < 0 or skipped_count > max_skipped:
+        raise RelayCampaignApiError(
+            f"Relay campaign {stage} recipient count mismatch: expected {expected_count}, "
+            f"Relay reported {recipient_count!r} recipients and {skipped_count!r} skipped."
+        )
+    if recipient_count + skipped_count != expected_count or (expected_count > 0 and recipient_count <= 0):
         raise RelayCampaignApiError(
             f"Relay campaign {stage} recipient count mismatch: expected {expected_count}, "
             f"Relay reported {recipient_count!r} recipients and {skipped_count!r} skipped."
@@ -448,17 +468,10 @@ def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_id
     return [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched]
 
 
-def _mark_campaign_contacts_verified(emails, scope, *, session=None):
-    """Mirror the website's ``email_verified`` flag onto Relay contacts.
-
-    Relay's dispatch-time suppression recheck skips contacts that are
-    unverified *at Relay*, even for members the website verified. List upsert
-    creates unverified Relay contacts, so without this step a ``verified_only``
-    campaign preflights with most recipients skipped (campaign 18: 47 of 1382).
-    Only locally verified users are marked; a failure aborts the queue so a
-    partially verified list can never send.
-    """
-    for address in emails:
+def _verify_single_relay_contact(address, scope, *, session=None):
+    """Mark one contact verified at Relay, retrying transient edge/rate blocks."""
+    delays = (1, 2, 4)
+    for attempt in range(len(delays) + 1):
         try:
             _campaign_api_request(
                 "POST",
@@ -470,11 +483,46 @@ def _mark_campaign_contacts_verified(emails, scope, *, session=None):
                 },
                 session=session,
             )
+            return True
+        except RelayCampaignEdgeBlocked:
+            if attempt >= len(delays):
+                raise
+            time.sleep(delays[attempt])
+        except RelayCampaignApiError as exc:
+            if exc.status_code == 429 and attempt < len(delays):
+                time.sleep(delays[attempt])
+                continue
+            if exc.status_code == 403:
+                return False
+            raise
+    return False
+
+
+def _mark_campaign_contacts_verified(emails, scope, *, session=None):
+    """Mirror the website's ``email_verified`` flag onto Relay contacts.
+
+    Returns the set of lowercase emails that Relay refused with a JSON 403
+    (suppressed/unsubscribed at Relay) so preflight/queue can account for real
+    suppressions without aborting the whole campaign.
+    """
+    suppressed_emails = set()
+    max_suppressed = max(10, len(emails) // 10)
+    for address in emails:
+        try:
+            verified = _verify_single_relay_contact(address, scope, session=session)
         except RelayCampaignError as exc:
             raise RelayCampaignApiError(
                 "Relay could not mark every verified campaign contact verified; "
-                "nothing was queued."
+                f"nothing was queued. ({exc})"
             ) from exc
+        if not verified:
+            suppressed_emails.add(address.strip().lower())
+            if len(suppressed_emails) > max_suppressed or (emails and len(suppressed_emails) >= len(emails)):
+                raise RelayCampaignApiError(
+                    "Relay could not mark every verified campaign contact verified; "
+                    f"nothing was queued. ({len(suppressed_emails)} contacts rejected with HTTP 403)"
+                )
+    return suppressed_emails
 
 
 def queue_native_campaign(campaign, deliveries, *, external_key=None, session=None):
@@ -602,7 +650,10 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
             },
             session=session,
         )
-    _mark_campaign_contacts_verified(verified_emails, scope, session=session)
+    suppressed_emails = _mark_campaign_contacts_verified(
+        verified_emails, scope, session=session,
+    )
+    allowed_skipped = len(suppressed_emails)
     campaign_payload = scope | {
         "subject": campaign.subject,
         "preview_text": "",
@@ -643,6 +694,7 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         recount.get("recipient_count"),
         recount.get("skipped_count"),
         stage="preflight",
+        max_skipped=allowed_skipped,
     )
     queued = _campaign_api_request(
         "POST",
@@ -655,8 +707,11 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
         queued.get("recipient_count"),
         queued.get("skipped_count"),
         stage="queue",
+        max_skipped=allowed_skipped,
     )
     queued["included_delivery_ids"] = included_delivery_ids
+    queued["suppressed_emails"] = sorted(suppressed_emails)
+    queued["allowed_skipped_count"] = allowed_skipped
     return queued
 
 

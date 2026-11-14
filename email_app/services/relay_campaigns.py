@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import logging
 import re
+import time
 import uuid
 from dataclasses import replace
 from email.utils import parseaddr
@@ -33,6 +34,10 @@ DEFAULT_TEMPLATE_KEY = "campaign-broadcast"
 DEFAULT_CATEGORY = "newsletter"
 DEFAULT_TEMPLATE_VERSION = 2
 RELAY_CAMPAIGN_TIMEOUT_SECONDS = 30.0
+RELAY_CAMPAIGN_API_USER_AGENT = "aishl-website/1.0"
+RELAY_CAMPAIGN_GET_MAX_RETRIES = 2
+RELAY_CAMPAIGN_GET_BACKOFF_BASE_SECONDS = 0.5
+RELAY_CAMPAIGN_RETRYABLE_GET_STATUSES = frozenset({429, 502, 503, 504})
 RELAY_CAMPAIGN_AUDIENCE = "aisl"
 RELAY_CAMPAIGN_CLIENT = "aisl-website"
 RELAY_CAMPAIGN_MEMBER_BATCH_SIZE = 50
@@ -276,6 +281,56 @@ def _is_edge_html_page(response) -> bool:
     return False
 
 
+def _response_diagnostic_summary(response) -> tuple[bool, str]:
+    """Return ``(is_edge_html_403, safe_detail)`` for non-2xx Relay API calls."""
+    headers = getattr(response, "headers", None)
+    if not isinstance(headers, dict) and hasattr(headers, "get"):
+        pass
+    content_type = headers.get("Content-Type", "") if headers is not None else ""
+    if not isinstance(content_type, str):
+        content_type = ""
+    server = headers.get("Server", "") if headers is not None else ""
+    if not isinstance(server, str):
+        server = ""
+    cf_id = headers.get("x-amz-cf-id", "") if headers is not None else ""
+    if not isinstance(cf_id, str):
+        cf_id = ""
+    is_edge_403 = response.status_code == 403 and _is_edge_html_page(response)
+    raw_text = getattr(response, "text", "")
+    snippet = ""
+    if isinstance(raw_text, str) and raw_text.strip():
+        snippet = re.sub(r"\s+", " ", raw_text[:200]).strip()
+    parts = []
+    if is_edge_403:
+        parts.append("edge_blocked=true")
+    if content_type:
+        parts.append(f"content_type={content_type}")
+    if server:
+        parts.append(f"server={server}")
+    if cf_id:
+        parts.append(f"cf_id={cf_id}")
+    if snippet:
+        parts.append(f"body={snippet!r}")
+    return is_edge_403, ", ".join(parts)
+
+
+def _is_retryable_campaign_api_response(method: str, response) -> bool:
+    """Retry only idempotent GET calls on transient edge-403 or 429/5xx."""
+    if method.upper() != "GET":
+        return False
+    if response.status_code in RELAY_CAMPAIGN_RETRYABLE_GET_STATUSES:
+        return True
+    return response.status_code == 403 and _is_edge_html_page(response)
+
+
+def _campaign_api_retry_delay(attempt: int, response) -> float:
+    headers = getattr(response, "headers", None)
+    retry_after = headers.get("Retry-After", "") if headers is not None else ""
+    if isinstance(retry_after, str) and retry_after.strip().isdigit():
+        return min(max(float(retry_after.strip()), 0.1), 5.0)
+    return RELAY_CAMPAIGN_GET_BACKOFF_BASE_SECONDS * (2 ** attempt)
+
+
 def _campaign_api_request(
     method, path, *, payload=None, params=None, session=None, allow_not_found=False,
 ):
@@ -289,29 +344,54 @@ def _campaign_api_request(
         timeout = float(timeout)
     except (TypeError, ValueError):
         timeout = RELAY_CAMPAIGN_TIMEOUT_SECONDS
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json",
+        "User-Agent": RELAY_CAMPAIGN_API_USER_AGENT,
+    }
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
     client = session or requests.Session()
-    try:
-        response = client.request(
-            method,
-            f"{base_url}{path}",
-            json=payload,
-            params=params,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            },
-            timeout=timeout,
+    max_attempts = 1
+    if method.upper() == "GET":
+        max_attempts = 1 + RELAY_CAMPAIGN_GET_MAX_RETRIES
+    response = None
+    for attempt in range(max_attempts):
+        try:
+            response = client.request(
+                method,
+                f"{base_url}{path}",
+                json=payload,
+                params=params,
+                headers=headers,
+                timeout=timeout,
+            )
+        except requests.RequestException as exc:
+            raise RelayCampaignApiError(
+                f"Relay campaign API {method} {path} timed out or was unavailable: {type(exc).__name__}"
+            ) from exc
+        if allow_not_found and response.status_code == 404:
+            return None
+        if 200 <= response.status_code < 300:
+            break
+        if attempt + 1 < max_attempts and _is_retryable_campaign_api_response(method, response):
+            _is_edge, detail = _response_diagnostic_summary(response)
+            logger.warning(
+                "Retrying Relay campaign API %s %s after HTTP %s (attempt %s/%s): %s",
+                method, path, response.status_code, attempt + 1, max_attempts, detail,
+            )
+            time.sleep(_campaign_api_retry_delay(attempt, response))
+            continue
+        _is_edge, detail = _response_diagnostic_summary(response)
+        logger.warning(
+            "Relay campaign API %s %s failed with HTTP %s: %s",
+            method, path, response.status_code, detail,
         )
-    except requests.RequestException as exc:
+        suffix = ""
+        if detail:
+            suffix = f" ({detail})"
         raise RelayCampaignApiError(
-            f"Relay campaign API {method} {path} timed out or was unavailable: {type(exc).__name__}"
-        ) from exc
-    if allow_not_found and response.status_code == 404:
-        return None
-    if not 200 <= response.status_code < 300:
-        raise RelayCampaignApiError(
-            f"Relay campaign API {method} {path} returned HTTP {response.status_code}"
+            f"Relay campaign API {method} {path} returned HTTP {response.status_code}{suffix}"
         )
     try:
         return response.json()

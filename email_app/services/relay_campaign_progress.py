@@ -173,7 +173,11 @@ def mark_native_queue_accepted(campaign, *, already_queued):
     ]
     if campaign.in_relay_attention and not already_queued:
         campaign.relay_campaign_progress_at = timezone.now()
-        update_fields.append("relay_campaign_progress_at")
+        campaign.relay_campaign_attention_alerted_at = None
+        update_fields.extend([
+            "relay_campaign_progress_at",
+            "relay_campaign_attention_alerted_at",
+        ])
     campaign.relay_campaign_state = "queued"
     campaign.relay_campaign_error = ""
     campaign.relay_campaign_attention_sent_count = None

@@ -70,10 +70,16 @@ def _enqueue_delivery_chunks(campaign, delivery_ids, covered):
     orphans = [pk for pk in delivery_ids if pk not in covered]
     if not orphans:
         return 0
-    batch_size = _get_batch_size()
-    chunks = list(_chunk(orphans, batch_size))
+    if campaign.relay_campaign_state:
+        # Native Relay campaigns own one immutable snapshot per Relay key;
+        # splitting orphans into 200-recipient batches races on the same key.
+        chunks = [orphans]
+        interval = 0
+    else:
+        batch_size = _get_batch_size()
+        chunks = list(_chunk(orphans, batch_size))
+        interval = _get_batch_interval_seconds(batch_size)
     now = timezone.now()
-    interval = _get_batch_interval_seconds(batch_size)
     created = 0
     for index, chunk in enumerate(chunks):
         task_name = build_task_name(
@@ -151,6 +157,8 @@ def recover_campaign_deliveries():
     for campaign_id, delivery_ids in pending_by_campaign.items():
         campaign = campaigns.get(campaign_id)
         if campaign is None:
+            continue
+        if campaign.status == 'needs_attention' and campaign.relay_campaign_state:
             continue
         created = _enqueue_delivery_chunks(campaign, delivery_ids, covered)
         if created:

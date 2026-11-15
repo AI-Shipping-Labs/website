@@ -210,6 +210,86 @@ class CampaignResumeServiceTest(TierSetupMixin, TestCase):
             f"aishl-campaign-{campaign.pk}-resume-1",
         )
 
+    @patch("email_app.tasks.send_campaign.send_campaign_batch")
+    @patch("email_app.services.campaign_resume.requests.Session.request")
+    def test_resume_campaign_batch_does_not_confirm_pending_or_queued_recipients(
+        self, mock_request, mock_send_batch,
+    ):
+        campaign, _sent_delivery, pending_1, pending_2 = self._make_partial_campaign()
+        mock_send_batch.return_value = {"sent_count": 0}
+
+        existing_resp = MagicMock()
+        existing_resp.status_code = 200
+        existing_resp.json.return_value = {"campaign": {"status": "sending"}}
+        rec_resp = MagicMock()
+        rec_resp.status_code = 200
+        rec_resp.json.return_value = {
+            "recipients": [
+                {"client_recipient_key": str(pending_1.pk), "status": "pending"},
+                {"client_recipient_key": str(pending_2.pk), "status": "queued"},
+            ],
+        }
+        mock_request.side_effect = [existing_resp, rec_resp]
+
+        result = resume_campaign_batch(
+            campaign.pk,
+            [pending_1.pk, pending_2.pk],
+            f"aishl-campaign-{campaign.pk}-resume-1",
+        )
+
+        pending_1.refresh_from_db()
+        pending_2.refresh_from_db()
+        campaign.refresh_from_db()
+        self.assertEqual(pending_1.state, CampaignDelivery.State.PENDING)
+        self.assertEqual(pending_2.state, CampaignDelivery.State.PENDING)
+        self.assertIsNone(pending_1.email_log_id)
+        self.assertIsNone(pending_2.email_log_id)
+        self.assertNotEqual(campaign.status, "sent")
+        self.assertNotIn("reconciled_only", result)
+        self.assertEqual(mock_send_batch.call_count, 1)
+        self.assertEqual(
+            mock_send_batch.call_args.kwargs["delivery_ids"],
+            [pending_1.pk, pending_2.pk],
+        )
+        self.assertEqual(
+            mock_send_batch.call_args.kwargs["external_key"],
+            f"aishl-campaign-{campaign.pk}-resume-1",
+        )
+
+    @patch("email_app.tasks.send_campaign.send_campaign_batch")
+    @patch("email_app.services.campaign_resume.requests.Session.request")
+    def test_resume_campaign_batch_confirms_delivered_but_not_claimed_or_sending(
+        self, mock_request, mock_send_batch,
+    ):
+        campaign, _sent_delivery, pending_1, pending_2 = self._make_partial_campaign()
+        mock_send_batch.return_value = {"sent_count": 0}
+
+        existing_resp = MagicMock()
+        existing_resp.status_code = 200
+        existing_resp.json.return_value = {"campaign": {"status": "sending"}}
+        rec_resp = MagicMock()
+        rec_resp.status_code = 200
+        rec_resp.json.return_value = {
+            "recipients": [
+                {"client_recipient_key": str(pending_1.pk), "status": "delivered"},
+                {"client_recipient_key": str(pending_2.pk), "status": "claimed"},
+            ],
+        }
+        mock_request.side_effect = [existing_resp, rec_resp]
+
+        resume_campaign_batch(
+            campaign.pk,
+            [pending_1.pk, pending_2.pk],
+            f"aishl-campaign-{campaign.pk}-resume-1",
+        )
+
+        pending_1.refresh_from_db()
+        pending_2.refresh_from_db()
+        self.assertEqual(pending_1.state, CampaignDelivery.State.SENT)
+        self.assertEqual(pending_2.state, CampaignDelivery.State.PENDING)
+        self.assertEqual(mock_send_batch.call_count, 1)
+        self.assertEqual(mock_send_batch.call_args.kwargs["delivery_ids"], [pending_2.pk])
+
 
 class StuckPartialCampaignAlertTest(TierSetupMixin, TestCase):
     @classmethod

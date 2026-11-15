@@ -1,5 +1,6 @@
 """Runtime and deployment evidence checks for the split Coolify topology."""
 
+import json
 import re
 import time
 from datetime import datetime, timedelta
@@ -213,3 +214,35 @@ def wait_for_consecutive(probe, required, timeout, interval, clock=None, sleeper
         clock,
         sleeper,
     )
+
+
+def _diff_env_keys(expected_envs, actual_envs):
+    keys = set()
+    for encoded in set(expected_envs) ^ set(actual_envs):
+        try:
+            item = json.loads(encoded)
+        except json.JSONDecodeError:
+            keys.add("<invalid>")
+            continue
+        if isinstance(item, dict) and isinstance(item.get("key"), str):
+            keys.add(item["key"])
+        else:
+            keys.add("<unknown>")
+    return sorted(keys)
+
+
+def describe_web_runtime_edit(expected_fingerprint, actual_fingerprint):
+    """Return a safe diagnostic message naming changed fields and env keys only."""
+    expected_fields, expected_envs = expected_fingerprint
+    actual_fields, actual_envs = actual_fingerprint
+    changed_fields = []
+    for (field, expected_value), (_, actual_value) in zip(expected_fields, actual_fields):
+        if expected_value != actual_value:
+            changed_fields.append(field)
+    changed_env_keys = _diff_env_keys(expected_envs, actual_envs)
+    parts = ["concurrent-web-runtime-edit"]
+    if changed_fields:
+        parts.append("fields=" + ",".join(changed_fields))
+    if changed_env_keys:
+        parts.append("env_keys=" + ",".join(changed_env_keys))
+    return " ".join(parts)

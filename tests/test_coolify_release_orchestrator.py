@@ -332,6 +332,68 @@ class ReleaseOrchestrationTest(SimpleTestCase):
                 sleeper=lambda _seconds: None,
             )
 
+    def test_concurrent_web_field_edit_fails_loudly_with_field_name(self):
+        coolify = FakeCoolify()
+        original_service_call = coolify._service_call
+
+        def mutate_web_field_during_source_deploy(method, payload):
+            result = original_service_call(method, payload)
+            if method == "PATCH":
+                coolify.app["custom_labels"] = "mutated=true"
+            return result
+
+        coolify._service_call = mutate_web_field_during_source_deploy
+        deployer = ReleaseDeployer(
+            release_config(),
+            coolify,
+            FakeDiagnostics(),
+            lambda _url: SHA,
+        )
+
+        with self.assertRaises(ReleaseError) as ctx:
+            deployer.deploy(timeout=0.001, interval=0.001)
+        self.assertIn("concurrent-web-runtime-edit", str(ctx.exception))
+        self.assertIn("fields=custom_labels", str(ctx.exception))
+        self.assertNotIn(
+            ("PATCH", f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}"),
+            coolify.calls,
+        )
+
+    def test_concurrent_web_env_edit_fails_loudly_without_leaking_value(self):
+        coolify = FakeCoolify()
+        original_service_call = coolify._service_call
+
+        def mutate_web_env_during_source_deploy(method, payload):
+            result = original_service_call(method, payload)
+            if method == "PATCH":
+                coolify.app_envs.append(
+                    {
+                        "key": "OUT_OF_BAND_SECRET",
+                        "value": "super-secret-token-value",
+                        "is_preview": False,
+                    }
+                )
+            return result
+
+        coolify._service_call = mutate_web_env_during_source_deploy
+        deployer = ReleaseDeployer(
+            release_config(),
+            coolify,
+            FakeDiagnostics(),
+            lambda _url: SHA,
+        )
+
+        with self.assertRaises(ReleaseError) as ctx:
+            deployer.deploy(timeout=0.001, interval=0.001)
+        message = str(ctx.exception)
+        self.assertIn("concurrent-web-runtime-edit", message)
+        self.assertIn("env_keys=OUT_OF_BAND_SECRET", message)
+        self.assertNotIn("super-secret-token-value", message)
+        self.assertNotIn(
+            ("PATCH", f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}"),
+            coolify.calls,
+        )
+
 
 class WebEnvironmentContractTest(SimpleTestCase):
     def test_web_contract_requires_debug_to_be_zero(self):

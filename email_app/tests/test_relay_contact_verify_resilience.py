@@ -169,3 +169,36 @@ class RelayContactVerifyResilienceTests(TestCase):
             for call in mock_request.call_args_list
         ]
         self.assertEqual(batch_sizes, [200, 200, 50])
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_preflight_allows_relay_side_skipped_within_threshold_when_import_reports_no_errors(
+        self, mock_request,
+    ):
+        mock_request.side_effect = [
+            _mock_response(404, {}),  # GET /api/campaigns/{key}
+            _mock_response(200, {"recipient_list": {}}),  # reconcile
+            _mock_response(200, {"recipient_list": {}}),  # bulk-upsert
+            _mock_response(200, {"counts": {"total": 2, "updated": 2}, "errors": []}),
+            _mock_response(201, {"campaign": {"status": "draft"}}),  # PUT campaign
+            _mock_response(200, {"recipient_count": 1, "skipped_count": 1}),  # recount
+            _mock_response(200, {
+                "queued": True,
+                "recipient_count": 1,
+                "skipped_count": 1,
+            }),  # queue
+        ]
+
+        result = send_campaign_batch(
+            self.campaign.pk,
+            delivery_ids=[self.delivery1.pk, self.delivery2.pk],
+            external_key="aishl-campaign-test-relay-skipped",
+            send_delay=0,
+        )
+
+        self.assertTrue(result["relay_queued"])
+        self.campaign.refresh_from_db()
+        self.assertEqual(self.campaign.relay_campaign_state, "queued")

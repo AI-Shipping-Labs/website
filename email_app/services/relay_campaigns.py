@@ -654,7 +654,13 @@ def queue_native_campaign(campaign, deliveries, *, external_key=None, session=No
     suppressed_emails = _mark_campaign_contacts_verified(
         verified_emails, scope, session=session,
     )
-    allowed_skipped = len(suppressed_emails)
+    # Bulk contact import does not report already-unsubscribed/suppressed Relay
+    # contacts in ``errors``, so Relay's recount/queue can legitimately skip a
+    # small share (up to 10%, min 10) while still accounting for every member.
+    allowed_skipped = max(
+        len(suppressed_emails),
+        max(10, len(included_delivery_ids) // 10),
+    )
     campaign_payload = scope | {
         "subject": campaign.subject,
         "preview_text": "",

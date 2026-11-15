@@ -15,6 +15,7 @@ class EmailCampaign(models.Model):
         ('sending', 'Sending'),
         ('needs_attention', 'Needs attention'),
         ('paused', 'Paused'),
+        ('cancelled', 'Cancelled'),
         ('sent', 'Sent'),
     ]
 
@@ -25,6 +26,7 @@ class EmailCampaign(models.Model):
         'failed': 'Failed',
         'timed_out': 'Timed out',
         'relay_failed': 'Relay failed',
+        'cancelled': 'Cancelled',
         'sent': 'Sent',
     }
 

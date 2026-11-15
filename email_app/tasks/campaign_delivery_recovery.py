@@ -105,6 +105,8 @@ def _enqueue_delivery_chunks(campaign, delivery_ids, covered):
 
 
 def _reset_failed_for_automatic_retry(delivery, *, max_attempts):
+    if delivery.campaign.status in ('paused', 'cancelled'):
+        return False
     if delivery.state != CampaignDelivery.State.FAILED:
         return False
     if delivery.attempt_count >= max_attempts:
@@ -157,6 +159,8 @@ def recover_campaign_deliveries():
     for campaign_id, delivery_ids in pending_by_campaign.items():
         campaign = campaigns.get(campaign_id)
         if campaign is None:
+            continue
+        if campaign.status in ('paused', 'cancelled'):
             continue
         if campaign.status == 'needs_attention' and campaign.relay_campaign_state:
             continue

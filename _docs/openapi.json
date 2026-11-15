@@ -1661,6 +1661,7 @@
             "schema": {
               "description": "Filter to campaigns with the given status.",
               "enum": [
+                "cancelled",
                 "draft",
                 "needs_attention",
                 "paused",
@@ -2201,6 +2202,54 @@
           }
         },
         "summary": "Update a campaign draft",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/cancel": {
+      "post": {
+        "description": "Calls Relay's stop endpoint on any queued/sending waves for this campaign, syncs Relay's sent count, reverts unconfirmed deliveries back to pending, and marks the campaign cancelled.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 18,
+                  "cancelled": true,
+                  "pending_count": 1186,
+                  "relay_campaign_state": "cancelled",
+                  "sent_count": 196,
+                  "status": "cancelled",
+                  "stopped_keys": [
+                    "aishl-campaign-18-resume-4"
+                  ]
+                }
+              }
+            },
+            "description": "Campaign cancelled and reconciled."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "Campaign has already been sent."
+          }
+        },
+        "summary": "Cancel a campaign and halt any active Relay waves",
         "tags": [
           "Campaigns"
         ]

@@ -528,7 +528,9 @@ def refresh_campaign_status(campaign_id):
         if campaign.sent_count != truthful_sent:
             campaign.sent_count = truthful_sent
             updates.append('sent_count')
-        if campaign.status == 'paused' and campaign.relay_campaign_state == 'cancelled':
+        if campaign.status == 'cancelled':
+            target_status = 'cancelled'
+        elif campaign.status == 'paused' and campaign.relay_campaign_state == 'cancelled':
             target_status = 'paused'
         elif has_work:
             target_status = 'sending'

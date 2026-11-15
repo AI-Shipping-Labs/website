@@ -123,8 +123,8 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(campaign_context["body_markdown"], self.campaign.body)
         self.assertEqual(json.dumps(campaign_call.kwargs["json"]).count(self.campaign.body), 1)
         self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
-        self.assertEqual(self.delivery.email_log.ses_message_id, "")
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.DISPATCHING)
+        self.assertIsNone(self.delivery.email_log)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",
@@ -185,10 +185,11 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
             send_delay=0,
         )
 
-        self.assertEqual(result["sent_count"], 1)
+        self.assertEqual(result["queued_count"], 1)
+        self.assertEqual(result["sent_count"], 0)
         self.assertEqual(mock_request.call_count, 2)
         self.delivery.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.SENT)
+        self.assertEqual(self.delivery.state, CampaignDelivery.State.DISPATCHING)
 
     @override_settings(
         RELAY_BASE_URL="https://relay.test.datatalks.club",

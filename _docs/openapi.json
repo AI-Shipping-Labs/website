@@ -2859,6 +2859,53 @@
         ]
       }
     },
+    "/api/campaigns/{campaign_id}/stop": {
+      "post": {
+        "description": "Calls Relay's stop endpoint on any queued/sending waves for this campaign, syncs Relay's sent count, and reverts any unconfirmed deliveries back to pending.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "campaign_id": 18,
+                  "pending_count": 1186,
+                  "sent_count": 196,
+                  "status": "paused",
+                  "stopped": true,
+                  "stopped_keys": [
+                    "aishl-campaign-18-resume-4"
+                  ]
+                }
+              }
+            },
+            "description": "Campaign stopped and reconciled."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "Campaign has no Relay key to stop."
+          }
+        },
+        "summary": "Stop an active Relay campaign and reconcile deliveries",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
     "/api/campaigns/{campaign_id}/test-send": {
       "post": {
         "description": "Delivers one explicit probe recipient without changing the campaign draft, status, or audience. Mirrors Studio's test send, including the re-permission policy for ``unverified_only`` campaigns. Unknown or invalid addresses answer 422; policy or transport failures answer 502 ``campaign_test_send_failed``.",

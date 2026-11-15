@@ -135,23 +135,15 @@ def _queue_native_campaign_batch(
             delivery.completed_at = now
             delivery.save(update_fields=["state", "skip_reason", "completed_at", "updated_at"])
             continue
-        log, _created = EmailLog.objects.get_or_create(
-            campaign=campaign,
-            user_id=delivery.recipient_user_pk,
-            defaults={
-                "recipient_email": delivery.recipient_email,
-                "email_type": "campaign",
-                "subject": campaign.subject,
-                "ses_message_id": "",
-            },
-        )
-        delivery.state = CampaignDelivery.State.SENT
-        delivery.email_log = log
+        delivery.state = CampaignDelivery.State.DISPATCHING
+        delivery.email_log = None
+        delivery.claim_expires_at = None
         delivery.resolution = ""
         delivery.resolved_at = None
-        delivery.completed_at = now
+        delivery.completed_at = None
         delivery.save(update_fields=[
-            "state", "email_log", "resolution", "resolved_at", "completed_at", "updated_at",
+            "state", "email_log", "claim_expires_at",
+            "resolution", "resolved_at", "completed_at", "updated_at",
         ])
 
     mark_native_queue_accepted(campaign, already_queued=bool(result.get("already_queued")))
@@ -159,7 +151,8 @@ def _queue_native_campaign_batch(
     return {
         "campaign_id": campaign.pk,
         "batch_size": len(delivery_ids),
-        "sent_count": len(included_ids),
+        "queued_count": len(included_ids),
+        "sent_count": 0,
         "skipped_count": len(delivery_ids) - len(included_ids),
         "relay_campaign_key": external_key,
         "relay_queued": bool(result.get("queued", True)),
@@ -524,10 +517,20 @@ def refresh_campaign_status(campaign_id):
             )
         ).exists()
         updates = []
-        if campaign.sent_count != confirmed:
-            campaign.sent_count = confirmed
+        has_dispatching = campaign.deliveries.filter(
+            state=CampaignDelivery.State.DISPATCHING,
+        ).exists()
+        truthful_sent = confirmed
+        if has_dispatching:
+            from email_app.services.relay_campaign_progress import stored_relay_sent_total
+
+            truthful_sent = max(confirmed, stored_relay_sent_total(campaign))
+        if campaign.sent_count != truthful_sent:
+            campaign.sent_count = truthful_sent
             updates.append('sent_count')
-        if has_work:
+        if campaign.status == 'paused' and campaign.relay_campaign_state == 'cancelled':
+            target_status = 'paused'
+        elif has_work:
             target_status = 'sending'
         elif has_attention:
             target_status = 'needs_attention'

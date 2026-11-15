@@ -226,3 +226,21 @@ text, padding, rounded corners) and container image sizing at render time for
 Studio preview, test sends, and campaign submission without mutating the stored
 Markdown. Standard Markdown links without `.email-btn` stay underlined text
 links, and `class="email-btn"` is allowed on `<a>` in `content.utils.markdown.sanitize_html`.
+
+## Stopping and resuming partial campaigns (pending-only)
+
+If a native Relay campaign stalls or needs to be halted mid-send, stop the active Relay wave(s) and reconcile the local delivery ledger first:
+
+```bash
+uv run asl campaigns stop <campaign_id> --yes
+```
+
+This calls `POST /api/campaigns/<id>/stop`, which halts any `queued`/`snapshotting`/`sending` Relay waves via Relay's `POST /api/campaigns/{external_key}/stop`, syncs Relay's `sent_count`, marks confirmed deliveries `sent`, and reverts any unconfirmed deliveries back to `pending`.
+
+When ready to send ONLY to the remaining `pending` recipients (never re-sending to anyone already confirmed `sent` in Relay):
+
+```bash
+uv run asl campaigns resume <campaign_id> --yes
+```
+
+This calls `POST /api/campaigns/<id>/resume`, which reconciles against all prior Relay keys on the campaign and queues only `pending` deliveries under a fresh `aishl-campaign-<id>-resume-N` key.

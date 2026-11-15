@@ -103,6 +103,16 @@ def read_campaign_relay_progress(campaign, *, session=None):
         campaign.relay_campaign_progress_at = now
         update_fields.append("relay_campaign_progress_at")
     campaign.save(update_fields=update_fields)
+    if totals["status"] == "sent":
+        from email_app.models import CampaignDelivery
+        from email_app.services.relay_campaign_control import reconcile_native_campaign_deliveries
+        from email_app.tasks.send_campaign import refresh_campaign_status
+
+        if campaign.deliveries.filter(state=CampaignDelivery.State.DISPATCHING).exists():
+            reconcile_native_campaign_deliveries(
+                campaign, revert_unconfirmed=True, session=session,
+            )
+            refresh_campaign_status(campaign.pk)
     return RelayProgressRead(totals=totals, per_key=tuple(per_key))
 
 

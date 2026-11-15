@@ -197,7 +197,15 @@ def _mark_campaign_resuming(campaign: EmailCampaign):
 
 def resume_pending_campaign(campaign_id: int, *, source: str = "API campaign resume") -> CampaignResumeResult:
     """Atomically enqueue a safe resume for PENDING deliveries only."""
+    from email_app.services.relay_campaign_control import reconcile_native_campaign_deliveries
     from jobs.tasks import async_task, build_task_name
+
+    pre_campaign = EmailCampaign.objects.get(pk=campaign_id)
+    if campaign_relay_keys(pre_campaign):
+        has_pending = pre_campaign.deliveries.filter(state=CampaignDelivery.State.PENDING).exists()
+        has_dispatching = pre_campaign.deliveries.filter(state=CampaignDelivery.State.DISPATCHING).exists()
+        if not has_pending or has_dispatching:
+            reconcile_native_campaign_deliveries(pre_campaign, revert_unconfirmed=True)
 
     with transaction.atomic():
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)

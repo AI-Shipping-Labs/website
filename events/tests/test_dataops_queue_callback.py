@@ -70,7 +70,7 @@ class DataOpsQueueCallbackTest(TestCase):
                 self.captureOnCommitCallbacks(execute=True):
             event = self._create()
         self.assertTrue(Event.objects.filter(pk=event.pk).exists())
-        alert.assert_called_once()
+        self.assertEqual(alert.call_count, 1)
 
     @override_settings(DATAOPS_QUEUE_URL="", DATAOPS_QUEUE_TOKEN="")
     def test_unconfigured_environment_skips(self):
@@ -104,7 +104,7 @@ class DataOpsQueueDeliveryTest(TestCase):
             with self.assertRaises(RuntimeError):
                 dataops_queue.deliver(self.item, sleep=lambda _s: None)
         self.assertEqual(post.call_count, 1 + len(dataops_queue.RETRY_DELAYS_SECONDS))
-        alert.assert_called_once()
+        self.assertEqual(alert.call_count, 1)
 
     def test_client_error_is_not_retried(self):
         with patch.object(dataops_queue.requests, "post", return_value=MagicMock(status_code=401, text="bad token")) as post, \
@@ -112,4 +112,4 @@ class DataOpsQueueDeliveryTest(TestCase):
             with self.assertRaises(RuntimeError):
                 dataops_queue.deliver(self.item, sleep=lambda _s: None)
         self.assertEqual(post.call_count, 1)
-        alert.assert_called_once()
+        self.assertEqual(alert.call_count, 1)

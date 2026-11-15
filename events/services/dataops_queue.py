@@ -93,9 +93,18 @@ def on_event_saved(event, before, created):
 
 def enqueue_delivery(item):
     try:
-        from jobs.tasks import async_task  # noqa: PLC0415 - jobs imports events
+        from jobs.tasks import async_task, build_task_name  # noqa: PLC0415 - jobs imports events
 
-        async_task("events.services.dataops_queue.deliver", item, max_retries=0)
+        async_task(
+            "events.services.dataops_queue.deliver",
+            item,
+            max_retries=0,
+            task_name=build_task_name(
+                "Post event change to DataOps queue",
+                f"event #{item['payload']['eventId']}",
+                item["kind"],
+            ),
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception("DataOps queue callback could not be enqueued: %s", item["idempotencyKey"])
         alert_failure(item, f"enqueue failed: {type(exc).__name__}: {exc}")

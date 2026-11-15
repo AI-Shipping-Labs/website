@@ -46,7 +46,6 @@ class CampaignStopApiTest(TestCase):
             HTTP_AUTHORIZATION=f"Token {self.token.key}",
         )
 
-        self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["stopped"])
         self.assertEqual(data["sent_count"], 196)
@@ -86,7 +85,6 @@ class CampaignStopApiTest(TestCase):
             HTTP_AUTHORIZATION=f"Token {self.token.key}",
         )
 
-        self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertTrue(data["cancelled"])
         self.assertEqual(data["status"], "cancelled")

@@ -100,9 +100,9 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         # and Relay skips those at preflight; locally verified members must be
         # marked verified at Relay before the campaign is created.
         verify_call = mock_request.call_args_list[3]
-        self.assertTrue(verify_call.args[1].endswith("/api/contacts"))
-        self.assertEqual(verify_call.kwargs["json"]["email"], self.user.email)
-        self.assertIs(verify_call.kwargs["json"]["verified"], True)
+        self.assertTrue(verify_call.args[1].endswith("/api/contacts/imports"))
+        self.assertEqual(verify_call.kwargs["json"]["contacts"][0]["email"], self.user.email)
+        self.assertIs(verify_call.kwargs["json"]["contacts"][0]["verified"], True)
         clear_call = mock_request.call_args_list[1]
         self.assertTrue(clear_call.args[1].endswith("/members/reconcile"))
         self.assertEqual(clear_call.kwargs["json"]["members"], [])

@@ -41,6 +41,7 @@ RELAY_CAMPAIGN_RETRYABLE_GET_STATUSES = frozenset({429, 502, 503, 504})
 RELAY_CAMPAIGN_AUDIENCE = "aisl"
 RELAY_CAMPAIGN_CLIENT = "aisl-website"
 RELAY_CAMPAIGN_MEMBER_BATCH_SIZE = 50
+RELAY_CONTACT_IMPORT_BATCH_SIZE = 200
 RELAY_TEST_CAMPAIGN_MIN_RECIPIENTS = 200
 RELAY_TEST_CAMPAIGN_MAX_RECIPIENTS = 500
 RELAY_TEST_CAMPAIGN_ALLOWED_DOMAINS = frozenset({
@@ -468,22 +469,21 @@ def _confirmed_delivery_ids_for_queued_campaign(key, scope, expected_delivery_id
     return [delivery_id for delivery_id in expected_delivery_ids if str(delivery_id) in matched]
 
 
-def _verify_single_relay_contact(address, scope, *, session=None):
-    """Mark one contact verified at Relay, retrying transient edge/rate blocks."""
+def _import_verified_contact_batch(batch, scope, *, session=None):
+    """Mark up to 200 contacts verified via Relay's bulk import endpoint."""
+    contacts = [
+        {"email": address, "verified": True, "status": "subscribed"}
+        for address in batch
+    ]
     delays = (1, 2, 4)
     for attempt in range(len(delays) + 1):
         try:
-            _campaign_api_request(
+            return _campaign_api_request(
                 "POST",
-                "/api/contacts",
-                payload=scope | {
-                    "email": address,
-                    "verified": True,
-                    "status": "subscribed",
-                },
+                "/api/contacts/imports",
+                payload=scope | {"contacts": contacts},
                 session=session,
             )
-            return True
         except RelayCampaignEdgeBlocked:
             if attempt >= len(delays):
                 raise
@@ -492,36 +492,37 @@ def _verify_single_relay_contact(address, scope, *, session=None):
             if exc.status_code == 429 and attempt < len(delays):
                 time.sleep(delays[attempt])
                 continue
-            if exc.status_code == 403:
-                return False
             raise
-    return False
+    return {}
 
 
 def _mark_campaign_contacts_verified(emails, scope, *, session=None):
-    """Mirror the website's ``email_verified`` flag onto Relay contacts.
+    """Mirror ``email_verified`` onto Relay contacts via bulk import (<=200/call).
 
-    Returns the set of lowercase emails that Relay refused with a JSON 403
-    (suppressed/unsubscribed at Relay) so preflight/queue can account for real
-    suppressions without aborting the whole campaign.
+    Returns the set of lowercase emails that Relay rejected in ``errors`` so
+    preflight/queue can account for real suppressions without tripping WAF
+    rate limits on large campaigns.
     """
     suppressed_emails = set()
     max_suppressed = max(10, len(emails) // 10)
-    for address in emails:
+    for offset in range(0, len(emails), RELAY_CONTACT_IMPORT_BATCH_SIZE):
+        batch = emails[offset:offset + RELAY_CONTACT_IMPORT_BATCH_SIZE]
         try:
-            verified = _verify_single_relay_contact(address, scope, session=session)
+            response = _import_verified_contact_batch(batch, scope, session=session)
         except RelayCampaignError as exc:
             raise RelayCampaignApiError(
                 "Relay could not mark every verified campaign contact verified; "
                 f"nothing was queued. ({exc})"
             ) from exc
-        if not verified:
-            suppressed_emails.add(address.strip().lower())
-            if len(suppressed_emails) > max_suppressed or (emails and len(suppressed_emails) >= len(emails)):
-                raise RelayCampaignApiError(
-                    "Relay could not mark every verified campaign contact verified; "
-                    f"nothing was queued. ({len(suppressed_emails)} contacts rejected with HTTP 403)"
-                )
+        for item in response.get("errors") or []:
+            address = str((item or {}).get("email") or "").strip().lower()
+            if address:
+                suppressed_emails.add(address)
+        if len(suppressed_emails) > max_suppressed or (emails and len(suppressed_emails) >= len(emails)):
+            raise RelayCampaignApiError(
+                "Relay could not mark every verified campaign contact verified; "
+                f"nothing was queued. ({len(suppressed_emails)} contacts rejected)"
+            )
     return suppressed_emails
 
 

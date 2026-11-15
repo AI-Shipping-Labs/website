@@ -76,9 +76,11 @@ class RelayContactVerifyResilienceTests(TestCase):
             _mock_response(404, {}),  # GET /api/campaigns/{key}
             _mock_response(200, {"recipient_list": {}}),  # reconcile
             _mock_response(200, {"recipient_list": {}}),  # bulk-upsert
-            _mock_response(403, html_text="<html>WAF</html>"),  # edge 403 on user1
-            _mock_response(200, {"contact": {}}),  # retry succeeds on user1
-            _mock_response(403, {"error": "Contact is unsubscribed"}),  # JSON 403 on user2
+            _mock_response(403, html_text="<html>WAF</html>"),  # edge 403 on batch
+            _mock_response(200, {
+                "counts": {"total": 2, "updated": 1, "invalid": 1},
+                "errors": [{"index": 1, "email": self.user2.email, "errors": {"status": "suppressed"}}],
+            }),  # bulk import retry succeeds with user2 suppressed
             _mock_response(201, {"campaign": {"status": "draft"}}),  # PUT campaign
             _mock_response(200, {"recipient_count": 1, "skipped_count": 1}),  # recount
             _mock_response(200, {
@@ -144,3 +146,26 @@ class RelayContactVerifyResilienceTests(TestCase):
         self.assertIsNotNone(read)
         self.assertEqual(read.totals["sent_count"], 182)
         self.assertEqual(read.totals["status"], "sent")
+
+    @override_settings(
+        RELAY_BASE_URL="https://relay.test.datatalks.club",
+        RELAY_API_KEY="test-relay-key-123",
+    )
+    @patch("email_app.services.relay_campaigns.requests.Session.request")
+    def test_mark_campaign_contacts_verified_batches_200_per_import_call(self, mock_request):
+        from email_app.services.relay_campaigns import _mark_campaign_contacts_verified
+
+        emails = [f"member-{idx}@example.com" for idx in range(450)]
+        mock_request.return_value = _mock_response(200, {"counts": {"total": 200}, "errors": []})
+
+        suppressed = _mark_campaign_contacts_verified(
+            emails, {"audience": "aisl", "client": "aisl-website"},
+        )
+
+        self.assertEqual(suppressed, set())
+        self.assertEqual(mock_request.call_count, 3)
+        batch_sizes = [
+            len(call.kwargs["json"]["contacts"])
+            for call in mock_request.call_args_list
+        ]
+        self.assertEqual(batch_sizes, [200, 200, 50])

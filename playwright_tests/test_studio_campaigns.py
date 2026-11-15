@@ -486,7 +486,8 @@ def _queue_failed_retry(page, recipients_url):
 
 def _complete_failed_retry(campaign, delivery):
     from email_app.models import EmailCampaign
-    from email_app.tasks.send_campaign import send_campaign_batch
+    from email_app.services.relay_campaign_control import reconcile_native_campaign_deliveries
+    from email_app.tasks.send_campaign import refresh_campaign_status, send_campaign_batch
 
     EmailCampaign.objects.filter(pk=campaign.pk).update(
         status="sending", relay_campaign_state="pending",
@@ -501,6 +502,13 @@ def _complete_failed_retry(campaign, delivery):
         },
     ):
         send_campaign_batch(campaign.pk, [delivery.pk], send_delay=0)
+    campaign.refresh_from_db()
+    with mock.patch(
+        "email_app.services.relay_campaign_control.fetch_relay_recipient_statuses",
+        return_value=({str(delivery.pk)}, set()),
+    ):
+        reconcile_native_campaign_deliveries(campaign)
+    refresh_campaign_status(campaign.pk)
     connection.close()
 
 

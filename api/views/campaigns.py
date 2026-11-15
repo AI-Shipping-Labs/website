@@ -43,6 +43,10 @@ from email_app.services.campaign_recipients import (
     serialize_campaign_recipients,
 )
 from email_app.services.campaign_waves import campaign_wave_summary, refresh_campaign_waves
+from email_app.services.relay_campaign_progress import (
+    RELAY_QUEUE_PENDING_STATES,
+    campaign_relay_keys,
+)
 from email_app.services.relay_campaigns import (
     RelayCampaignError,
     refresh_campaign_relay_stats_loud,
@@ -207,6 +211,20 @@ def campaign_recipient_count(request):
     return JsonResponse({"recipient_count": recount(**audience)})
 
 
+def _relay_stats_status(campaign, relay_stats):
+    if isinstance(relay_stats, dict):
+        return "available"
+    if campaign.status == "sent":
+        return "legacy_unavailable"
+    if (
+        campaign_relay_keys(campaign)
+        and campaign.relay_campaign_state in RELAY_QUEUE_PENDING_STATES
+    ):
+        # Queued in AISHL but Relay has not created the campaign row yet.
+        return "pending"
+    return "not_available"
+
+
 def _serialize_campaign(campaign):
     relay_stats = campaign.relay_campaign_stats
     return {
@@ -229,11 +247,7 @@ def _serialize_campaign(campaign):
         "relay_campaign_progress_at": isoformat_or_none(campaign.relay_campaign_progress_at),
         "relay_campaign_attention_alerted_at": isoformat_or_none(campaign.relay_campaign_attention_alerted_at),
         "relay_stats_available": isinstance(relay_stats, dict),
-        "relay_stats_status": (
-            "available" if isinstance(relay_stats, dict)
-            else "legacy_unavailable" if campaign.status == "sent"
-            else "not_available"
-        ),
+        "relay_stats_status": _relay_stats_status(campaign, relay_stats),
         "relay_stats": relay_stats,
         "relay_stats_synced_at": isoformat_or_none(campaign.relay_campaign_stats_synced_at),
         "scheduled_at": isoformat_or_none(campaign.scheduled_at),

@@ -14,6 +14,10 @@ _AGGREGATE_FIELDS = (
 RELAY_TERMINAL_FAILURE_STATUSES = ("failed", "cancelled")
 # Stored errors in these states explain the state, so a stats read must keep them.
 _ERROR_OWNING_STATES = frozenset({"failed", "timed_out", "relay_failed"})
+# begin_native_queue stores the key (state "pending") before Relay creates the
+# campaign row, so a Relay 404 there means "stats not ready yet", not an outage.
+# "queued" is only set after Relay accepted the submit, so a 404 stays loud.
+RELAY_QUEUE_PENDING_STATES = frozenset({"pending"})
 
 
 @dataclass(frozen=True)
@@ -81,7 +85,11 @@ def read_campaign_relay_progress(campaign, *, session=None):
     previous_sent = stored_relay_sent_total(campaign)
     totals = dict.fromkeys(_AGGREGATE_FIELDS, 0)
     per_key = []
-    allow_missing_key = len(keys) > 1 or campaign.relay_campaign_state in _ERROR_OWNING_STATES
+    allow_missing_key = (
+        len(keys) > 1
+        or campaign.relay_campaign_state in _ERROR_OWNING_STATES
+        or campaign.relay_campaign_state in RELAY_QUEUE_PENDING_STATES
+    )
     for key in keys:
         native = get_native_campaign_stats(
             key, session=session, allow_not_found=allow_missing_key,

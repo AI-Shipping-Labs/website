@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
+from email_app.services.campaign_batch_guard import load_sendable_campaign
 from email_app.services.relay_campaign_progress import (
     campaign_relay_keys,
     mark_native_queue_accepted,
@@ -119,7 +120,7 @@ def resume_campaign_batch(campaign_id: int, delivery_ids: list[int], external_ke
     """Reconcile against prior Relay keys, then queue only unconfirmed pending deliveries."""
     from email_app.tasks.send_campaign import refresh_campaign_status, send_campaign_batch
 
-    campaign = EmailCampaign.objects.get(pk=campaign_id)
+    campaign = load_sendable_campaign(campaign_id)
     confirmed = _confirmed_keys_from_prior_campaigns(campaign, external_key)
     _mark_confirmed_deliveries_sent(campaign, delivery_ids, confirmed)
     remaining_ids = list(

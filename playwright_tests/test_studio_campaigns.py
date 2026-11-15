@@ -505,7 +505,7 @@ def _complete_failed_retry(campaign, delivery):
     campaign.refresh_from_db()
     with mock.patch(
         "email_app.services.relay_campaign_control.fetch_relay_recipient_statuses",
-        return_value=({str(delivery.pk)}, set()),
+        return_value=({str(delivery.pk): "provider-confirmed"}, set()),
     ):
         reconcile_native_campaign_deliveries(campaign)
     refresh_campaign_status(campaign.pk)

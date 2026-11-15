@@ -7,6 +7,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
+from email_app.services.campaign_batch_guard import load_sendable_campaign
 from email_app.services.campaign_pacing import (
     DEFAULT_SEND_DELAY,
     get_campaign_batch_interval_seconds,
@@ -432,10 +433,7 @@ def send_campaign_batch(
     """Process durable deliveries; legacy user-id schedules fail closed."""
     if send_delay is None:
         send_delay = DEFAULT_SEND_DELAY
-    try:
-        campaign = EmailCampaign.objects.get(pk=campaign_id)
-    except EmailCampaign.DoesNotExist as exc:
-        raise ValueError(f'Campaign {campaign_id} not found') from exc
+    campaign = load_sendable_campaign(campaign_id)
 
     if campaign.relay_campaign_state:
         return _queue_native_campaign_batch(

@@ -53,7 +53,7 @@ def stop_native_campaign(external_key: str, *, session=None) -> dict:
     )
 
 
-def _statuses_for_key(key: str, scope: dict, session: requests.Session) -> tuple[set[str], set[str]]:
+def _statuses_for_key(key: str, scope: dict, session: requests.Session) -> tuple[dict[str, str], set[str]]:
     existing = _campaign_api_request(
         "GET",
         f"/api/campaigns/{key}",
@@ -62,23 +62,23 @@ def _statuses_for_key(key: str, scope: dict, session: requests.Session) -> tuple
         allow_not_found=True,
     )
     if not existing or not isinstance(existing.get("campaign"), dict):
-        return set(), set()
+        return {}, set()
     if existing["campaign"].get("status") not in _RECONCILABLE_RELAY_STATUSES:
-        return set(), set()
+        return {}, set()
     rec_resp = _campaign_api_request(
         "GET",
         f"/api/campaigns/{key}/recipients",
         params=scope,
         session=session,
     )
-    sent: set[str] = set()
+    sent: dict[str, str] = {}
     skipped: set[str] = set()
     for row in rec_resp.get("recipients") or []:
         if not isinstance(row, dict) or not row.get("client_recipient_key"):
             continue
         rkey = str(row["client_recipient_key"])
-        if row.get("status") == "sent" or row.get("sent_at"):
-            sent.add(rkey)
+        if row.get("ses_message_id"):
+            sent[rkey] = str(row["ses_message_id"])
         elif row.get("status") == "skipped":
             skipped.add(rkey)
     return sent, skipped
@@ -86,22 +86,22 @@ def _statuses_for_key(key: str, scope: dict, session: requests.Session) -> tuple
 
 def fetch_relay_recipient_statuses(
     campaign: EmailCampaign, *, session=None,
-) -> tuple[set[str], set[str]]:
-    """Return ``(sent_delivery_keys, skipped_delivery_keys)`` across all Relay keys."""
+) -> tuple[dict[str, str], set[str]]:
+    """Return provider IDs by delivery key and skipped keys across Relay waves."""
     scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
     if session is None:
         session = requests.Session()
-    sent_keys: set[str] = set()
+    sent_keys: dict[str, str] = {}
     skipped_keys: set[str] = set()
     for key in campaign_relay_keys(campaign):
         key_sent, key_skipped = _statuses_for_key(key, scope, session)
         sent_keys.update(key_sent)
         skipped_keys.update(key_skipped)
-    skipped_keys -= sent_keys
+    skipped_keys.difference_update(sent_keys)
     return sent_keys, skipped_keys
 
 
-def _mark_delivery_sent(campaign: EmailCampaign, delivery: CampaignDelivery, now) -> None:
+def _mark_delivery_sent(campaign: EmailCampaign, delivery: CampaignDelivery, now, provider_id: str) -> None:
     log, _created = EmailLog.objects.get_or_create(
         campaign=campaign,
         user_id=delivery.recipient_user_pk,
@@ -109,17 +109,21 @@ def _mark_delivery_sent(campaign: EmailCampaign, delivery: CampaignDelivery, now
             "recipient_email": delivery.recipient_email,
             "email_type": "campaign",
             "subject": campaign.subject,
-            "ses_message_id": "",
+            "ses_message_id": provider_id,
         },
     )
+    if log.ses_message_id != provider_id:
+        log.ses_message_id = provider_id
+        log.save(update_fields=["ses_message_id"])
     delivery.state = CampaignDelivery.State.SENT
     delivery.email_log = log
+    delivery.ses_message_id = provider_id
     delivery.resolution = ""
     delivery.resolved_at = None
     if delivery.completed_at is None:
         delivery.completed_at = now
     delivery.save(update_fields=[
-        "state", "email_log", "resolution", "resolved_at", "completed_at", "updated_at",
+        "state", "email_log", "ses_message_id", "resolution", "resolved_at", "completed_at", "updated_at",
     ])
 
 
@@ -136,19 +140,18 @@ def _revert_delivery_to_pending(delivery: CampaignDelivery) -> None:
 def _reconcile_one_delivery(
     campaign: EmailCampaign,
     delivery: CampaignDelivery,
-    sent_keys: set[str],
+    sent_keys: dict[str, str],
     skipped_keys: set[str],
     revert_unconfirmed: bool,
     now,
 ) -> str | None:
     rkey = str(delivery.pk)
     if rkey in sent_keys:
-        if delivery.state != CampaignDelivery.State.SENT or delivery.email_log_id is None:
-            _mark_delivery_sent(campaign, delivery, now)
-            return "sent"
-        return None
+        _mark_delivery_sent(campaign, delivery, now, sent_keys[rkey])
+        return "sent"
     if rkey in skipped_keys:
-        if delivery.state in {CampaignDelivery.State.PENDING, CampaignDelivery.State.DISPATCHING}:
+        if delivery.state == CampaignDelivery.State.PENDING or _is_unconfirmed(delivery):
+            _revert_delivery_to_pending(delivery)
             delivery.state = CampaignDelivery.State.SKIPPED
             delivery.skip_reason = delivery.skip_reason or "skipped_at_relay"
             delivery.completed_at = now
@@ -169,7 +172,7 @@ def reconcile_native_campaign_deliveries(
     now = timezone.now()
     counts = {"sent": 0, "skipped": 0, "reverted": 0}
     with transaction.atomic():
-        deliveries = campaign.deliveries.select_for_update().select_related("email_log")
+        deliveries = campaign.deliveries.select_for_update(of=("self",)).select_related("email_log")
         for delivery in deliveries:
             outcome = _reconcile_one_delivery(
                 campaign, delivery, sent_keys, skipped_keys, revert_unconfirmed, now,
@@ -180,6 +183,8 @@ def reconcile_native_campaign_deliveries(
 
 
 def _is_unconfirmed(delivery: CampaignDelivery) -> bool:
+    if delivery.ses_message_id:
+        return False
     if delivery.state == CampaignDelivery.State.DISPATCHING:
         return True
     if delivery.state == CampaignDelivery.State.SENT:
@@ -259,6 +264,12 @@ def cancel_campaign(campaign_id: int, *, session=None) -> CampaignStopResult:
             "Campaign has already been sent.",
             code="campaign_already_sent",
         )
+    # Commit the local stop before fallible provider calls or reconciliation.
+    # A Relay outage must never leave queued recovery able to send this campaign.
+    campaign.status = "cancelled"
+    campaign.scheduled_at = None
+    campaign.scheduled_timezone = ""
+    campaign.save(update_fields=["status", "scheduled_at", "scheduled_timezone"])
     if session is None:
         session = requests.Session()
     return _halt_and_reconcile(

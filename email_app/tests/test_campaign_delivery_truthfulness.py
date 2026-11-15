@@ -120,7 +120,7 @@ class CampaignDeliveryTruthfulnessTest(TierSetupMixin, TestCase):
             _json_response({"campaign": {"status": "sent"}}),
             _json_response({
                 "recipients": [
-                    {"client_recipient_key": str(d.pk), "status": "sent"}
+                    {"client_recipient_key": str(d.pk), "status": "sent", "ses_message_id": f"provider-{d.pk}"}
                     for d in deliveries
                 ],
             }),
@@ -181,7 +181,7 @@ class CampaignDeliveryTruthfulnessTest(TierSetupMixin, TestCase):
         }
         recipients_payload = {
             "recipients": [
-                {"client_recipient_key": str(deliveries[0].pk), "status": "sent"},
+                {"client_recipient_key": str(deliveries[0].pk), "status": "sent", "ses_message_id": "provider-confirmed"},
                 {"client_recipient_key": str(deliveries[1].pk), "status": "pending"},
                 {"client_recipient_key": str(deliveries[2].pk), "status": "pending"},
             ],
@@ -234,7 +234,7 @@ class CampaignDeliveryTruthfulnessTest(TierSetupMixin, TestCase):
             _json_response({"campaign": {"status": "cancelled"}}),
             _json_response({
                 "recipients": [
-                    {"client_recipient_key": str(deliveries[0].pk), "status": "sent"},
+                    {"client_recipient_key": str(deliveries[0].pk), "status": "sent", "ses_message_id": "provider-confirmed"},
                     {"client_recipient_key": str(deliveries[1].pk), "status": "pending"},
                     {"client_recipient_key": str(deliveries[2].pk), "status": "pending"},
                 ],
@@ -286,7 +286,7 @@ class CampaignDeliveryTruthfulnessTest(TierSetupMixin, TestCase):
         }
         recipients_payload = {
             "recipients": [
-                {"client_recipient_key": str(deliveries[0].pk), "status": "sent"},
+                {"client_recipient_key": str(deliveries[0].pk), "status": "sent", "ses_message_id": "provider-confirmed"},
                 {"client_recipient_key": str(deliveries[1].pk), "status": "pending"},
                 {"client_recipient_key": str(deliveries[2].pk), "status": "pending"},
             ],

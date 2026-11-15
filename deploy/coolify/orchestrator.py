@@ -29,6 +29,7 @@ from .verification import (
     wait_for_consecutive,
     wait_until,
     web_application_ready,
+    web_runtime_drift,
 )
 
 
@@ -250,8 +251,9 @@ class ReleaseDeployer:
         validate_web_application(current, self.config.web_app_uuid)
         current_envs = without_release_identity(current_envs)
         validate_web_environment(current_envs)
-        if web_runtime_fingerprint(current, current_envs) != plan.web_fingerprint:
-            raise ReleaseError("concurrent-web-runtime-edit")
+        drift = web_runtime_drift(plan.web_fingerprint, current, current_envs)
+        if drift:
+            raise ReleaseError(f"concurrent-web-runtime-edit {drift}")
 
     def _wait_for_web_deployment(self, plan, deployment_uuid, timeout, interval):
         def deployment_finished():

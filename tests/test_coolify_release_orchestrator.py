@@ -368,3 +368,69 @@ class WebEnvironmentContractTest(SimpleTestCase):
         next(item for item in wrong_threads if item['key'] == 'GUNICORN_THREADS')['value'] = '8'
         with self.assertRaisesRegex(ReleaseError, 'key=GUNICORN_THREADS'):
             validate_web_environment(wrong_threads)
+
+    def test_concurrent_web_runtime_field_edit_fails_closed_with_field_name(self):
+        coolify = FakeCoolify()
+        original_call = coolify.call
+        app_gets = 0
+
+        def drifting_call(method, path, payload=None):
+            nonlocal app_gets
+            result = original_call(method, path, payload)
+            if method == "GET" and path == f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}":
+                app_gets += 1
+                if app_gets == 2:
+                    result["limits_cpu_shares"] = 2048
+            return result
+
+        coolify.call = drifting_call
+        deployer = ReleaseDeployer(
+            release_config(),
+            coolify,
+            FakeDiagnostics(),
+            lambda _url: SHA,
+        )
+
+        with self.assertRaisesRegex(
+            ReleaseError,
+            r"concurrent-web-runtime-edit fields=limits_cpu_shares\Z",
+        ):
+            deployer.deploy(timeout=1, interval=0.01)
+        self.assertNotIn(
+            ("POST", f"/api/v1/deploy?uuid={EXPECTED_WEB_APP_UUID}&force=true"),
+            coolify.calls,
+        )
+
+    def test_concurrent_web_env_edit_fails_closed_without_leaking_values(self):
+        coolify = FakeCoolify()
+        original_call = coolify.call
+        env_gets = 0
+
+        def drifting_call(method, path, payload=None):
+            nonlocal env_gets
+            result = original_call(method, path, payload)
+            if method == "GET" and path == f"/api/v1/applications/{EXPECTED_WEB_APP_UUID}/envs":
+                env_gets += 1
+                if env_gets == 2:
+                    result.append(
+                        {"key": "EXTRA_SECRET", "value": "super-secret-value", "is_preview": False}
+                    )
+            return result
+
+        coolify.call = drifting_call
+        deployer = ReleaseDeployer(
+            release_config(),
+            coolify,
+            FakeDiagnostics(),
+            lambda _url: SHA,
+        )
+
+        with self.assertRaises(ReleaseError) as ctx:
+            deployer.deploy(timeout=1, interval=0.01)
+        message = str(ctx.exception)
+        self.assertIn("concurrent-web-runtime-edit env_keys=EXTRA_SECRET", message)
+        self.assertNotIn("super-secret-value", message)
+        self.assertNotIn(
+            ("POST", f"/api/v1/deploy?uuid={EXPECTED_WEB_APP_UUID}&force=true"),
+            coolify.calls,
+        )

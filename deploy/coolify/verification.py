@@ -1,10 +1,11 @@
 """Runtime and deployment evidence checks for the split Coolify topology."""
 
+import json
 import re
 import time
 from datetime import datetime, timedelta
 
-from .contracts import EXPECTED_WEB_APP_NAME, REQUIRED_ROLES
+from .contracts import EXPECTED_WEB_APP_NAME, REQUIRED_ROLES, web_runtime_fingerprint
 from .errors import ReleaseError
 
 PENDING_STATUSES = {"queued", "in_progress"}
@@ -213,3 +214,27 @@ def wait_for_consecutive(probe, required, timeout, interval, clock=None, sleeper
         clock,
         sleeper,
     )
+
+
+def web_runtime_drift(expected_fingerprint, current, current_envs):
+    """Return changed web runtime field/env key names without leaking values."""
+    expected_app, expected_envs = expected_fingerprint
+    actual_app, actual_envs = web_runtime_fingerprint(current, current_envs)
+    parts = []
+    changed_fields = []
+    for (field, before), (_, after) in zip(expected_app, actual_app):
+        if before != after:
+            changed_fields.append(field)
+    if changed_fields:
+        parts.append("fields=" + ",".join(changed_fields))
+    if actual_envs != expected_envs:
+        diff_keys = set()
+        for raw in set(expected_envs) ^ set(actual_envs):
+            item = json.loads(raw)
+            if isinstance(item, dict) and item.get("key"):
+                diff_keys.add(str(item["key"]))
+        if diff_keys:
+            parts.append("env_keys=" + ",".join(sorted(diff_keys)))
+        else:
+            parts.append("env_changed=true")
+    return " ".join(parts)

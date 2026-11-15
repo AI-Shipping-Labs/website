@@ -23,6 +23,7 @@ from .source_readiness import (
 )
 from .verification import (
     application_deployment_uuid,
+    describe_web_runtime_edit,
     diagnostics_cutoff,
     exact_deployment_finished,
     service_request_accepted,
@@ -250,8 +251,11 @@ class ReleaseDeployer:
         validate_web_application(current, self.config.web_app_uuid)
         current_envs = without_release_identity(current_envs)
         validate_web_environment(current_envs)
-        if web_runtime_fingerprint(current, current_envs) != plan.web_fingerprint:
-            raise ReleaseError("concurrent-web-runtime-edit")
+        actual_fingerprint = web_runtime_fingerprint(current, current_envs)
+        if actual_fingerprint != plan.web_fingerprint:
+            raise ReleaseError(
+                describe_web_runtime_edit(plan.web_fingerprint, actual_fingerprint)
+            )
 
     def _wait_for_web_deployment(self, plan, deployment_uuid, timeout, interval):
         def deployment_finished():

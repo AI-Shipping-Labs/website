@@ -54,6 +54,7 @@ from api.views.campaign_scheduling import (
     campaign_test_send,
     campaign_unschedule,
 )
+from api.views.campaign_stop import campaign_stop
 from api.views.campaign_verify import (
     campaign_deleted_users,
     campaign_unverified_deletion,
@@ -569,6 +570,11 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/resume",
         campaign_resume,
         name="api_campaign_resume",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/stop",
+        campaign_stop,
+        name="api_campaign_stop",
     ),
     path(
         "campaigns/<int:campaign_id>/test-send",

@@ -883,13 +883,11 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
     @patch('email_app.tasks.send_campaign.queue_native_campaign')
     def test_full_pipeline_queues_one_native_campaign_and_completes(self, mock_queue):
         """All snapshotted recipients reach Relay in one native campaign call."""
-        users = [
+        for i in range(7):
             create_user_with_membership(
                 email=f'eu{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
-            for i in range(7)
-        ]
         campaign = EmailCampaign.objects.create(
             subject='Pipeline', body='Hi', target_min_level=0,
             status='draft',
@@ -937,17 +935,12 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
         self.assertEqual(set(queued_delivery_ids), set(delivery_ids))
 
         campaign.refresh_from_db()
-        self.assertEqual(campaign.status, 'sent')
-        self.assertEqual(campaign.sent_count, 7)
-        self.assertIsNotNone(campaign.sent_at)
-        # Every user has exactly one EmailLog.
-        for user in users:
-            self.assertEqual(
-                EmailLog.objects.filter(
-                    campaign=campaign, user=user,
-                ).count(),
-                1,
-            )
+        self.assertEqual(campaign.status, 'sending')
+        self.assertEqual(campaign.sent_count, 0)
+        self.assertEqual(
+            campaign.deliveries.filter(state='dispatching').count(), 7,
+        )
+        self.assertIsNone(campaign.sent_at)
 
 
 class CampaignAdminTest(TierSetupMixin, TestCase):
@@ -1105,13 +1098,13 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
         self.assertEqual(mock_queue.call_count, 1)
 
         campaign.refresh_from_db()
-        self.assertEqual(campaign.sent_count, 3)
-        self.assertEqual(campaign.status, 'sent')
+        self.assertEqual(campaign.sent_count, 0)
+        self.assertEqual(campaign.status, 'sending')
 
-        logs = EmailLog.objects.filter(campaign=campaign)
-        self.assertEqual(logs.count(), 3)
+        dispatching = campaign.deliveries.filter(state='dispatching')
+        self.assertEqual(dispatching.count(), 3)
 
-        recipient_emails = set(logs.values_list('user__email', flat=True))
+        recipient_emails = set(dispatching.values_list('recipient_email', flat=True))
         self.assertIn('main-eligible-1@test.com', recipient_emails)
         self.assertIn('main-eligible-2@test.com', recipient_emails)
         self.assertIn('premium-eligible@test.com', recipient_emails)

@@ -516,6 +516,10 @@ SITE_NAME = 'AI Shipping Labs'
 # that needs the freshest DB-overridden value already calls
 # ``site_base_url()``.
 SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
+
+# AISL -> DataOps ad-hoc queue callback (events/services/dataops_queue.py).
+DATAOPS_QUEUE_URL = os.environ.get('DATAOPS_QUEUE_URL', '')
+DATAOPS_QUEUE_TOKEN = os.environ.get('DATAOPS_QUEUE_TOKEN', '')
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 
 # Stripe payment links

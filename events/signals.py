@@ -13,6 +13,7 @@ from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from events.models import Event
+from events.services import dataops_queue
 from events.services.event_recap_notification import (
     is_recap_ready,
     maybe_enqueue_recap_auto_notify,
@@ -47,3 +48,26 @@ def queue_recap_auto_notify(sender, instance, created, raw=False, **kwargs):
     except KeyError:
         pass
     maybe_enqueue_recap_auto_notify(instance, was_ready=was_ready)
+
+
+_DATAOPS_BEFORE_ATTR = "_dataops_queue_before"
+
+
+@receiver(pre_save, sender=Event)
+def remember_dataops_snapshot(sender, instance, raw=False, **kwargs):
+    """Record the tracked fields before the save so post_save can diff them."""
+    if raw or instance.pk is None:
+        return
+    try:
+        stored = Event.objects.filter(pk=instance.pk).first()
+        instance.__dict__[_DATAOPS_BEFORE_ATTR] = dataops_queue.snapshot(stored) if stored else None
+    except Exception:  # noqa: BLE001 - never block the save
+        instance.__dict__[_DATAOPS_BEFORE_ATTR] = None
+
+
+@receiver(post_save, sender=Event)
+def post_event_change_to_dataops(sender, instance, created, raw=False, **kwargs):
+    if raw:
+        return
+    before = instance.__dict__.pop(_DATAOPS_BEFORE_ATTR, None)
+    dataops_queue.on_event_saved(instance, before, created)

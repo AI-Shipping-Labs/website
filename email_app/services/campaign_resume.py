@@ -48,6 +48,18 @@ def _next_resume_key(campaign: EmailCampaign) -> str:
     return f"{base}-resume-{index}"
 
 
+_CONFIRMED_SENT_STATUSES = frozenset({"sent", "delivered", "bounced", "complained", "unsubscribed"})
+
+
+def _is_confirmed_sent_recipient(row: object) -> bool:
+    """Return True only when Relay confirms the recipient was actually sent."""
+    if not isinstance(row, dict) or not row.get("client_recipient_key"):
+        return False
+    if row.get("ses_message_id"):
+        return True
+    return row.get("status") in _CONFIRMED_SENT_STATUSES
+
+
 def _confirmed_keys_for_relay_key(key: str, scope: dict, session: requests.Session) -> set[str]:
     existing = _campaign_api_request(
         "GET",
@@ -68,11 +80,7 @@ def _confirmed_keys_for_relay_key(key: str, scope: dict, session: requests.Sessi
     )
     confirmed: set[str] = set()
     for row in rec_resp.get("recipients") or []:
-        if (
-            isinstance(row, dict)
-            and row.get("client_recipient_key")
-            and row.get("status") not in {"skipped", "failed", "cancelled"}
-        ):
+        if _is_confirmed_sent_recipient(row):
             confirmed.add(str(row["client_recipient_key"]))
     return confirmed
 

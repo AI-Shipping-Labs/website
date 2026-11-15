@@ -197,33 +197,70 @@ def _halt_active_relay_keys(keys: list[str], *, session: requests.Session) -> li
     return stopped_keys
 
 
-def stop_campaign(campaign_id: int, *, session=None) -> CampaignStopResult:
-    """Stop active Relay waves for a campaign and reconcile local deliveries."""
-    campaign = EmailCampaign.objects.get(pk=campaign_id)
+def _halt_and_reconcile(
+    campaign: EmailCampaign, *, target_status: str, label: str, session: requests.Session,
+) -> CampaignStopResult:
     keys = campaign_relay_keys(campaign)
-    if not keys:
-        raise CampaignStopConflict(
-            "Campaign has no Relay campaign key to stop.",
-            code="campaign_no_relay_key",
+    stopped_keys: list[str] = []
+    if keys:
+        stopped_keys = _halt_active_relay_keys(keys, session=session)
+        read_campaign_relay_progress(campaign, session=session)
+        reconcile_native_campaign_deliveries(
+            campaign, revert_unconfirmed=True, session=session,
         )
-    if session is None:
-        session = requests.Session()
-    stopped_keys = _halt_active_relay_keys(keys, session=session)
-    read_campaign_relay_progress(campaign, session=session)
-    reconcile_native_campaign_deliveries(
-        campaign, revert_unconfirmed=True, session=session,
-    )
-    campaign.refresh_from_db()
-    message = f"Stopped via AISHL ({', '.join(stopped_keys)})." if stopped_keys else "Stopped via AISHL."
-    campaign.status = "paused"
-    campaign.relay_campaign_state = "cancelled"
+        campaign.refresh_from_db()
+        campaign.relay_campaign_state = "cancelled"
+    if stopped_keys:
+        message = f"{label} via AISHL ({', '.join(stopped_keys)})."
+    else:
+        message = f"{label} via AISHL."
+    campaign.status = target_status
     campaign.relay_campaign_error = message
     campaign.sent_at = None
-    campaign.save(update_fields=["status", "relay_campaign_state", "relay_campaign_error", "sent_at"])
+    campaign.scheduled_at = None
+    campaign.scheduled_timezone = ""
+    campaign.save(update_fields=[
+        "status",
+        "relay_campaign_state",
+        "relay_campaign_error",
+        "sent_at",
+        "scheduled_at",
+        "scheduled_timezone",
+    ])
     pending_count = campaign.deliveries.filter(state=CampaignDelivery.State.PENDING).count()
     return CampaignStopResult(
         campaign=campaign,
         stopped_keys=tuple(stopped_keys),
         sent_count=campaign.sent_count,
         pending_count=pending_count,
+    )
+
+
+def stop_campaign(campaign_id: int, *, session=None) -> CampaignStopResult:
+    """Stop active Relay waves for a campaign and reconcile local deliveries."""
+    campaign = EmailCampaign.objects.get(pk=campaign_id)
+    if not campaign_relay_keys(campaign):
+        raise CampaignStopConflict(
+            "Campaign has no Relay campaign key to stop.",
+            code="campaign_no_relay_key",
+        )
+    if session is None:
+        session = requests.Session()
+    return _halt_and_reconcile(
+        campaign, target_status="paused", label="Stopped", session=session,
+    )
+
+
+def cancel_campaign(campaign_id: int, *, session=None) -> CampaignStopResult:
+    """Permanently cancel a campaign and halt any active Relay waves."""
+    campaign = EmailCampaign.objects.get(pk=campaign_id)
+    if campaign.status == "sent":
+        raise CampaignStopConflict(
+            "Campaign has already been sent.",
+            code="campaign_already_sent",
+        )
+    if session is None:
+        session = requests.Session()
+    return _halt_and_reconcile(
+        campaign, target_status="cancelled", label="Cancelled", session=session,
     )

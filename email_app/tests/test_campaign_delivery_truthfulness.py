@@ -249,3 +249,72 @@ class CampaignDeliveryTruthfulnessTest(TierSetupMixin, TestCase):
             mock_async.call_args.args[2],
             [deliveries[1].pk, deliveries[2].pk],
         )
+
+    @patch("email_app.services.relay_campaign_control.requests.Session.request")
+    def test_cancel_campaign_halts_relay_and_blocks_recovery_and_resume(self, mock_request):
+        from email_app.services.campaign_resume import CampaignResumeConflict
+        from email_app.services.relay_campaign_control import cancel_campaign
+        from email_app.tasks.campaign_delivery_recovery import recover_campaign_deliveries
+        from email_app.tasks.send_campaign import refresh_campaign_status
+
+        campaign, deliveries = self._make_campaign(
+            status="needs_attention", relay_state="timed_out",
+        )
+        key = f"aishl-campaign-{campaign.pk}"
+        campaign.relay_campaign_key = key
+        campaign.relay_campaign_keys = [key]
+        campaign.save(update_fields=["relay_campaign_key", "relay_campaign_keys"])
+        campaign.deliveries.update(state=CampaignDelivery.State.SENT)
+
+        sending_payload = {
+            "campaign": {
+                "external_key": key,
+                "status": "sending",
+                "sent_count": 1,
+                "delivered_count": 1,
+                "unique_open_count": 0,
+                "open_count": 0,
+                "unique_click_count": 0,
+                "click_count": 0,
+                "unsubscribe_count": 0,
+                "bounce_count": 0,
+                "complaint_count": 0,
+            },
+        }
+        cancelled_payload = {
+            "campaign": dict(sending_payload["campaign"], status="cancelled"),
+        }
+        recipients_payload = {
+            "recipients": [
+                {"client_recipient_key": str(deliveries[0].pk), "status": "sent"},
+                {"client_recipient_key": str(deliveries[1].pk), "status": "pending"},
+                {"client_recipient_key": str(deliveries[2].pk), "status": "pending"},
+            ],
+        }
+        mock_request.side_effect = [
+            _json_response(sending_payload),
+            _json_response(cancelled_payload),
+            _json_response(cancelled_payload),
+            _json_response({"campaign": {"status": "cancelled"}}),
+            _json_response(recipients_payload),
+        ]
+
+        result = cancel_campaign(campaign.pk)
+
+        self.assertEqual(result.stopped_keys, (key,))
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(result.pending_count, 2)
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, "cancelled")
+        self.assertEqual(campaign.relay_campaign_state, "cancelled")
+
+        refresh_campaign_status(campaign.pk)
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, "cancelled")
+
+        recovery = recover_campaign_deliveries()
+        self.assertEqual(recovery["requeued_batches"], 0)
+
+        with self.assertRaises(CampaignResumeConflict) as ctx:
+            resume_pending_campaign(campaign.pk)
+        self.assertEqual(ctx.exception.code, "campaign_cancelled")

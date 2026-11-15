@@ -150,6 +150,11 @@ def resume_campaign_batch(campaign_id: int, delivery_ids: list[int], external_ke
 
 
 def _validate_resumable_campaign(campaign: EmailCampaign) -> list[int]:
+    if campaign.status == "cancelled":
+        raise CampaignResumeConflict(
+            "Campaign has been cancelled.",
+            code="campaign_cancelled",
+        )
     if campaign.status == "draft":
         raise CampaignResumeConflict(
             "Campaign is still a draft; use send instead.",

@@ -22,3 +22,18 @@ def campaigns_stop(campaign_id, yes, fmt):
             abort=True,
         )
     emit(client.post(f"{API}/campaigns/{campaign_id}/stop", json_body={}), fmt)
+
+
+@click.command("cancel")
+@click.argument("campaign_id", type=int)
+@click.option("--yes", is_flag=True, help="Confirm cancelling the campaign without prompting.")
+@format_option
+def campaigns_cancel(campaign_id, yes, fmt):
+    """Permanently cancel a campaign and halt any active Relay waves."""
+    client = get_client()
+    if not yes:
+        click.confirm(
+            f"Permanently cancel campaign {campaign_id} and halt active Relay waves?",
+            abort=True,
+        )
+    emit(client.post(f"{API}/campaigns/{campaign_id}/cancel", json_body={}), fmt)

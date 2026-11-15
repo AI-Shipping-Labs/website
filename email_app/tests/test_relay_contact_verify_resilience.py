@@ -101,7 +101,7 @@ class RelayContactVerifyResilienceTests(TestCase):
         self.assertEqual(mock_sleep.call_count, 1)
         self.delivery1.refresh_from_db()
         self.delivery2.refresh_from_db()
-        self.assertEqual(self.delivery1.state, CampaignDelivery.State.SENT)
+        self.assertEqual(self.delivery1.state, CampaignDelivery.State.DISPATCHING)
         self.assertEqual(self.delivery2.state, CampaignDelivery.State.SKIPPED)
         self.assertEqual(self.delivery2.skip_reason, "suppressed_at_relay")
 

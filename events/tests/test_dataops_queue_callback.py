@@ -113,3 +113,12 @@ class DataOpsQueueDeliveryTest(TestCase):
                 dataops_queue.deliver(self.item, sleep=lambda _s: None)
         self.assertEqual(post.call_count, 1)
         self.assertEqual(alert.call_count, 1)
+
+
+class DataOpsQueueSettingsTest(TestCase):
+    def test_isolated_dev_runtime_never_posts_to_production_queue(self):
+        from website.settings import _dataops_queue_setting
+
+        env = {"DATAOPS_QUEUE_URL": "https://dataops.test/api/v1/queue/items"}
+        self.assertEqual(_dataops_queue_setting("DATAOPS_QUEUE_URL", env), env["DATAOPS_QUEUE_URL"])
+        self.assertEqual(_dataops_queue_setting("DATAOPS_QUEUE_URL", {**env, "AISL_DATABASE_NAME": "aisl_dev"}), "")

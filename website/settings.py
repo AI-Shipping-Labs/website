@@ -517,9 +517,23 @@ SITE_NAME = 'AI Shipping Labs'
 # ``site_base_url()``.
 SITE_BASE_URL = os.environ.get('SITE_BASE_URL', 'https://aishippinglabs.com')
 
-# AISL -> DataOps ad-hoc queue callback (events/services/dataops_queue.py).
-DATAOPS_QUEUE_URL = os.environ.get('DATAOPS_QUEUE_URL', '')
-DATAOPS_QUEUE_TOKEN = os.environ.get('DATAOPS_QUEUE_TOKEN', '')
+
+
+def _dataops_queue_setting(name, environ=None):
+    """AISL -> DataOps ad-hoc queue callback (events/services/dataops_queue.py).
+
+    The isolated dev web runtime (``AISL_DATABASE_NAME=aisl_dev``) shares the
+    service env but has no django-q worker and holds non-production events,
+    so it never posts to the production DataOps queue.
+    """
+    environ = os.environ if environ is None else environ
+    if environ.get('AISL_DATABASE_NAME', '').strip():
+        return ''
+    return environ.get(name, '')
+
+
+DATAOPS_QUEUE_URL = _dataops_queue_setting('DATAOPS_QUEUE_URL')
+DATAOPS_QUEUE_TOKEN = _dataops_queue_setting('DATAOPS_QUEUE_TOKEN')
 SITE_DESCRIPTION = 'An invite-only community for action-oriented builders who want to turn AI ideas into real projects.'
 
 # Stripe payment links

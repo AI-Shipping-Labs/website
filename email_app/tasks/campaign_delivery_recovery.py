@@ -10,6 +10,7 @@ from django.utils import timezone
 from django_q.models import OrmQ, Schedule
 
 from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.services.relay_campaign_progress import campaign_relay_keys
 from email_app.tasks.send_campaign import (
     _append_diagnostic,
     _chunk,
@@ -24,6 +25,8 @@ from jobs.tasks import build_task_name
 logger = logging.getLogger(__name__)
 
 BATCH_FUNC = 'email_app.tasks.send_campaign.send_campaign_batch'
+RESUME_BATCH_FUNC = 'email_app.services.campaign_resume.resume_campaign_batch'
+BATCH_FUNCS = (BATCH_FUNC, RESUME_BATCH_FUNC)
 
 
 def _parse_kwargs(raw):
@@ -36,6 +39,20 @@ def _parse_kwargs(raw):
     except (ValueError, SyntaxError, TypeError):
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _parse_args(raw):
+    if isinstance(raw, (list, tuple)):
+        return list(raw)
+    if not raw:
+        return []
+    try:
+        parsed = ast.literal_eval(raw)
+    except (ValueError, SyntaxError, TypeError):
+        return []
+    if isinstance(parsed, (list, tuple)):
+        return list(parsed)
+    return []
 
 
 def _delivery_ids_from_kwargs(kwargs):
@@ -51,18 +68,36 @@ def _delivery_ids_from_kwargs(kwargs):
     return parsed
 
 
+def _delivery_ids_from_task(kwargs, args):
+    if isinstance(kwargs, dict) and kwargs.get('delivery_ids') is not None:
+        return _delivery_ids_from_kwargs(kwargs)
+    if isinstance(args, (list, tuple)) and len(args) > 1:
+        return _delivery_ids_from_kwargs({'delivery_ids': args[1]})
+    return []
+
+
 def live_batch_delivery_ids():
-    """Return delivery IDs already covered by a live batch schedule or queue."""
+    """Return delivery IDs already covered by a live batch or resume task."""
     covered = set()
-    for sched in Schedule.objects.filter(func=BATCH_FUNC).exclude(repeats=0):
-        covered.update(_delivery_ids_from_kwargs(_parse_kwargs(sched.kwargs)))
+    for sched in Schedule.objects.filter(func__in=BATCH_FUNCS).exclude(repeats=0):
+        covered.update(
+            _delivery_ids_from_task(
+                _parse_kwargs(sched.kwargs),
+                _parse_args(sched.args),
+            )
+        )
     for row in OrmQ.objects.iterator():
         task = row.task
         if not isinstance(task, dict):
             continue
-        if task.get('func') != BATCH_FUNC:
+        if task.get('func') not in BATCH_FUNCS:
             continue
-        covered.update(_delivery_ids_from_kwargs(task.get('kwargs') or {}))
+        covered.update(
+            _delivery_ids_from_task(
+                task.get('kwargs') or {},
+                task.get('args') or [],
+            )
+        )
     return covered
 
 
@@ -106,6 +141,8 @@ def _enqueue_delivery_chunks(campaign, delivery_ids, covered):
 
 def _reset_failed_for_automatic_retry(delivery, *, max_attempts):
     if delivery.campaign.status in ('paused', 'cancelled'):
+        return False
+    if delivery.campaign.relay_campaign_state and campaign_relay_keys(delivery.campaign):
         return False
     if delivery.state != CampaignDelivery.State.FAILED:
         return False
@@ -163,6 +200,10 @@ def recover_campaign_deliveries():
         if campaign.status in ('paused', 'cancelled'):
             continue
         if campaign.status == 'needs_attention' and campaign.relay_campaign_state:
+            continue
+        if campaign.relay_campaign_state and campaign_relay_keys(campaign):
+            # Native Relay campaigns with an existing Relay key must be resumed
+            # explicitly via resume_pending_campaign, never re-queued to the base key.
             continue
         created = _enqueue_delivery_chunks(campaign, delivery_ids, covered)
         if created:

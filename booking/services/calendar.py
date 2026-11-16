@@ -159,6 +159,19 @@ def create_calendar_event(
         return {}
 
 
+def _format_event_datetime(dt: datetime, time_zone: str | None = None) -> dict:
+    """Format a datetime for Google Calendar start/end payloads."""
+    aware = _ensure_utc(dt)
+    if time_zone:
+        try:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+            tz = ZoneInfo(time_zone)
+            return {"dateTime": aware.astimezone(tz).isoformat(), "timeZone": time_zone}
+        except (ZoneInfoNotFoundError, KeyError, ValueError):
+            pass
+    return {"dateTime": aware.isoformat()}
+
+
 def update_calendar_event(
     event_id: str,
     *,
@@ -168,17 +181,17 @@ def update_calendar_event(
     description: str | None = None,
     location: str | None = None,
     calendar_id: str | None = None,
+    time_zone: str | None = None,
+    send_updates: str = "all",
 ) -> dict:
     """Update event start/end times and optional metadata on Google Calendar."""
     if not event_id:
         return {}
     cal_id = calendar_id or get_selected_calendar_id()
-    start_utc = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
-    end_utc = end if end.tzinfo else end.replace(tzinfo=timezone.utc)
 
     payload: dict = {
-        "start": {"dateTime": start_utc.isoformat()},
-        "end": {"dateTime": end_utc.isoformat()},
+        "start": _format_event_datetime(start, time_zone),
+        "end": _format_event_datetime(end, time_zone),
     }
     if summary is not None:
         payload["summary"] = summary
@@ -191,7 +204,10 @@ def update_calendar_event(
     quoted_event = urllib.parse.quote(event_id, safe="")
     try:
         return _google_request(
-            "PATCH", f"/calendars/{quoted_cal}/events/{quoted_event}", payload=payload, params={"sendUpdates": "all"}
+            "PATCH",
+            f"/calendars/{quoted_cal}/events/{quoted_event}",
+            payload=payload,
+            params={"sendUpdates": send_updates},
         )
     except CalendarError as exc:
         logger.error("Failed to update Google Calendar event %s: %s", event_id, exc)

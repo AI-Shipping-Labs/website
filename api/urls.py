@@ -120,6 +120,7 @@ from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
 )
+from api.views.event_calendar_sync import event_sync_calendar
 from api.views.event_guest_invitations import (
     event_by_id,
     event_guest_invitation_detail,
@@ -676,6 +677,11 @@ urlpatterns = [
         "events/<slug:slug>/sync-zoom",
         event_sync_zoom,
         name="api_event_sync_zoom",
+    ),
+    path(
+        "events/<slug:slug>/sync-calendar",
+        event_sync_calendar,
+        name="api_event_sync_calendar",
     ),
     path(
         "events/<slug:slug>/retry-recording-upload",

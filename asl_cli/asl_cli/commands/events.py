@@ -373,6 +373,14 @@ def events_sync_zoom(slug, fmt):
     emit(get_client().post(f"{API}/events/{slug}/sync-zoom"), fmt)
 
 
+@events.command("sync-calendar")
+@click.argument("slug")
+@format_option
+def events_sync_calendar(slug, fmt):
+    """Force-sync stored event schedule to Google Calendar."""
+    emit(get_client().post(f"{API}/events/{slug}/sync-calendar"), fmt)
+
+
 @events.command("promote-registrations")
 @click.argument("slug")
 @format_option

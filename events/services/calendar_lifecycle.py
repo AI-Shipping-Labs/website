@@ -58,6 +58,9 @@ def enqueue_schedule_update(event, old_start, old_end=None):
         from events.tasks.notify_series_invite import enqueue_series_update
         enqueue_series_update(event.pk, old_start_iso=old_start.isoformat())
 
+    from events.services.google_calendar import sync_event_google_calendar
+    sync_event_google_calendar(event, send_updates="none")
+
     return count
 
 

@@ -10214,6 +10214,47 @@
         ]
       }
     },
+    "/api/events/{slug}/sync-calendar": {
+      "post": {
+        "description": "PATCHes the Google Calendar invite derived from the event's immutable calendar_uid with the event's current start/end datetimes and timezone using sendUpdates=none. Does not save the event or send attendee reschedule emails.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "calendar_sync_status": "synced",
+                  "google_event_id": "_clr6arjk5l..."
+                }
+              }
+            },
+            "description": "Google Calendar sync attempted."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "description": "Event not found."
+          },
+          "422": {
+            "description": "Cancelled or unscheduled event."
+          }
+        },
+        "summary": "Force-sync an event's Google Calendar invite",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}/sync-transcript": {
       "post": {
         "description": "Operator recovery path for the transcript pipeline (issue #1597). Re-lists the meeting's recordings via the Zoom API to pick up a transcript VTT (and MP4 download URL) the webhook missed, then re-enqueues the transcript task, which archives the raw VTT, stores transcript_text and transcript_s3_url, and chains the LLM recap draft (written to recap_notes only when recap_notes is empty). This endpoint is never gated by RECORDING_TRANSCRIPT_INGEST_ENABLED \u2014 it exists so a transcript can be backfilled by hand with automation off. Optional body {\"redraft\": true} regenerates the recap draft even when recap_notes is non-empty (explicit opt-in; 422 llm_not_configured when the LLM provider is missing). Allowed for synced GitHub events: the transcript and recap draft are operational state, not content owned by the source repo.",

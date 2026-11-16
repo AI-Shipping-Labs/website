@@ -3,8 +3,11 @@
 - ``GET /api/courses/<slug>/announcements`` — list, newest first.
 - ``POST /api/courses/<slug>/announcements`` — create (draft default).
 - ``GET /api/courses/<slug>/announcements/<id>`` — detail.
-- ``PATCH /api/courses/<slug>/announcements/<id>`` — update title/body/status.
-Unpublished courses are addressable by slug. DELETE is not available.
+- ``PATCH /api/courses/<slug>/announcements/<id>`` — update title/body/status
+  and, while the announcement is a draft, its cohort.
+Every announcement targets one cohort: only that cohort's members see it and
+only its active enrollments get the first-publish email. Unpublished courses
+are addressable by slug. DELETE is not available.
 """
 
 from django.http import JsonResponse
@@ -22,10 +25,12 @@ from api.utils import (
     validation_response,
 )
 from content.models import Course
+from content.models.cohort import Cohort
 from content.models.course_announcement import CourseAnnouncement
 from content.services.course_announcements import save_announcement
+from content.services.course_cohorts import get_course_cohort_by_key
 
-_WRITABLE_FIELDS = ('title', 'body', 'status')
+_WRITABLE_FIELDS = ('title', 'body', 'status', 'cohort', 'cohort_id')
 _STATUSES = frozenset({
     CourseAnnouncement.STATUS_DRAFT,
     CourseAnnouncement.STATUS_PUBLISHED,
@@ -34,6 +39,7 @@ _STATUSES = frozenset({
 _ANNOUNCEMENT_EXAMPLE = {
     'id': 12,
     'course': 'ai-dev-tools',
+    'cohort': {'id': 7, 'external_key': '4', 'name': 'Cohort 4'},
     'title': 'Week 2 office hours moved',
     'body': '**Tomorrow** we meet at 18:00 CET.',
     'author_email': 'admin@test.com',
@@ -78,6 +84,56 @@ def _parse_status(raw, *, required=False):
             message='status must be draft or published',
         )
     return raw, None
+
+
+def _unknown_cohort_response(field, raw, course):
+    return validation_response(
+        {'field': field, 'value': raw},
+        message=f'Unknown cohort {raw!r} for course {course.slug!r}',
+    )
+
+
+def _parse_cohort(course, data, *, required):
+    """Resolve ``cohort`` (external key) or ``cohort_id`` within ``course``.
+
+    Returns ``(cohort, error_response)``; ``(None, None)`` when neither key
+    was sent and the cohort is not required.
+    """
+    has_key = 'cohort' in data
+    has_id = 'cohort_id' in data
+    if has_key and has_id:
+        return None, validation_response(
+            {'field': 'cohort', 'expected': 'cohort or cohort_id, not both'},
+            message='Send either cohort or cohort_id, not both',
+        )
+    if not has_key and not has_id:
+        if required:
+            return None, validation_response(
+                {'field': 'cohort', 'expected': 'cohort external key'},
+                message='cohort is required',
+            )
+        return None, None
+    if has_key:
+        raw = data['cohort']
+        if not isinstance(raw, str) or not raw.strip():
+            return None, validation_response(
+                {'field': 'cohort', 'expected': 'cohort external key'},
+                message='cohort must be a cohort external key',
+            )
+        cohort = get_course_cohort_by_key(course, raw)
+        if cohort is None:
+            return None, _unknown_cohort_response('cohort', raw, course)
+        return cohort, None
+    raw = data['cohort_id']
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None, validation_response(
+            {'field': 'cohort_id', 'expected': 'integer'},
+            message='cohort_id must be an integer',
+        )
+    cohort = Cohort.objects.filter(pk=raw, course=course).first()
+    if cohort is None:
+        return None, _unknown_cohort_response('cohort_id', raw, course)
+    return cohort, None
 
 
 def _parse_title(raw, *, required=True):
@@ -134,7 +190,8 @@ def _parse_body(raw, *, required=True):
             "summary": "List course announcements (staff-only)",
             "description": (
                 "Announcements for this course (any course status), newest "
-                "first. Optional ``status=draft|published`` filters the list."
+                "first. Optional ``status=draft|published`` filters the list; "
+                "optional ``cohort=<external key>`` keeps one cohort's rows."
             ),
             "query": {
                 "status": {
@@ -142,6 +199,11 @@ def _parse_body(raw, *, required=True):
                     "enum": ["draft", "published"],
                     "required": False,
                     "description": "Filter by announcement status.",
+                },
+                "cohort": {
+                    "type": "string",
+                    "required": False,
+                    "description": "Filter by cohort external key.",
                 },
             },
             "responses": {
@@ -161,14 +223,28 @@ def _parse_body(raw, *, required=True):
         "POST": {
             "summary": "Create a course announcement (staff-only)",
             "description": (
-                "Body: ``title``, ``body``, optional ``status`` "
-                "(``draft`` default). ``status=published`` uses the same "
-                "first-publish email path as Studio."
+                "Body: ``title``, ``body``, the target cohort as ``cohort`` "
+                "(its external key, the ``?cohort=`` value) or ``cohort_id``, "
+                "and optional ``status`` (``draft`` default). Only members "
+                "of that cohort see the announcement. ``status=published`` "
+                "uses the same first-publish email path as Studio: it emails "
+                "only the cohort's active enrollments."
             ),
             "request_body": {
                 "properties": {
                     "title": {"type": "string"},
                     "body": {"type": "string"},
+                    "cohort": {
+                        "type": "string",
+                        "description": (
+                            "Cohort external key. Required unless "
+                            "cohort_id is sent."
+                        ),
+                    },
+                    "cohort_id": {
+                        "type": "integer",
+                        "description": "Cohort id, instead of cohort.",
+                    },
                     "status": {
                         "type": "string",
                         "enum": ["draft", "published"],
@@ -177,7 +253,8 @@ def _parse_body(raw, *, required=True):
                 "example": {
                     "title": "Week 2 office hours moved",
                     "body": "**Tomorrow** we meet at 18:00 CET.",
-                    "status": "published",
+                    "cohort": "4",
+                    "status": "draft",
                 },
             },
             "responses": {
@@ -218,7 +295,7 @@ def course_announcements_collection(request, slug):
         rows = (
             CourseAnnouncement.objects
             .filter(course=course)
-            .select_related('course', 'author')
+            .select_related('course', 'author', 'cohort')
             .order_by('-published_at', '-created_at')
         )
         status = request.GET.get('status')
@@ -229,6 +306,12 @@ def course_announcements_collection(request, slug):
                     message='status must be draft or published',
                 )
             rows = rows.filter(status=status)
+        cohort_key = request.GET.get('cohort')
+        if cohort_key:
+            cohort = get_course_cohort_by_key(course, cohort_key)
+            if cohort is None:
+                return _unknown_cohort_response('cohort', cohort_key, course)
+            rows = rows.filter(cohort=cohort)
         return JsonResponse({
             'announcements': [
                 serialize_course_announcement(row) for row in rows
@@ -255,6 +338,9 @@ def course_announcements_collection(request, slug):
     status, status_error = _parse_status(data.get('status'))
     if status_error is not None:
         return status_error
+    cohort, cohort_error = _parse_cohort(course, data, required=True)
+    if cohort_error is not None:
+        return cohort_error
     announcement = CourseAnnouncement(course=course)
     save_announcement(
         announcement,
@@ -262,6 +348,7 @@ def course_announcements_collection(request, slug):
         body=body,
         status=status,
         author=request.user,
+        cohort=cohort,
     )
     return JsonResponse(
         serialize_course_announcement(announcement),
@@ -289,14 +376,25 @@ def course_announcements_collection(request, slug):
         "PATCH": {
             "summary": "Update a course announcement (staff-only)",
             "description": (
-                "Partial update of ``title``, ``body``, and ``status``. "
-                "The first ``draft`` to ``published`` transition emails "
-                "enrolled learners; later publishes do not."
+                "Partial update of ``title``, ``body``, ``status``, and the "
+                "target cohort (``cohort`` external key or ``cohort_id``). "
+                "The cohort can change only while the announcement is a "
+                "draft, and publishing needs one. The first ``draft`` to "
+                "``published`` transition emails the cohort's active "
+                "enrollments only; later publishes do not."
             ),
             "request_body": {
                 "properties": {
                     "title": {"type": "string"},
                     "body": {"type": "string"},
+                    "cohort": {
+                        "type": "string",
+                        "description": "Cohort external key.",
+                    },
+                    "cohort_id": {
+                        "type": "integer",
+                        "description": "Cohort id, instead of cohort.",
+                    },
                     "status": {
                         "type": "string",
                         "enum": ["draft", "published"],
@@ -340,7 +438,7 @@ def course_announcement_detail(request, slug, announcement_id):
         return _unknown_course_response()
     announcement = (
         CourseAnnouncement.objects
-        .select_related('course', 'author')
+        .select_related('course', 'author', 'cohort')
         .filter(pk=announcement_id, course=course)
         .first()
     )
@@ -380,11 +478,33 @@ def course_announcement_detail(request, slug, announcement_id):
         status, status_error = _parse_status(data.get('status'), required=True)
         if status_error is not None:
             return status_error
+    cohort, cohort_error = _parse_cohort(course, data, required=False)
+    if cohort_error is not None:
+        return cohort_error
+    if (
+        cohort is not None
+        and cohort.pk != announcement.cohort_id
+        and announcement.status == CourseAnnouncement.STATUS_PUBLISHED
+    ):
+        return validation_response(
+            {'field': 'cohort', 'expected': 'draft announcement'},
+            message='Unpublish the announcement before changing its cohort',
+        )
+    if (
+        status == CourseAnnouncement.STATUS_PUBLISHED
+        and cohort is None
+        and announcement.cohort_id is None
+    ):
+        return validation_response(
+            {'field': 'cohort', 'expected': 'cohort external key'},
+            message='Set a cohort before publishing',
+        )
     save_announcement(
         announcement,
         title=title,
         body=body,
         status=status,
         author=request.user,
+        cohort=cohort,
     )
     return JsonResponse(serialize_course_announcement(announcement), status=200)

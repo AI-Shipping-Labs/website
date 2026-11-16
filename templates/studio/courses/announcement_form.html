@@ -21,6 +21,16 @@
 <form id="announcement-form" method="post" class="space-y-6 max-w-3xl" data-testid="announcement-form">
   {% csrf_token %}
   <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <div>
+      <label class="block text-sm font-medium text-foreground mb-1" for="announcement-cohort">Cohort</label>
+      <select id="announcement-cohort" name="cohort_id" required {% if cohort_locked %}disabled{% endif %} data-testid="announcement-cohort-select" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent{% if cohort_locked %} opacity-60{% endif %}">
+        <option value="" {% if not values.cohort_id %}selected{% endif %}>Choose a cohort</option>
+        {% for cohort in cohorts %}
+        <option value="{{ cohort.pk }}" {% if values.cohort_id == cohort.pk|stringformat:'s' %}selected{% endif %}>{{ cohort.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="mt-1 text-xs text-muted-foreground">Only members of this cohort see the announcement, and publishing emails only them.{% if cohort_locked %} Unpublish to change the cohort.{% endif %}</p>
+    </div>
     {% include "studio/includes/forms/title.html" with value=values.title %}
     {% include "studio/includes/forms/textarea.html" with label="Body (Markdown)" name="body" rows=12 value=values.body monospace=True %}
   </div>

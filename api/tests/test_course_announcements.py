@@ -1,5 +1,6 @@
 """Staff API for course announcements (issue #1942)."""
 
+import datetime
 import json
 from unittest.mock import patch
 
@@ -8,7 +9,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import Token
-from content.models import Course, Enrollment
+from content.models import Cohort, Course, Enrollment
 from content.models.course_announcement import CourseAnnouncement
 
 User = get_user_model()
@@ -28,11 +29,59 @@ class CourseAnnouncementApiTest(TestCase):
             title='API tools', slug='api-tools-1942', status='draft',
         )
         Enrollment.objects.create(user=cls.member, course=cls.course)
+        start = datetime.date(2026, 9, 21)
+        cls.cohort3 = Cohort.objects.create(
+            course=cls.course, name='Cohort 3', external_key='3',
+            start_date=start - datetime.timedelta(days=160),
+            end_date=start - datetime.timedelta(days=100),
+        )
+        cls.cohort4 = Cohort.objects.create(
+            course=cls.course, name='Cohort 4', external_key='4',
+            start_date=start, end_date=start + datetime.timedelta(days=60),
+        )
+        other = Course.objects.create(
+            title='Other', slug='other-api-1942', status='draft',
+        )
+        cls.foreign_cohort = Cohort.objects.create(
+            course=other, name='Foreign', external_key='9',
+            start_date=start, end_date=start + datetime.timedelta(days=60),
+        )
 
     def _auth(self, token=None):
         if token is None:
             token = self.staff_token
         return {'HTTP_AUTHORIZATION': f'Token {token.key}'}
+
+    def _collection(self):
+        return reverse(
+            'api_course_announcements_collection',
+            kwargs={'slug': self.course.slug},
+        )
+
+    def _detail(self, announcement_id):
+        return reverse(
+            'api_course_announcement_detail',
+            kwargs={
+                'slug': self.course.slug,
+                'announcement_id': announcement_id,
+            },
+        )
+
+    def _post(self, payload):
+        return self.client.post(
+            self._collection(),
+            data=json.dumps(payload),
+            content_type='application/json',
+            **self._auth(),
+        )
+
+    def _patch(self, announcement_id, payload):
+        return self.client.patch(
+            self._detail(announcement_id),
+            data=json.dumps(payload),
+            content_type='application/json',
+            **self._auth(),
+        )
 
     def test_unpublished_course_is_addressable(self):
         response = self.client.get(
@@ -58,6 +107,7 @@ class CourseAnnouncementApiTest(TestCase):
                     data=json.dumps({
                         'title': 'Week 2 office hours moved',
                         'body': '**Tomorrow** we meet at 18:00 CET.',
+                        'cohort': '4',
                         'status': 'published',
                     }),
                     content_type='application/json',
@@ -68,6 +118,9 @@ class CourseAnnouncementApiTest(TestCase):
         self.assertEqual(created.status_code, 201)
         self.assertEqual(payload['status'], 'published')
         self.assertEqual(payload['author_email'], self.staff.email)
+        self.assertEqual(payload['cohort'], {
+            'id': self.cohort4.pk, 'external_key': '4', 'name': 'Cohort 4',
+        })
         self.assertIsNotNone(payload['published_at'])
         announcement_id = payload['id']
 
@@ -120,6 +173,7 @@ class CourseAnnouncementApiTest(TestCase):
             data=json.dumps({
                 'title': 'Draft note',
                 'body': 'Hold for later.',
+                'cohort_id': self.cohort4.pk,
             }),
             content_type='application/json',
             **self._auth(),
@@ -146,6 +200,63 @@ class CourseAnnouncementApiTest(TestCase):
             enqueue.assert_called_once_with(created.json()['id'])
         self.assertEqual(published.json()['status'], 'published')
         self.assertIsNotNone(published.json()['published_at'])
+
+    def test_create_requires_a_cohort_of_this_course(self):
+        missing = self._post({'title': 'No cohort', 'body': 'x'})
+        self.assertEqual(missing.status_code, 422)
+        self.assertEqual(missing.json()['details']['field'], 'cohort')
+        unknown = self._post({'title': 'Bad', 'body': 'x', 'cohort': '7'})
+        self.assertEqual(unknown.status_code, 422)
+        foreign = self._post({
+            'title': 'Bad', 'body': 'x', 'cohort_id': self.foreign_cohort.pk,
+        })
+        self.assertEqual(foreign.status_code, 422)
+        self.assertEqual(foreign.json()['details']['field'], 'cohort_id')
+        both = self._post({
+            'title': 'Bad', 'body': 'x',
+            'cohort': '4', 'cohort_id': self.cohort4.pk,
+        })
+        self.assertEqual(both.status_code, 422)
+        self.assertFalse(CourseAnnouncement.objects.exists())
+
+    def test_draft_cohort_can_change_published_cohort_is_locked(self):
+        created = self._post({'title': 'Note', 'body': 'x', 'cohort': '3'})
+        announcement_id = created.json()['id']
+        moved = self._patch(announcement_id, {'cohort': '4'})
+        self.assertEqual(moved.status_code, 200)
+        self.assertEqual(moved.json()['cohort']['external_key'], '4')
+        with self.captureOnCommitCallbacks(execute=False):
+            self._patch(announcement_id, {'status': 'published'})
+        locked = self._patch(announcement_id, {'cohort': '3'})
+        self.assertEqual(locked.status_code, 422)
+        self.assertEqual(
+            CourseAnnouncement.objects.get(pk=announcement_id).cohort,
+            self.cohort4,
+        )
+
+    def test_publish_without_cohort_is_rejected(self):
+        legacy = CourseAnnouncement.objects.create(
+            course=self.course, title='Legacy', body='x',
+        )
+        response = self._patch(legacy.pk, {'status': 'published'})
+        self.assertEqual(response.status_code, 422)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.status, CourseAnnouncement.STATUS_DRAFT)
+
+    def test_list_filters_by_cohort_key(self):
+        self._post({'title': 'For three', 'body': 'x', 'cohort': '3'})
+        self._post({'title': 'For four', 'body': 'x', 'cohort': '4'})
+        response = self.client.get(
+            self._collection(), {'cohort': '4'}, **self._auth(),
+        )
+        self.assertEqual(
+            [row['title'] for row in response.json()['announcements']],
+            ['For four'],
+        )
+        unknown = self.client.get(
+            self._collection(), {'cohort': 'nope'}, **self._auth(),
+        )
+        self.assertEqual(unknown.status_code, 422)
 
     def test_anonymous_and_non_staff_cannot_write(self):
         collection = reverse(

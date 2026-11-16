@@ -5220,7 +5220,7 @@
         ]
       },
       "get": {
-        "description": "Announcements for this course (any course status), newest first. Optional ``status=draft|published`` filters the list.",
+        "description": "Announcements for this course (any course status), newest first. Optional ``status=draft|published`` filters the list; optional ``cohort=<external key>`` keeps one cohort's rows.",
         "parameters": [
           {
             "in": "path",
@@ -5242,6 +5242,15 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "description": "Filter by cohort external key.",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -5253,6 +5262,11 @@
                     {
                       "author_email": "admin@test.com",
                       "body": "**Tomorrow** we meet at 18:00 CET.",
+                      "cohort": {
+                        "external_key": "4",
+                        "id": 7,
+                        "name": "Cohort 4"
+                      },
                       "course": "ai-dev-tools",
                       "created_at": "2026-10-12T11:50:00+00:00",
                       "email_queued_at": "2026-10-12T12:00:01+00:00",
@@ -5286,7 +5300,7 @@
         ]
       },
       "post": {
-        "description": "Body: ``title``, ``body``, optional ``status`` (``draft`` default). ``status=published`` uses the same first-publish email path as Studio.",
+        "description": "Body: ``title``, ``body``, the target cohort as ``cohort`` (its external key, the ``?cohort=`` value) or ``cohort_id``, and optional ``status`` (``draft`` default). Only members of that cohort see the announcement. ``status=published`` uses the same first-publish email path as Studio: it emails only the cohort's active enrollments.",
         "parameters": [
           {
             "in": "path",
@@ -5302,13 +5316,22 @@
             "application/json": {
               "example": {
                 "body": "**Tomorrow** we meet at 18:00 CET.",
-                "status": "published",
+                "cohort": "4",
+                "status": "draft",
                 "title": "Week 2 office hours moved"
               },
               "schema": {
                 "properties": {
                   "body": {
                     "type": "string"
+                  },
+                  "cohort": {
+                    "description": "Cohort external key. Required unless cohort_id is sent.",
+                    "type": "string"
+                  },
+                  "cohort_id": {
+                    "description": "Cohort id, instead of cohort.",
+                    "type": "integer"
                   },
                   "status": {
                     "enum": [
@@ -5334,6 +5357,11 @@
                 "example": {
                   "author_email": "admin@test.com",
                   "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "cohort": {
+                    "external_key": "4",
+                    "id": 7,
+                    "name": "Cohort 4"
+                  },
                   "course": "ai-dev-tools",
                   "created_at": "2026-10-12T11:50:00+00:00",
                   "email_queued_at": "2026-10-12T12:00:01+00:00",
@@ -5425,6 +5453,11 @@
                 "example": {
                   "author_email": "admin@test.com",
                   "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "cohort": {
+                    "external_key": "4",
+                    "id": 7,
+                    "name": "Cohort 4"
+                  },
                   "course": "ai-dev-tools",
                   "created_at": "2026-10-12T11:50:00+00:00",
                   "email_queued_at": "2026-10-12T12:00:01+00:00",
@@ -5448,7 +5481,7 @@
         ]
       },
       "patch": {
-        "description": "Partial update of ``title``, ``body``, and ``status``. The first ``draft`` to ``published`` transition emails enrolled learners; later publishes do not.",
+        "description": "Partial update of ``title``, ``body``, ``status``, and the target cohort (``cohort`` external key or ``cohort_id``). The cohort can change only while the announcement is a draft, and publishing needs one. The first ``draft`` to ``published`` transition emails the cohort's active enrollments only; later publishes do not.",
         "parameters": [
           {
             "in": "path",
@@ -5479,6 +5512,14 @@
                   "body": {
                     "type": "string"
                   },
+                  "cohort": {
+                    "description": "Cohort external key.",
+                    "type": "string"
+                  },
+                  "cohort_id": {
+                    "description": "Cohort id, instead of cohort.",
+                    "type": "integer"
+                  },
                   "status": {
                     "enum": [
                       "draft",
@@ -5503,6 +5544,11 @@
                 "example": {
                   "author_email": "admin@test.com",
                   "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "cohort": {
+                    "external_key": "4",
+                    "id": 7,
+                    "name": "Cohort 4"
+                  },
                   "course": "ai-dev-tools",
                   "created_at": "2026-10-12T11:50:00+00:00",
                   "email_queued_at": "2026-10-12T12:00:01+00:00",

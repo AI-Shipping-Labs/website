@@ -26,7 +26,7 @@ COURSE_SLUG = 'announcements-1942'
 
 def _seed(*, with_announcement=False, extra=None):
     from accounts.models import User
-    from content.models import Course, Enrollment
+    from content.models import Cohort, CohortEnrollment, Course, Enrollment
     from content.models.course_announcement import CourseAnnouncement
 
     create_staff_user('admin@test.com')
@@ -39,10 +39,17 @@ def _seed(*, with_announcement=False, extra=None):
         status='published', required_level=0,
     )
     Enrollment.objects.create(user=learner, course=course)
+    today = timezone.localdate()
+    cohort = Cohort.objects.create(
+        course=course, name='Cohort 4', external_key='4',
+        start_date=today, end_date=today + datetime.timedelta(days=60),
+    )
+    CohortEnrollment.objects.create(user=learner, cohort=cohort)
     announcement = None
     if with_announcement:
         announcement = CourseAnnouncement.objects.create(
             course=course,
+            cohort=cohort,
             title='Week 2 office hours moved',
             body='**Tomorrow** we meet at 18:00 CET.',
             author=staff,
@@ -53,6 +60,10 @@ def _seed(*, with_announcement=False, extra=None):
         extra(course, staff, learner)
     connection.close()
     return course, announcement
+
+
+def _cohort4(course):
+    return course.aisl_cohorts.get(external_key='4')
 
 
 def _page(browser, email=None):
@@ -170,7 +181,8 @@ def test_non_enrolled_member_cannot_find_course_announcements(django_server, bro
         from content.models.course_announcement import CourseAnnouncement
 
         CourseAnnouncement.objects.create(
-            course=course, title='Enrolled only', body='Secret',
+            course=course, cohort=_cohort4(course),
+            title='Enrolled only', body='Secret',
             author=staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=timezone.now(),
         )
@@ -219,7 +231,8 @@ def test_staff_previews_announcements_without_enrolling(django_server, browser):
         from content.models.course_announcement import CourseAnnouncement
 
         CourseAnnouncement.objects.create(
-            course=course, title='Staff preview', body='Readable.',
+            course=course, cohort=_cohort4(course),
+            title='Staff preview', body='Readable.',
             author=staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=timezone.now(),
         )
@@ -245,12 +258,14 @@ def test_learner_sees_newest_announcement_first(django_server, browser):
 
         now = timezone.now()
         CourseAnnouncement.objects.create(
-            course=course, title='Older note', body='yesterday',
+            course=course, cohort=_cohort4(course),
+            title='Older note', body='yesterday',
             author=staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=now - datetime.timedelta(days=1),
         )
         CourseAnnouncement.objects.create(
-            course=course, title='Newer note', body='today',
+            course=course, cohort=_cohort4(course),
+            title='Newer note', body='today',
             author=staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=now,
         )
@@ -276,7 +291,8 @@ def test_instructor_edits_published_announcement_without_reemail_confirm(
         from content.models.course_announcement import CourseAnnouncement
 
         CourseAnnouncement.objects.create(
-            course=course, title='Old title', body='Old body',
+            course=course, cohort=_cohort4(course),
+            title='Old title', body='Old body',
             author=staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=timezone.now(),
             email_queued_at=timezone.now(),

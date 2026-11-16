@@ -13,17 +13,19 @@ class CourseAnnouncementAdmin(admin.ModelAdmin):
     list_display = [
         'title',
         'course',
+        'cohort',
         'status',
         'author',
         'published_at',
         'email_queued_at',
         'created_at',
     ]
-    list_filter = ['status', 'course']
+    list_filter = ['status', 'course', 'cohort']
     search_fields = ['title', 'body', 'course__title', 'author__email']
-    raw_id_fields = ['course', 'author']
+    raw_id_fields = ['course', 'cohort', 'author']
     readonly_fields = [
         'course',
+        'cohort',
         'title',
         'body',
         'author',

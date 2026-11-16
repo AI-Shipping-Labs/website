@@ -1,4 +1,8 @@
-"""Course announcements member tab, model, and email-once (issue #1942)."""
+"""Course announcements member tab, model, and email-once (issue #1942).
+
+Announcements are cohort-scoped: only the target cohort sees them and only
+its active enrollments get the first-publish email.
+"""
 
 import datetime
 from unittest.mock import patch
@@ -9,10 +13,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from content.models import Course, Enrollment
+from content.models import Cohort, CohortEnrollment, Course, Enrollment
 from content.models.course_announcement import CourseAnnouncement
 from content.services.course_announcements import (
     EMAIL_TYPE,
+    published_queryset,
     save_announcement,
     send_course_announcement_email,
     show_announcements_tab,
@@ -24,6 +29,14 @@ from email_app.services.email_classification import (
 )
 
 User = get_user_model()
+
+
+def _cohort(course, key, *, start_offset_days=0):
+    start = timezone.localdate() + datetime.timedelta(days=start_offset_days)
+    return Cohort.objects.create(
+        course=course, name=f'Cohort {key}', external_key=key,
+        start_date=start, end_date=start + datetime.timedelta(days=60),
+    )
 
 
 class CourseAnnouncementModelTest(TestCase):
@@ -76,8 +89,19 @@ class CourseAnnouncementMemberAccessTest(TestCase):
             is_staff=True, email_verified=True,
         )
         Enrollment.objects.create(user=cls.learner, course=cls.course)
+        cls.cohort4 = _cohort(cls.course, '4')
+        cls.cohort3 = _cohort(cls.course, '3', start_offset_days=-200)
+        CohortEnrollment.objects.create(user=cls.learner, cohort=cls.cohort4)
+        cls.cohort3_learner = User.objects.create_user(
+            email='cohort3-1942@test.com', password='pw', email_verified=True,
+        )
+        Enrollment.objects.create(user=cls.cohort3_learner, course=cls.course)
+        CohortEnrollment.objects.create(
+            user=cls.cohort3_learner, cohort=cls.cohort3,
+        )
         cls.published = CourseAnnouncement.objects.create(
             course=cls.course,
+            cohort=cls.cohort4,
             title='Week 2 office hours moved',
             body='**Tomorrow** we meet at 18:00 CET.',
             author=cls.staff,
@@ -86,6 +110,7 @@ class CourseAnnouncementMemberAccessTest(TestCase):
         )
         cls.draft = CourseAnnouncement.objects.create(
             course=cls.course,
+            cohort=cls.cohort4,
             title='Secret draft',
             body='Not ready.',
             author=cls.staff,
@@ -173,7 +198,8 @@ class CourseAnnouncementMemberAccessTest(TestCase):
     def test_newest_published_first(self):
         older = timezone.now() - datetime.timedelta(days=1)
         CourseAnnouncement.objects.create(
-            course=self.course, title='Older note', body='old',
+            course=self.course, cohort=self.cohort4,
+            title='Older note', body='old',
             author=self.staff, status=CourseAnnouncement.STATUS_PUBLISHED,
             published_at=older,
         )
@@ -195,15 +221,59 @@ class CourseAnnouncementMemberAccessTest(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_keeps_cohort_query_on_tab_links(self):
-        from content.models import Cohort, CohortEnrollment
-
-        today = timezone.localdate()
-        cohort = Cohort.objects.create(
-            course=self.course, name='Cohort 4', external_key='4',
-            start_date=today, end_date=today + datetime.timedelta(days=30),
+    def _cohort3_note(self):
+        return CourseAnnouncement.objects.create(
+            course=self.course, cohort=self.cohort3, title='Cohort 3 note',
+            body='old cohort', author=self.staff,
+            status=CourseAnnouncement.STATUS_PUBLISHED,
+            published_at=timezone.now(),
         )
-        CohortEnrollment.objects.create(user=self.learner, cohort=cohort)
+
+    def test_other_cohort_learner_does_not_see_announcement(self):
+        self.client.force_login(self.cohort3_learner)
+        response = self.client.get(
+            reverse('course_announcements', kwargs={'slug': self.course.slug}),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Week 2 office hours moved')
+        self.assertContains(response, 'data-testid="course-announcements-empty"')
+
+    def test_each_cohort_sees_only_its_own_announcements(self):
+        self._cohort3_note()
+        self.assertEqual(
+            [row.title for row in published_queryset(
+                self.course, user=self.learner,
+            )],
+            ['Week 2 office hours moved'],
+        )
+        self.assertEqual(
+            [row.title for row in published_queryset(
+                self.course, user=self.cohort3_learner,
+            )],
+            ['Cohort 3 note'],
+        )
+
+    def test_announcement_without_cohort_is_hidden_from_learners(self):
+        self.published.cohort = None
+        self.published.save(update_fields=['cohort'])
+        self.client.force_login(self.learner)
+        response = self.client.get(
+            reverse('course_announcements', kwargs={'slug': self.course.slug}),
+        )
+        self.assertNotContains(response, 'Week 2 office hours moved')
+
+    def test_staff_sees_all_cohorts_and_filters_by_preview(self):
+        self._cohort3_note()
+        self.client.force_login(self.staff)
+        url = reverse('course_announcements', kwargs={'slug': self.course.slug})
+        response = self.client.get(url)
+        self.assertContains(response, 'Week 2 office hours moved')
+        self.assertContains(response, 'Cohort 3 note')
+        response = self.client.get(url + '?cohort=4')
+        self.assertContains(response, 'Week 2 office hours moved')
+        self.assertNotContains(response, 'Cohort 3 note')
+
+    def test_keeps_cohort_query_on_tab_links(self):
         self.client.force_login(self.learner)
         response = self.client.get(
             reverse('course_announcements', kwargs={'slug': self.course.slug})
@@ -253,10 +323,16 @@ class CourseAnnouncementEmailOnceTest(TestCase):
             user=cls.unenrolled, course=cls.course,
             unenrolled_at=timezone.now(),
         )
+        cls.cohort4 = _cohort(cls.course, '4')
+        for user in (
+            cls.learner, cls.unsubscribed, cls.inactive, cls.unenrolled,
+        ):
+            CohortEnrollment.objects.create(user=user, cohort=cls.cohort4)
 
     def _publish(self, **kwargs):
         row = CourseAnnouncement(
             course=self.course,
+            cohort=self.cohort4,
             title=kwargs.get('title', 'Project deadline extended'),
             body=kwargs.get('body', 'Submit by Friday.'),
             author=self.staff,
@@ -379,6 +455,23 @@ class CourseAnnouncementEmailOnceTest(TestCase):
         )
         self.assertEqual(delivery.related_object_id, str(row.pk))
 
+    def test_publish_without_cohort_queues_nothing(self):
+        row = CourseAnnouncement(course=self.course, author=self.staff)
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            queued = save_announcement(
+                row, title='No audience', body='body',
+                status=CourseAnnouncement.STATUS_PUBLISHED,
+            )
+        self.assertFalse(queued)
+        self.assertEqual(callbacks, [])
+        result = send_course_announcement_email(row.pk)
+        self.assertEqual(result['reason'], 'no_cohort')
+        row.refresh_from_db()
+        self.assertIsNone(row.email_queued_at)
+        self.assertFalse(
+            EmailDelivery.objects.filter(purpose=EMAIL_TYPE).exists(),
+        )
+
     def test_per_recipient_failure_does_not_abort_rest(self):
         from email_app.package_mail import send_package_mail as real_send
 
@@ -403,3 +496,56 @@ class CourseAnnouncementEmailOnceTest(TestCase):
                 ),
             ).exists(),
         )
+
+
+class CohortFourAnnouncementEmailTest(TestCase):
+    """A Cohort 4 announcement emails only Cohort 4; Cohorts 1-3 get nothing."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='AI Buildcamp', slug='ai-buildcamp-cohort-scope',
+            status='published',
+        )
+        cls.staff = User.objects.create_user(
+            email='staff-scope@test.com', password='pw', is_staff=True,
+        )
+        cls.cohorts = {
+            key: _cohort(cls.course, key, start_offset_days=offset)
+            for key, offset in (
+                ('1', -400), ('2', -300), ('3', -200), ('4', -30),
+            )
+        }
+        cls.members = {}
+        for key, cohort in cls.cohorts.items():
+            cls.members[key] = []
+            for index in range(2):
+                user = User.objects.create_user(
+                    email=f'cohort{key}-{index}-scope@test.com', password='pw',
+                )
+                Enrollment.objects.create(user=user, course=cls.course)
+                CohortEnrollment.objects.create(user=user, cohort=cohort)
+                cls.members[key].append(user)
+
+    def test_cohort_4_announcement_emails_only_cohort_4(self):
+        row = CourseAnnouncement(
+            course=self.course, cohort=self.cohorts['4'], author=self.staff,
+        )
+        with self.captureOnCommitCallbacks(execute=False):
+            queued = save_announcement(
+                row, title='How to submit your project', body='Steps.',
+                status=CourseAnnouncement.STATUS_PUBLISHED,
+            )
+        self.assertTrue(queued)
+
+        result = send_course_announcement_email(row.pk)
+
+        self.assertEqual(result['sent'], 2)
+        recipients = set(
+            EmailDelivery.objects.filter(purpose=EMAIL_TYPE)
+            .values_list('idempotency_key', flat=True)
+        )
+        self.assertEqual(recipients, {
+            f'course-announcement:{row.pk}:{user.pk}'
+            for user in self.members['4']
+        })

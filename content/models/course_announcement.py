@@ -1,8 +1,9 @@
 """Course announcements authored in Studio (issue #1942).
 
-AISL overlay: not a community-base curriculum change. Learners see
-published rows on the course Home Announcements tab; the first publish
-emails actively enrolled members once.
+AISL overlay: not a community-base curriculum change. Each announcement
+belongs to one cohort of its course: only that cohort's members see the
+published row on the course Home Announcements tab, and the first publish
+emails that cohort's actively enrolled members once.
 """
 
 from django.conf import settings
@@ -22,6 +23,15 @@ class CourseAnnouncement(models.Model):
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
+        related_name='announcements',
+    )
+    # SET_NULL: deleting a cohort hides its announcements from learners
+    # (a null cohort has no audience) instead of deleting the history.
+    cohort = models.ForeignKey(
+        'content.Cohort',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='announcements',
     )
     title = models.CharField(max_length=200)

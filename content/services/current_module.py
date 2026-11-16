@@ -38,6 +38,7 @@ from content.services.homework_step_reader import question_key
 
 UPCOMING_STATUSES = ('Live now', 'In progress', 'Upcoming')
 DELIVERABLE_KINDS = ('Homework', 'Project')
+PEER_REVIEW_KIND = 'Peer reviews'
 UNSCHEDULED_SESSION_STATUS = 'Not scheduled'
 
 
@@ -362,8 +363,17 @@ def _module_url(course, module, cohort_query):
     return f'/courses/{course.slug}/{module.slug}{cohort_query}'
 
 
+def is_deliverable(row):
+    """Homework, projects, and peer reviews the learner still has to do."""
+    if row['kind'] == PEER_REVIEW_KIND:
+        return bool(row.get('review_pending'))
+    return row['kind'] in DELIVERABLE_KINDS
+
+
 def deliverable_key(row):
     """Identity of one homework or project deliverable across Home sections."""
+    if row['kind'] == PEER_REVIEW_KIND:
+        return (PEER_REVIEW_KIND, row.get('project_id') or row['title'])
     if row['kind'] == 'Project':
         return ('Project', row.get('project_id') or row['title'])
     return ('Homework', row.get('unit_content_id') or row['title'])
@@ -580,7 +590,7 @@ def build_due_next(course, user, cohort, commitments, *, cohort_query, now,
         return empty
     candidates = [
         row for row in commitments['open_assignments']
-        if row['kind'] in DELIVERABLE_KINDS and row['when'] is not None
+        if is_deliverable(row) and row['when'] is not None
         and not row['complete'] and not row['closed']
     ]
     if not candidates:
@@ -603,7 +613,7 @@ def build_due_next(course, user, cohort, commitments, *, cohort_query, now,
             row, unit=units.get(row.get('unit_content_id') or ''),
             user=user, cohort=cohort, cohort_query=cohort_query, loader=loader,
         )
-        if display['kind'] == 'Project':
+        if display['kind'] in ('Project', PEER_REVIEW_KIND):
             display['module_title'] = row.get('project_group_title') or ''
         rows.append(display)
     # Homework before projects, each by due date.
@@ -619,13 +629,17 @@ def build_due_next(course, user, cohort, commitments, *, cohort_query, now,
     }}
 
 
+def _card_deliverables(deliverables, due_next_keys):
+    """The card's deliverable list, without repeating "Due next" wholesale."""
+    for row in deliverables:
+        if deliverable_key(row) not in due_next_keys:
+            return deliverables
+    return []
+
+
 def build_current_module(course, user, cohort, home, commitments, *, completed_ids,
                          cohort_query, today, due_next_keys=frozenset(), loader=None):
-    """Template context for the Current module card and Next live session block.
-
-    ``due_next_keys`` are deliverables already listed in "Due next"; the card
-    does not repeat them.
-    """
+    """Template context for the Current module card and Next live session block."""
     module = home['current_module']
     if module is None:
         return {'current_module': None, 'home_next_session': None}
@@ -642,11 +656,7 @@ def build_current_module(course, user, cohort, home, commitments, *, completed_i
         deliverables = _undated_deliverable_rows(
             commitments['focus_work_items'], user=user, cohort=cohort, loader=loader,
         )
-    # "Due next" already lists some of these; the card shows the rest, but
-    # the primary action still considers every deliverable of the module.
-    shown_deliverables = [
-        row for row in deliverables if deliverable_key(row) not in due_next_keys
-    ]
+    shown_deliverables = _card_deliverables(deliverables, due_next_keys)
     session_rows = [
         row for row in commitments['live_session_schedule']
         if row.get('session_unit') is not None
@@ -685,6 +695,8 @@ def build_current_module(course, user, cohort, home, commitments, *, completed_i
                 deliverables=deliverables, cohort_query=cohort_query,
             ),
             'deliverables': shown_deliverables,
+            'show_homework_link': any(r['kind'] != 'Project' for r in shown_deliverables),
+            'show_projects_link': any(r['kind'] == 'Project' for r in shown_deliverables),
             'sessions': [session_item(row, cohort_query) for row in session_rows],
         },
         'home_next_session': next_live_session,

@@ -7,9 +7,14 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from content.models import Cohort, Course, ProjectSubmission
+from content.models import Cohort, Course, CourseProject, ProjectSubmission
 from content.models.peer_review import SUBMISSION_STATUS_CHOICES
 from content.services.peer_review_service import PeerReviewService
+from content.services.project_state import (
+    ProjectStateError,
+    parse_state,
+    set_project_state,
+)
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
@@ -171,6 +176,26 @@ def peer_review_form_batch(request, course_id):
     else:
         messages.info(request, 'No submissions ready for review assignments.')
 
+    return redirect('studio_peer_review_management', course_id=course.pk)
+
+
+@staff_required
+@require_POST
+def peer_review_set_state(request, course_id, project_id):
+    """Move one dated attempt between CMP states (e.g. close peer review)."""
+    course = get_object_or_404(Course, pk=course_id)
+    project = get_object_or_404(CourseProject, pk=project_id, course=course)
+    try:
+        previous = set_project_state(
+            project, parse_state(request.POST.get('state', '')), actor=request.user,
+        )
+    except ProjectStateError as error:
+        messages.error(request, str(error))
+    else:
+        messages.success(
+            request,
+            f'{project.title}: {project.get_state_display()} (was {previous}).',
+        )
     return redirect('studio_peer_review_management', course_id=course.pk)
 
 

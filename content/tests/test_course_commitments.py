@@ -250,8 +250,10 @@ class CourseCommitmentsTests(TestCase):
                       if row['kind'] == 'Peer reviews')
         self.assertEqual(review['status'], '1 of 3 complete')
         self.assertEqual(review['action'], 'Continue reviews')
+        first_pending = PeerReview.objects.filter(reviewer=self.user, is_complete=False).order_by('pk').first()
         self.assertEqual(
-            review['url'], '/courses/commitment-course/projects/first-project/reviews',
+            review['url'],
+            f'/courses/commitment-course/projects/first-project/reviews/{first_pending.submission_id}',
         )
         self.assertEqual(review['detail'], '1 of 3 reviews completed')
         self.assertTrue(any(row['kind'] == 'Project'

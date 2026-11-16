@@ -19,18 +19,21 @@ deliverables and its live session.
   {% endif %}
   {% if card.action %}<a href="{{ card.action.url }}" class="{% button_classes 'primary' size='md' extra='mt-3 w-full justify-center sm:mt-4 sm:w-auto' %}" data-testid="course-home-primary-action">{{ card.action.label }}</a>{% endif %}
   {% if card.deliverables %}
-  <div class="mt-3 border-t border-border pt-3 sm:mt-4" data-testid="course-home-deliverables">
+  <div class="mt-6" data-testid="course-home-deliverables">
     <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Deliverables</h3>
     <ol class="divide-y divide-border">
       {% for item in card.deliverables %}
       {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
       {% endfor %}
     </ol>
-    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-homework">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    <div class="flex flex-wrap gap-x-6">
+      {% if card.show_homework_link %}<a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-homework">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+      {% if card.show_projects_link %}<a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-projects">See all projects <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+    </div>
   </div>
   {% endif %}
   {% if card.sessions %}
-  <div class="mt-3 border-t border-border pt-3 sm:mt-4" data-testid="course-home-module-sessions">
+  <div class="mt-6" data-testid="course-home-module-sessions">
     <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Live session{{ card.sessions|length|pluralize }}</h3>
     <ol class="divide-y divide-border">
       {% for session in card.sessions %}

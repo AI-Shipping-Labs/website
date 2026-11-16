@@ -56,6 +56,7 @@ _INVENTORY_EXAMPLE = {
             "cohort_id": 12,
             "submission_due_at": "2026-11-16T23:59:00+00:00",
             "review_due_at": "2026-11-23T23:59:00+00:00",
+            "state": "CS",
             "peer_review_count": None,
             "submission_count": 0,
         }],
@@ -76,6 +77,7 @@ _INVENTORY_EXAMPLE = {
         "complete": 0,
         "incomplete": 0,
         "scored": 0,
+        "criteria_scored": 0,
         "unscored": 0,
         "reviewers_without_submission": {"pairs": 0, "reviews": 0},
     },
@@ -109,7 +111,10 @@ _INVENTORY_EXAMPLE = {
                 "unscoped attempts with zero submissions), ``submissions`` "
                 "(per ``status``, ``course_project=NULL``, blank versus "
                 "non-blank ``description``), ``reviews`` (complete or "
-                "incomplete, scored or null, and reviewers with no "
+                "incomplete, ``scored`` = legacy 1-5 score set, "
+                "``criteria_scored`` = complete reviews with stored "
+                "per-criterion answers (their ``score`` is NULL), "
+                "``unscored`` = neither, and reviewers with no "
                 "submission in the reviewed attempt as distinct "
                 "``pairs`` and ``reviews``), ``batches`` (legacy "
                 "self-paced pooled groups sharing ``batch_assigned_at``) "

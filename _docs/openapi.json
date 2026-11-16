@@ -6090,7 +6090,7 @@
     },
     "/api/courses/{slug}/coursework-inventory": {
       "get": {
-        "description": "Counts the course's current legacy project rows, the baseline for moving projects onto ``community_base.coursework``. Sections: ``cohorts`` (per mode, with enrollment, project and submission counts), ``enrollments`` (``CohortEnrollment`` rows in cohorts that have projects; a self-paced cohort has projects when an unscoped attempt exists), ``projects`` (``CourseProject`` per cohort, ``null_cohort`` counted separately, and unscoped attempts with zero submissions), ``submissions`` (per ``status``, ``course_project=NULL``, blank versus non-blank ``description``), ``reviews`` (complete or incomplete, scored or null, and reviewers with no submission in the reviewed attempt as distinct ``pairs`` and ``reviews``), ``batches`` (legacy self-paced pooled groups sharing ``batch_assigned_at``) and ``certificates`` (``with_submission`` has the submission FK). Writes nothing.",
+        "description": "Counts the course's current legacy project rows, the baseline for moving projects onto ``community_base.coursework``. Sections: ``cohorts`` (per mode, with enrollment, project and submission counts), ``enrollments`` (``CohortEnrollment`` rows in cohorts that have projects; a self-paced cohort has projects when an unscoped attempt exists), ``projects`` (``CourseProject`` per cohort, ``null_cohort`` counted separately, and unscoped attempts with zero submissions), ``submissions`` (per ``status``, ``course_project=NULL``, blank versus non-blank ``description``), ``reviews`` (complete or incomplete, ``scored`` = legacy 1-5 score set, ``criteria_scored`` = complete reviews with stored per-criterion answers (their ``score`` is NULL), ``unscored`` = neither, and reviewers with no submission in the reviewed attempt as distinct ``pairs`` and ``reviews``), ``batches`` (legacy self-paced pooled groups sharing ``batch_assigned_at``) and ``certificates`` (``with_submission`` has the submission FK). Writes nothing.",
         "parameters": [
           {
             "in": "path",
@@ -6169,6 +6169,7 @@
                         "peer_review_count": null,
                         "review_due_at": "2026-11-23T23:59:00+00:00",
                         "slug": "attempt-1",
+                        "state": "CS",
                         "submission_count": 0,
                         "submission_due_at": "2026-11-16T23:59:00+00:00",
                         "title": "Attempt 1"
@@ -6185,6 +6186,7 @@
                   },
                   "reviews": {
                     "complete": 0,
+                    "criteria_scored": 0,
                     "incomplete": 0,
                     "reviewers_without_submission": {
                       "pairs": 0,

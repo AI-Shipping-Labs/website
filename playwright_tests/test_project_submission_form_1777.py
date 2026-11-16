@@ -1,9 +1,4 @@
-"""Learner-facing project submission must keep the shared form, minus FAQ (#1777).
-
-The dated attempt route and the undated ``/courses/<slug>/submit`` slot both
-embed ``coursework/_project_submission_form.html``. These journeys fail if
-either page silently shrinks back to GitHub + commit ID.
-"""
+"""Learner-facing project submission must keep the shared form, minus FAQ (#1777)."""
 
 import os
 from datetime import timedelta
@@ -19,7 +14,7 @@ os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
 GITHUB_URL = 'https://github.com/learner/project-1777'
-COMMIT_ID = 'a1b2c3d'
+PINNED_COMMIT = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678'
 TIME_SPENT = '6.5'
 CERT_NAME = 'Learner A. Display'
 PUBLIC_LINKS = (
@@ -28,12 +23,11 @@ PUBLIC_LINKS = (
 )
 SHARED_FIELD_ORDER = (
     'github_link',
-    'commit_id',
     'learning_in_public_links',
     'time_spent',
-    'description',
     'certificate_name',
 )
+REMOVED_FIELDS = ('commit_id', 'description', 'faq_contribution_url')
 
 
 def _seed_course(email, *, slug, dated):
@@ -41,7 +35,7 @@ def _seed_course(email, *, slug, dated):
     from django.db import connection
     from django.utils import timezone
 
-    from content.models import Cohort, Course
+    from content.models import Cohort, Course, ProjectSubmission
     from content.models.cohort import CohortEnrollment
     from content.models.peer_review import CourseProject
 
@@ -63,7 +57,7 @@ def _seed_course(email, *, slug, dated):
         end_date=today + timedelta(days=90),
     )
     CohortEnrollment.objects.create(cohort=cohort, user=user)
-    attempt_id = None
+    attempt = None
     if dated:
         now = timezone.now()
         attempt = CourseProject.objects.create(
@@ -74,10 +68,16 @@ def _seed_course(email, *, slug, dated):
             submission_due_at=now + timedelta(days=1),
             review_due_at=now + timedelta(days=8),
         )
-        attempt_id = attempt.pk
         submit_path = f'/courses/{slug}/projects/first/submit'
     else:
         submit_path = f'/courses/{slug}/submit'
+    ProjectSubmission.objects.create(
+        user=user, course=course, course_project=attempt, cohort=cohort,
+        project_url=GITHUB_URL, commit_id=PINNED_COMMIT,
+    )
+    attempt_id = None
+    if attempt is not None:
+        attempt_id = attempt.pk
     connection.close()
     return {
         'course_id': course.pk,
@@ -107,18 +107,28 @@ def _assert_shared_fields(page):
     for index, name in enumerate(SHARED_FIELD_ORDER):
         expect(fields.nth(index)).to_have_attribute('data-project-field', name)
         expect(form.locator(f'[name="{name}"]').first).to_be_visible()
-    expect(form.locator('[data-commit-id-help]')).to_contain_text(
-        'Where do I find the commit ID?',
-    )
-    expect(form.locator('[name="faq_contribution_url"]')).to_have_count(0)
-    expect(page.locator('[data-project-field="faq_contribution_url"]')).to_have_count(0)
+    for name in REMOVED_FIELDS:
+        expect(form.locator(f'[name="{name}"]')).to_have_count(0)
+        expect(page.locator(f'[data-project-field="{name}"]')).to_have_count(0)
     expect(form.locator('[data-add-learning-in-public-link]')).to_be_visible()
+
+
+def _assert_pinned_commit(page):
+    status = _form(page).locator(
+        '[data-project-field="github_link"] [data-testid="commit-status"]',
+    )
+    expect(status).to_contain_text(f'Commit recorded: {PINNED_COMMIT[:7]}')
+    expect(status.get_by_test_id('commit-recorded')).to_have_attribute(
+        'href', f'{GITHUB_URL}/commit/{PINNED_COMMIT}',
+    )
+    expect(status.get_by_test_id('update-commit-button')).to_have_text('update')
 
 
 def _fill_and_save(page):
     form = _form(page)
-    form.locator('[data-project-field="github_link"] [name="github_link"]').fill(GITHUB_URL)
-    form.locator('[data-project-field="commit_id"] [name="commit_id"]').fill(COMMIT_ID)
+    expect(
+        form.locator('[data-project-field="github_link"] [name="github_link"]'),
+    ).to_have_value(GITHUB_URL)
     link_inputs = form.locator(
         '[data-project-field="learning_in_public_links"] [name="learning_in_public_links"]',
     )
@@ -132,7 +142,7 @@ def _fill_and_save(page):
         CERT_NAME,
     )
     form.locator('[data-project-save]').click()
-    expect(page.get_by_role('status')).to_contain_text('Your project has been submitted')
+    expect(page.get_by_role('status').first).to_contain_text('Your project is saved')
 
 
 def _assert_saved_values(page):
@@ -140,9 +150,6 @@ def _assert_saved_values(page):
     expect(
         form.locator('[data-project-field="github_link"] [name="github_link"]'),
     ).to_have_value(GITHUB_URL)
-    expect(
-        form.locator('[data-project-field="commit_id"] [name="commit_id"]'),
-    ).to_have_value(COMMIT_ID)
     link_inputs = form.locator(
         '[data-project-field="learning_in_public_links"] [name="learning_in_public_links"]',
     )
@@ -154,7 +161,7 @@ def _assert_saved_values(page):
     expect(
         form.locator('[data-project-field="certificate_name"] [name="certificate_name"]'),
     ).to_have_value(CERT_NAME)
-    expect(form.locator('[name="faq_contribution_url"]')).to_have_count(0)
+    _assert_pinned_commit(page)
 
 
 def _assert_persisted(email, *, course_id, attempt_id):
@@ -174,7 +181,7 @@ def _assert_persisted(email, *, course_id, attempt_id):
             user=user, course_project_id=attempt_id,
         )
     assert submission.project_url == GITHUB_URL
-    assert submission.commit_id == COMMIT_ID
+    assert submission.commit_id == PINNED_COMMIT
     assert submission.learning_in_public_links == list(PUBLIC_LINKS)
     assert submission.time_spent == 6.5
     enrollment = CurriculumEnrollment.objects.get(
@@ -193,6 +200,7 @@ def _run_submit_journey(django_server, browser, *, email, slug, dated):
         wait_until='domcontentloaded',
     )
     _assert_shared_fields(page)
+    _assert_pinned_commit(page)
     _fill_and_save(page)
     _assert_saved_values(page)
     page.reload(wait_until='domcontentloaded')

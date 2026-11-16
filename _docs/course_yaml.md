@@ -192,6 +192,21 @@ omitting either deadline on any other entry, fails the course sync. Resyncing
 the same Self-paced slug clears copied dates in place without replacing its
 row or learner records.
 
+A dated attempt follows a staff-controlled state, as in the course-management
+platform (CMP): Collecting submissions (the default for new attempts), Peer
+reviewing, Completed, or Closed. The dates above are informational; the clock
+never moves an attempt. Learners submit only while Collecting, do reviews only
+while Peer reviewing, and see their own results, feedback and the Passed or
+Failed badge only once the attempt is Completed (finishing all assigned reviews
+shows "Review completed" and nothing more). "Create review assignments" in
+Studio (or `form_review_batches`) assigns reviews and moves a Collecting
+attempt to Peer reviewing; staff close peer review with the Studio
+"Close peer review" button, `manage.py close_peer_review <course-slug>
+<attempt-slug>`, or any state with `manage.py set_project_state <course-slug>
+<attempt-slug> <state>`. Self-paced attempts have no state (CMP has no such
+projects): their results are final once all assigned reviews are done. The
+coursework inventory API reports each attempt's `state` code (CL, CS, PR, CO).
+
 `module_path` must identify a leaf module; the attempts appear in that module's
 syllabus and overview page. Sync upserts attempts by `(course, slug)` and never deletes an attempt removed
 from YAML, because it may already have submissions. Review assignments begin

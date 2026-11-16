@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from content.models import Cohort, CourseProject, ProjectSubmission
+from content.models.peer_review import ProjectState
 
 
 def _add(summary, submissions, reviews):
@@ -15,24 +16,28 @@ def _add(summary, submissions, reviews):
 def _form_dated_attempt_batches(course, assign_reviews, summary):
     projects = CourseProject.objects.filter(
         course=course,
+        state=ProjectState.COLLECTING_SUBMISSIONS,
         submission_due_at__lte=timezone.now(),
-        review_due_at__gt=timezone.now(),
     ).exclude(cohort__mode='self_paced')
     for project in projects:
         waiting = ProjectSubmission.objects.filter(
             course=course,
             course_project=project,
             status='submitted',
-            submitted_at__lte=project.submission_due_at,
         ).order_by('pk')
         if project.cohort_id:
             waiting = waiting.filter(cohort_id=project.cohort_id)
+        formed = False
         for cohort_id in waiting.values_list('cohort_id', flat=True).distinct():
             submissions = list(waiting.filter(cohort_id=cohort_id))
             if len(submissions) >= 2:
                 _add(summary, submissions, assign_reviews(
                     course, submissions, project=project,
                 ))
+                formed = True
+        if formed:
+            project.state = ProjectState.PEER_REVIEWING
+            project.save(update_fields=['state'])
 
 
 def _form_legacy_cohort_batches(course, assign_reviews, summary):

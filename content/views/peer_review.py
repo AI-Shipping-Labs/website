@@ -23,6 +23,7 @@ from content.services.project_form_adapter import (
     certificate_cohort,
     lookup_curriculum_enrollment,
     submission_cohort,
+    update_commit_action,
 )
 
 
@@ -72,6 +73,7 @@ def project_submit(request, slug):
             submission=submission,
             enrollment=enrollment, user=user,
             certificate_cohort=cert_cohort,
+            commit_id_enabled=False, resolve_commit=True,
         ),
     }
 
@@ -83,6 +85,27 @@ def project_submit(request, slug):
             context['error'] = REMOVAL_UNAVAILABLE_MESSAGE
             return render(request, 'content/peer_review/submit.html', context)
 
+        if request.POST.get('action') == 'update_commit':
+            if submission is None:
+                context['error'] = 'Save your project first; the first save records the commit.'
+                return render(request, 'content/peer_review/submit.html', context, status=400)
+            form = build_submission_form(
+                data=request.POST, submission=submission,
+                enrollment=enrollment, user=user, course=course,
+                cohort=submission_cohort(user, course),
+                certificate_cohort=cert_cohort,
+                commit_id_enabled=False, resolve_commit=True,
+            )
+            ok, message = update_commit_action(form, submission)
+            context.update(
+                project_form=form, submission=submission,
+                commit_notice=message,
+            )
+            return render(
+                request, 'content/peer_review/submit.html', context,
+                status=200 if ok else 400,
+            )
+
         form = build_submission_form(
             data=request.POST,
             submission=submission,
@@ -90,9 +113,11 @@ def project_submit(request, slug):
             course=course,
             cohort=submission_cohort(user, course),
             certificate_cohort=cert_cohort,
+            commit_id_enabled=False, resolve_commit=True,
         )
         if form.is_valid():
             submission, _created = form.save()
+            context['commit_notice'] = form.commit_notice
             context.update(submission=submission, just_submitted=True, project_form=form)
         else:
             context['project_form'] = form
@@ -260,12 +285,8 @@ def api_submit_project(request, slug):
             status=400,
         )
 
-    # Legacy clients post project_url/description only; the newly collected
-    # fields arrive optional and validate through the shared form contract
-    # (issue #1777). ``github_link`` falls back to ``project_url``.
     payload = dict(data) if isinstance(data, dict) else {}
     payload['github_link'] = str(payload.get('github_link') or payload.get('project_url') or '')
-    payload.setdefault('description', '')
     payload.setdefault('learning_in_public_links', [])
     # A payload without a commit_id key is a legacy client: the commit field
     # is not collected, so an update keeps the stored value. Payloads that do

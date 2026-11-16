@@ -1,0 +1,50 @@
+{% load accounts_extras member_badges member_empty_state schedule_tags %}
+{% if phase.reviews_assigned and phase.reviews_pending and phase.key != 'feedback' %}
+<div class="mt-6 rounded-md border px-4 py-3 text-sm {% if phase.certificate_blocked %}border-yellow-500/30 bg-yellow-500/10{% else %}border-green-500/30 bg-green-500/10{% endif %}" data-testid="peer-review-certificate-requirement" data-blocked="{% if phase.certificate_blocked %}true{% else %}false{% endif %}">
+  <p class="font-medium text-foreground">Complete all {{ phase.reviews_assigned }} reviews to be eligible for your certificate.</p>
+  <p class="mt-1 text-muted-foreground" data-testid="peer-review-progress">{{ phase.reviews_done }} of {{ phase.reviews_assigned }} complete</p>
+</div>
+{% endif %}
+
+{% if phase.key == 'submit' %}
+<section class="mt-8" data-testid="attempt-phase-submit-body">
+  {% url 'course_project_submit' slug=course.slug attempt_slug=course_project.slug as submit_url %}
+  {% if submission %}
+  <p class="rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground">{% if self_paced_project %}Your project is saved.{% else %}Your project is saved. Peer reviews will be assigned after the submission deadline on <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>.{% endif %}</p>
+  <a href="{{ submit_url }}" class="{% button_classes 'secondary' size='md' extra='mt-4 w-full sm:w-auto' %}">{{ phase.action_label }}</a>
+  {% else %}
+  {% button_classes 'primary' size='md' as submit_cta_class %}
+  {% member_empty_state title="No project submitted yet" body="Submit your project to join peer review." icon="folder-git-2" primary_cta_label="Submit project" primary_cta_url=submit_url primary_cta_class=submit_cta_class testid="peer-review-no-submission" %}
+  {% endif %}
+</section>
+{% elif phase.key == 'missed' %}
+<section class="mt-8">
+  {% member_empty_state title="No project submitted" body="You did not make a submission for this project." icon="folder-git-2" testid="peer-review-no-submission" %}
+</section>
+{% elif phase.key == 'waiting' %}
+<p class="mt-8 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground" data-testid="peer-review-waiting">{% if self_paced_project %}Waiting for enough submissions to form a review group. We'll notify you when reviews are ready.{% else %}Submissions are closed. Peer reviews are being assigned; we'll notify you when they're ready.{% endif %}</p>
+{% elif phase.key == 'review' and phase.reviews_assigned and not phase.reviews_pending %}
+<p class="mt-8 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground" data-testid="peer-review-completed-notice">Review completed. Thanks for reviewing. Your results appear once the course team closes peer review.</p>
+{% endif %}
+
+{% if evaluation_rows and phase.reviews_pending and phase.key != 'feedback' %}
+<section class="mt-8" aria-labelledby="peer-evaluations-title" data-testid="peer-evaluations">
+  <h2 id="peer-evaluations-title" class="mb-3 text-lg font-semibold text-foreground">Assigned reviews</h2>
+  <ul class="divide-y divide-border">
+    {% for row in evaluation_rows %}
+    <li>
+      <a href="{% url 'course_project_review_form' slug=course.slug attempt_slug=course_project.slug submission_id=row.submission_id %}" class="flex min-h-[44px] items-center justify-between gap-3 px-2 py-3 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-evaluation-row">
+        <span class="min-w-0 break-words text-foreground">{{ row.author_label }}'s submission</span>
+        {% member_status_badge row.status_label status=row.status_key testid="peer-review-status" %}
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if not review_open %}<p class="mt-3 text-sm text-muted-foreground" data-testid="peer-review-form-closed">The peer review form is closed.</p>{% endif %}
+  {% if review_open and phase.reviews_pending %}<a href="{{ next_pending_url }}" class="{% button_classes 'primary' extra='mt-4 w-full sm:w-auto' %}" data-testid="peer-review-continue">Continue reviews</a>{% endif %}
+</section>
+{% endif %}
+
+{% if phase.key == 'feedback' %}
+{% include "content/peer_review/_attempt_results.html" %}
+{% endif %}

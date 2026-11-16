@@ -10,7 +10,7 @@ from django.db.models.signals import post_delete, post_save
 from django.utils import timezone
 
 from accounts.services.timezones import is_valid_timezone
-from content.models import Cohort, CohortEnrollment, Homework
+from content.models import Cohort, CohortEnrollment, CourseAccess, Homework
 from content.models.peer_review import CourseProject
 
 _PROJECT_EPOCH = 0
@@ -175,6 +175,34 @@ def pickable_cohorts(course, *, today=None):
     if open_cohorts:
         return open_cohorts
     return sorted(active, key=lambda cohort: (cohort.start_date, cohort.pk), reverse=True)
+
+
+def next_open_cohort(course, *, today=None):
+    """The single current or upcoming dated cohort the landing advertises."""
+    today = today or timezone.localdate()
+    cohorts = pickable_cohorts(course, today=today)
+    if not cohorts:
+        return None
+    cohort = cohorts[0]
+    if cohort.end_date is not None and cohort.end_date < today:
+        return None
+    return cohort
+
+
+def already_takes_course(user, course, *, course_enrolled):
+    """Whether the landing should show the learner state, not enroll actions."""
+    if not user.is_authenticated:
+        return False
+    if course_enrolled:
+        return True
+    if course.access_mode == 'entitlement' and CourseAccess.objects.filter(
+        user=user, course=course,
+    ).exists():
+        return True
+    return CohortEnrollment.objects.filter(
+        user=user, cohort__course=course,
+        cohort__mode='cohort', cohort__is_active=True,
+    ).exists()
 
 
 def schedule_timezone_name(course, user):

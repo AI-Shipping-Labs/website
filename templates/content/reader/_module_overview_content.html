@@ -47,7 +47,7 @@ rewrites every course-surface instant and the zone label together.
 
 {% if module_homework_rows or module_project_rows %}
 <div class="mb-10" data-testid="module-work-status">
-  {% include "content/course_home/_deadlines.html" with section="module" deadline_rows=module_work_rows completed_deadline_rows=None %}
+  {% include "content/course_home/_deadlines.html" with section="module" deadline_rows=module_work_rows %}
 </div>
 {% endif %}
 

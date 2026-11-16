@@ -14,6 +14,15 @@ SUBMISSION_STATUS_CHOICES = [
 ]
 
 
+class ProjectState(models.TextChoices):
+    """CMP's ProjectState (courses/models/project.py), same codes and names."""
+
+    CLOSED = 'CL', 'Closed'
+    COLLECTING_SUBMISSIONS = 'CS', 'Collecting submissions'
+    PEER_REVIEWING = 'PR', 'Peer reviewing'
+    COMPLETED = 'CO', 'Completed'
+
+
 class CourseProject(models.Model):
     """A project attempt, date-free only for an actual self-paced cohort."""
 
@@ -33,11 +42,17 @@ class CourseProject(models.Model):
     title = models.CharField(max_length=200)
     submission_due_at = models.DateTimeField(null=True, blank=True)
     review_due_at = models.DateTimeField(null=True, blank=True)
+    state = models.CharField(
+        max_length=2, choices=ProjectState.choices,
+        default=ProjectState.COLLECTING_SUBMISSIONS,
+        db_default=ProjectState.COLLECTING_SUBMISSIONS.value,
+    )
     peer_review_count = models.PositiveSmallIntegerField(
         null=True, blank=True,
         validators=[MinValueValidator(1)],
         help_text='Reviews per learner; blank uses the course setting.',
     )
+    evaluation_criteria = models.JSONField(default=list, blank=True, db_default=[])
 
     class Meta:
         ordering = ['submission_due_at', 'pk']
@@ -84,21 +99,21 @@ class CourseProject(models.Model):
         """Whether this attempt belongs to an actual self-paced cohort."""
         return bool(self.cohort_id and self.cohort.mode == 'self_paced')
 
-    def is_submission_open(self, now):
-        """Date-free self-paced attempts stay open; malformed rows fail closed."""
+    def is_submission_open(self, now=None):
+        """Dated: only while staff keep the state at Collecting submissions (CMP)."""
         if self.is_self_paced:
             return True
-        if self.submission_due_at is None:
-            return False
-        return now < self.submission_due_at
+        return self.state == ProjectState.COLLECTING_SUBMISSIONS
 
-    def is_review_open(self, now):
-        """Self-paced review assignments remain open until completed."""
+    def is_review_open(self, now=None):
+        """Dated: reviews are doable only while Peer reviewing (CMP)."""
         if self.is_self_paced:
             return True
-        if self.review_due_at is None:
-            return False
-        return now < self.review_due_at
+        return self.state == ProjectState.PEER_REVIEWING
+
+    def is_completed(self):
+        """Dated: results are visible only once staff move it to Completed."""
+        return not self.is_self_paced and self.state == ProjectState.COMPLETED
 
 
 class ProjectSubmission(models.Model):
@@ -225,6 +240,7 @@ class PeerReview(models.Model):
         help_text="Numeric score from 1 to 5.",
     )
     feedback = models.TextField(blank=True, default='')
+    criteria_scores = models.JSONField(default=dict, blank=True, db_default={})
     is_complete = models.BooleanField(default=False)
     assigned_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)

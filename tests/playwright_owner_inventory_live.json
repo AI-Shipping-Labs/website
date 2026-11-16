@@ -133,7 +133,6 @@
     "playwright_tests/test_account_timezone_display.py::test_saved_preference_is_not_overwritten_by_browser_detection",
     "playwright_tests/test_action_buttons_1280.py::test_cancellation_actions_preserve_get_keep_and_post_semantics",
     "playwright_tests/test_action_buttons_1280.py::test_certificate_and_roadmap_actions_keep_destinations_and_keyboard_focus",
-    "playwright_tests/test_action_buttons_1280.py::test_cohort_actions_keep_endpoint_behavior_and_canonical_opposite_states",
     "playwright_tests/test_activities_curation_1243.py::test_benefit_rows_keep_one_action_or_are_intentionally_static",
     "playwright_tests/test_activities_curation_1243.py::test_legacy_activities_redirects_to_the_membership_benefits_anchor",
     "playwright_tests/test_activities_curation_1243.py::test_legacy_pricing_preserves_query_on_membership_redirect",

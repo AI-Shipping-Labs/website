@@ -23,26 +23,8 @@
     {% endif %}
     {% endfor %}
   </ol>
-  {% elif not completed_deadline_rows %}
-  {% member_empty_state title=empty_title body=empty_body icon=empty_icon kind='fresh' testid='course-home-deadlines-empty' %}
   {% else %}
-  <p class="text-sm text-muted-foreground">No outstanding deadlines here.</p>
+  {% member_empty_state title=empty_title body=empty_body icon=empty_icon kind='fresh' testid='course-home-deadlines-empty' %}
   {% endif %}
-  {% endif %}
-  {% if completed_deadline_rows and section != 'module' %}
-  <details class="mt-4 border-t border-border pt-4">
-    <summary class="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">Completed work ({{ completed_deadline_rows|length }})</summary>
-    <ol class="mt-2 divide-y divide-border">
-      {% for item in completed_deadline_rows %}
-      <li class="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-        <span class="min-w-0 break-words text-foreground">
-          <span class="block">{{ item.title }}</span>
-          {% if item.detail %}<span class="mt-0.5 block text-xs text-muted-foreground">{{ item.detail }}</span>{% endif %}
-        </span>
-        <span class="text-xs text-muted-foreground">{{ item.status }}</span>
-      </li>
-      {% endfor %}
-    </ol>
-  </details>
   {% endif %}
 </section>

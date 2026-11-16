@@ -44,6 +44,13 @@ class CourseProjectSyncTest(SimpleTestCase):
         with self.assertRaises(GitHubSyncError):
             self.defaults(peer_review_count=0)
 
+    def test_project_passing_score_is_imported_and_validated(self):
+        self.assertEqual(self.defaults(project_passing_score=12)['project_passing_score'], 12)
+        self.assertEqual(self.defaults()['project_passing_score'], 0)
+        for bad in (-1, '12', True):
+            with self.subTest(value=bad), self.assertRaises(GitHubSyncError):
+                self.defaults(project_passing_score=bad)
+
 
 class CourseProjectAttemptSyncTest(TestCase):
     @classmethod
@@ -141,6 +148,18 @@ class CourseProjectAttemptSyncTest(TestCase):
                     'review_due_at': '2026-11-22T23:59:00+01:00',
                 },
             ]}, 'buildcamp')
+        self.assertFalse(CourseProject.objects.filter(course=self.course).exists())
+
+    def test_invalid_criteria_fail_sync_with_located_message_before_any_write(self):
+        bad = [{'id': 'Bad Id', 'title': 'Problem', 'options': [{'points': 1, 'text': 'Ok'}]}]
+        with self.assertRaisesMessage(
+            GitHubSyncError,
+            "buildcamp/course.yaml project_criteria: criterion id 'Bad Id' must be a lowercase slug",
+        ):
+            _sync_course_projects(self.course, {
+                'project_criteria': bad,
+                'projects': [self._self_paced_entry()],
+            }, 'buildcamp')
         self.assertFalse(CourseProject.objects.filter(course=self.course).exists())
 
     def test_rejects_unroutable_slug(self):
@@ -277,5 +296,5 @@ class CourseProjectAttemptSyncTest(TestCase):
         )
         with self.assertRaises(ValidationError):
             malformed.full_clean()
-        self.assertFalse(malformed.is_submission_open(timezone.now()))
+        self.assertTrue(malformed.is_submission_open(timezone.now()))
         self.assertFalse(malformed.is_review_open(timezone.now()))

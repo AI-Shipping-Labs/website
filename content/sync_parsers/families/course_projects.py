@@ -10,6 +10,7 @@ from django.utils.dateparse import parse_datetime
 from content.models import Module
 from content.models.cohort import COHORT_MODE_SELF_PACED
 from content.models.peer_review import CourseProject
+from content.services.project_criteria import CriteriaError, parse_criteria
 from content.sync_parsers.common import GitHubSyncError
 
 
@@ -24,11 +25,27 @@ def sync_course_projects(course, course_data, rel_path):
         raise GitHubSyncError(
             f'Projects in {rel_path}/course.yaml require peer_review_enabled: true'
         )
+    default_criteria = _parse_criteria(
+        course_data.get('project_criteria'),
+        f'{rel_path}/course.yaml project_criteria',
+    )
     parsed = _parse_project_entries(course, entries, rel_path)
+    for slug, defaults in parsed:
+        override = defaults.pop('criteria', None)
+        defaults['evaluation_criteria'] = (
+            override if override is not None else default_criteria
+        )
     for slug, defaults in parsed:
         CourseProject.objects.update_or_create(
             course=course, slug=slug, defaults=defaults,
         )
+
+
+def _parse_criteria(raw, where):
+    try:
+        return parse_criteria(raw, where)
+    except CriteriaError as exc:
+        raise GitHubSyncError(str(exc)) from exc
 
 
 def _parse_project_entries(course, entries, rel_path):
@@ -48,6 +65,10 @@ def _parse_project_entries(course, entries, rel_path):
             'peer_review_count': _review_count(entry, slug),
             **_project_dates(entry, cohort, slug, rel_path),
         }
+        if 'criteria' in entry:
+            defaults['criteria'] = _parse_criteria(
+                entry['criteria'], f'Project {slug!r} in {rel_path}/course.yaml',
+            )
         parsed.append((slug, defaults))
     return parsed
 

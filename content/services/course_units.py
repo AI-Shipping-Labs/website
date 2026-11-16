@@ -400,12 +400,16 @@ def build_course_unit_navigation_context(
         if unit.kind == UNIT_KIND_EVENT else None
     )
 
+    from content.services.project_reader import criteria_row, project_rows
+
     return {
         'course': course,
         'module': module,
         'unit': unit,
         'modules': modules,
         'scoped_module': scoped_module,
+        'reader_project_rows': project_rows(user, course, scoped_module),
+        'reader_criteria_row': criteria_row(course, scoped_module),
         'previous_module': previous_module,
         'next_module': next_module,
         'is_gated': False,

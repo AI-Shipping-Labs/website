@@ -43,6 +43,16 @@ AISL_COURSE_FIELDS = (
     'peer_review_criteria',
     'peer_review_criteria_html',
     'auto_banner_title_hash',
+    'project_passing_score',
+    'project_criteria_intro',
+    'project_criteria_intro_html',
+    'project_criteria_outro',
+    'project_criteria_outro_html',
+)
+_MARKDOWN_EXTENSION_FIELDS = (
+    'peer_review_criteria',
+    'project_criteria_intro',
+    'project_criteria_outro',
 )
 
 _APPLIED = False
@@ -52,6 +62,7 @@ _NON_STRING_EXTENSION_FIELDS = (
     'peer_review_enabled',
     'peer_review_count',
     'peer_review_deadline_days',
+    'project_passing_score',
 )
 
 
@@ -125,6 +136,8 @@ def _default_extension_value(field: str, fallback):
         return 3
     if field == 'peer_review_deadline_days':
         return 7
+    if field == 'project_passing_score':
+        return 0
     return fallback
 
 
@@ -197,11 +210,12 @@ def _wrap_inits_and_saves() -> None:
                     return
             else:
                 kwargs['update_fields'] = ['updated_at'] if hasattr(self, 'updated_at') else []
-        if 'peer_review_criteria' in extra:
-            criteria_md = extra.get('peer_review_criteria') or ''
-            extra['peer_review_criteria_html'] = (
-                linkify_urls(render_markdown(criteria_md)) if criteria_md else ''
-            )
+        for md_field in _MARKDOWN_EXTENSION_FIELDS:
+            if md_field in extra:
+                field_md = extra.get(md_field) or ''
+                extra[f'{md_field}_html'] = (
+                    linkify_urls(render_markdown(field_md)) if field_md else ''
+                )
         if kwargs.get('update_fields') == []:
             # Only AISL overlay fields changed.
             ext, _ = CourseExtension.objects.get_or_create(course=self)

@@ -170,6 +170,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_peer_review_extend_deadline',
         'studio_peer_review_form_batch',
         'studio_peer_review_issue_certificates',
+        'studio_peer_review_set_state',
         # Issue #1683: read-only homework/submissions visibility, same
         # course-scoped nesting as peer reviews above.
         'studio_homework_list',

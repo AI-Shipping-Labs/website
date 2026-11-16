@@ -88,7 +88,8 @@ Notes
 - The anchor sets `min-h-[44px]` so taps land on iOS/Android even when
   the title is short.
 - `<span>` text uses `truncate` so long titles do not wrap and break
-  the row rhythm. A long status label wraps inside its own slot instead.
+  the row rhythm. The status label stays on one line (`whitespace-nowrap`)
+  and the title truncates instead.
 {% endcomment %}
 {% load member_badges %}
 <a href="{{ href }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
@@ -107,7 +108,7 @@ Notes
     {% endif %}
   </span>
   <span class="min-w-0 flex-1 truncate">{{ title }}{% if status_meta %}<span class="sr-only">, {{ status_meta.aria_label }}</span>{% endif %}</span>
-  {% if status_meta %}<span class="max-w-[45%] flex-shrink-0 text-right text-xs font-normal text-muted-foreground" aria-hidden="true" data-testid="homework-row-status" data-homework-state="{{ status_meta.value }}">{{ status_meta.label }}</span>{% endif %}
+  {% if status_meta %}{% include "includes/_list_row_status.html" with status=status_meta only %}{% endif %}
   {% if not root_optional and wrapper_optional or optional_badge and not root_optional and not ancestor_optional %}
     {% if '(Optional)' not in title %}
     {% member_badge 'Optional' tone='muted' %}

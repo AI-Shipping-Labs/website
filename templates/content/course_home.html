@@ -27,6 +27,9 @@
           {% include "content/_course_syllabus_search_index.html" %}
         </div>
       </section>
+      {% if peer_review_prompt %}
+      {% include "content/course_home/_peer_review_prompt.html" with prompt=peer_review_prompt %}
+      {% endif %}
       {% if current_module %}
       {% include "content/course_home/_current_module.html" %}
       {% endif %}
@@ -57,17 +60,20 @@
       {% endif %}
     {% elif section == 'homework' %}
       <h2 id="course-homework-heading" class="sr-only">Homework</h2>
-      {% if not cohort and not homework_rows and not completed_homework_rows %}
+      {% if not cohort and not homework_rows %}
       {% member_empty_state title='Homework deadlines appear once your cohort is linked' body="Your cohort's homework and due dates will show here. Homework inside the syllabus stays open to you." icon='clipboard-list' kind='fresh' primary_cta_label='Contact course support' primary_cta_url='mailto:team@aishippinglabs.com?subject=Course%20cohort%20access' primary_cta_class=support_cta_classes testid='course-home-homework-no-cohort' %}
       {% else %}
-      {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows completed_deadline_rows=completed_homework_rows deadline_heading="Homework deadlines" empty_title="No homework yet" empty_body="Homework for this cohort will appear here." empty_icon="clipboard-list" %}
+      {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows deadline_heading="Homework deadlines" empty_title="No homework yet" empty_body="Homework for this cohort will appear here." empty_icon="clipboard-list" %}
       {% endif %}
     {% elif section == 'projects' %}
       <h2 id="course-projects-heading" class="sr-only">Projects</h2>
+      {% if peer_review_prompt %}
+      <div class="mb-6">{% include "content/course_home/_peer_review_prompt.html" with prompt=peer_review_prompt %}</div>
+      {% endif %}
       {% if not cohort %}
       {% member_empty_state title='Projects appear once your cohort is linked' body="Your cohort's project submission windows will show here." icon='folder-kanban' kind='fresh' primary_cta_label='Contact course support' primary_cta_url='mailto:team@aishippinglabs.com?subject=Course%20cohort%20access' primary_cta_class=support_cta_classes testid='course-home-projects-no-cohort' %}
       {% else %}
-      {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows completed_deadline_rows=completed_project_rows deadline_heading="Project deadlines" empty_title="No projects yet" empty_body="Project submission windows for your cohort will appear here." empty_icon="folder-kanban" %}
+      {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows deadline_heading="Project deadlines" empty_title="No projects yet" empty_body="Project submission windows for your cohort will appear here." empty_icon="folder-kanban" %}
       {% endif %}
       {% if cohort and review_rows %}
       <section class="mt-10" aria-labelledby="course-peer-reviews-heading">

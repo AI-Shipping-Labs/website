@@ -2224,7 +2224,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2237)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2236)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 0)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -2292,8 +2292,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2962)
-        self.assertEqual(len(inventory.owners), 2757)
+        self.assertEqual(inventory.item_count, 2961)
+        self.assertEqual(len(inventory.owners), 2756)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner, self.tag_cache_isolation_owner}

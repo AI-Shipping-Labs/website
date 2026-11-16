@@ -32,11 +32,15 @@ shadow field. The view resolves the AISL cohort; the form writes the name.
 from community_base.coursework.models import ProjectState
 from community_base.coursework.project_forms import ProjectSubmissionForm
 from community_base.curriculum.models import Enrollment as CurriculumEnrollment
-from django import forms
 from django.db import transaction
 
 from content.models.cohort import CohortEnrollment
 from content.models.peer_review import ProjectSubmission
+from content.services.github_commit import (
+    GitHubCommitError,
+    GitHubUnavailable,
+    resolve_commit,
+)
 
 REMOVAL_UNAVAILABLE_MESSAGE = (
     'Submissions cannot be removed on AI Shipping Labs: peer reviews are '
@@ -48,7 +52,6 @@ REMOVAL_UNAVAILABLE_MESSAGE = (
 # default. DataTalksClub renders the same cap on its reference form.
 LEARNING_IN_PUBLIC_CAP = 14
 
-DESCRIPTION_HELP = 'Tell reviewers about your project.'
 
 
 class CourseProjectSubmissionTarget:
@@ -102,21 +105,6 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
       ``cohort`` for self-paced learners).
     """
 
-    # The legacy AISL description rides along as the documented subclass
-    # extra field so reviewer context is preserved (issue #1777).
-    description = forms.CharField(
-        label='Description',
-        required=False,
-        help_text=DESCRIPTION_HELP,
-        widget=forms.Textarea(
-            attrs={
-                'class': 'cb-input',
-                'rows': 4,
-                'placeholder': 'Tell reviewers about your project...',
-            },
-        ),
-    )
-
     def __init__(
         self,
         data=None,
@@ -129,9 +117,14 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
         cohort=None,
         certificate_cohort=None,
         commit_id_enabled=True,
+        resolve_commit=False,
         **kwargs,
     ):
         self.course = course
+        self.resolve_commit = resolve_commit
+        self.resolved_commit = None
+        self.commit_notice = ''
+        self.clear_commit = False
         self.cohort = cohort
         self.certificate_cohort = certificate_cohort
         super().__init__(
@@ -142,6 +135,8 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
             user=user,
             **kwargs,
         )
+        if submission is not None and submission.project_url and 'github_link' in self.fields:
+            self.fields['github_link'].widget.attrs['title'] = submission.project_url
         if not commit_id_enabled:
             # Legacy API clients predate commit capture: the field disappears,
             # so an update keeps the stored commit id (see ``save``) instead of
@@ -159,16 +154,33 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
                     submission.learning_in_public_links or []
                 ),
                 'time_spent': submission.time_spent,
-                'description': submission.description,
             }
+        name = ''
         if enrollment is not None:
-            initial['certificate_name'] = (
-                enrollment.certificate_name or enrollment.display_name
-            )
+            name = enrollment.certificate_name or enrollment.display_name
+        initial['certificate_name'] = name or _account_full_name(self.user)
         return initial
 
-    def apply_extra_fields(self, submission: ProjectSubmission) -> None:
-        submission.description = (self.cleaned_data.get('description') or '').strip()
+    def clean(self):
+        cleaned = super().clean()
+        link = (cleaned or {}).get('github_link')
+        if not self.resolve_commit or not link or self.errors.get('github_link'):
+            return cleaned
+        existing = self.submission
+        link_changed = (
+            existing is not None
+            and _normalize_link(existing.project_url) != _normalize_link(link)
+        )
+        if existing is not None and existing.commit_id and not link_changed:
+            return cleaned
+        try:
+            self.resolved_commit = resolve_commit(link)
+        except GitHubUnavailable as exc:
+            self.clear_commit = link_changed
+            self.commit_notice = exc.message
+        except GitHubCommitError as exc:
+            self.add_error('github_link', exc.message)
+        return cleaned
 
     def save(self) -> tuple[ProjectSubmission, bool]:
         """Create or update the AISL submission. Call only after ``is_valid()``.
@@ -200,6 +212,10 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
             submission.project_url = data['github_link']
             if 'commit_id' in self.fields:
                 submission.commit_id = data.get('commit_id', '')
+            if self.resolved_commit:
+                submission.commit_id = self.resolved_commit
+            elif self.clear_commit:
+                submission.commit_id = ''
             if 'learning_in_public_links' in self.fields:
                 submission.learning_in_public_links = (
                     data.get('learning_in_public_links') or []
@@ -232,6 +248,40 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
         if certificate_name != enrollment.certificate_name:
             enrollment.certificate_name = certificate_name
             enrollment.save(update_fields=['certificate_name'])
+
+
+def _normalize_link(url):
+    return (url or '').strip().rstrip('/').lower()
+
+
+def update_commit_action(form, submission):
+    """The "update" control: pin the commit of the link typed in the form."""
+    form.is_valid()
+    if 'github_link' in form.errors:
+        return False, ''
+    link = (form.cleaned_data.get('github_link') or '').strip()
+    if not link:
+        form.add_error('github_link', 'Enter the link to your GitHub repository.')
+        return False, ''
+    try:
+        sha = resolve_commit(link)
+    except GitHubCommitError as exc:
+        form.add_error('github_link', exc.message)
+        return False, exc.message
+    with transaction.atomic():
+        submission.project_url = link
+        submission.commit_id = sha
+        submission.save(update_fields=['project_url', 'commit_id'])
+    return True, ''
+
+
+def _account_full_name(user):
+    """First and last name from the account; empty when neither is set."""
+    if user is None:
+        return ''
+    first = (getattr(user, 'first_name', '') or '').strip()
+    last = (getattr(user, 'last_name', '') or '').strip()
+    return f'{first} {last}'.strip()
 
 
 def submission_cohort(user, course, preferred_cohort=None):
@@ -293,6 +343,7 @@ def build_submission_form(
     cohort=None,
     certificate_cohort=None,
     commit_id_enabled=True,
+    resolve_commit=False,
 ):
     """The AISL adapter form for one submission slot (dated or undated).
 
@@ -313,5 +364,6 @@ def build_submission_form(
         cohort=cohort,
         certificate_cohort=certificate_cohort,
         commit_id_enabled=commit_id_enabled,
+        resolve_commit=resolve_commit,
         **kwargs,
     )

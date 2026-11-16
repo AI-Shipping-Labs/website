@@ -494,6 +494,9 @@ def _build_course_defaults(
         raise GitHubSyncError(f'Invalid peer_review_count in {rel_path}/course.yaml: expected 1–10')
     if not isinstance(peer_review_deadline_days, int) or isinstance(peer_review_deadline_days, bool) or not 1 <= peer_review_deadline_days <= 90:
         raise GitHubSyncError(f'Invalid peer_review_deadline_days in {rel_path}/course.yaml: expected 1–90')
+    project_passing_score = course_data.get('project_passing_score', 0)
+    if not isinstance(project_passing_score, int) or isinstance(project_passing_score, bool) or project_passing_score < 0:
+        raise GitHubSyncError(f'Invalid project_passing_score in {rel_path}/course.yaml: expected a non-negative integer')
     return {
         'title': course_data.get('title', slug),
         'description': description,
@@ -514,7 +517,10 @@ def _build_course_defaults(
         'peer_review_enabled': peer_review_enabled,
         'peer_review_count': peer_review_count,
         'peer_review_deadline_days': peer_review_deadline_days,
+        'project_passing_score': project_passing_score,
         'peer_review_criteria': course_data.get('peer_review_criteria', '') or '',
+        'project_criteria_intro': course_data.get('project_criteria_intro', '') or '',
+        'project_criteria_outro': course_data.get('project_criteria_outro', '') or '',
         'tags': course_data.get('tags', []),
         'testimonials': course_data.get('testimonials', []),
         'status': 'published',

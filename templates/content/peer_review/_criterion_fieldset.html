@@ -1,0 +1,15 @@
+<fieldset class="min-w-0" data-testid="review-criterion" data-criterion="{{ row.id }}" data-input-type="{{ row.input_type }}"{% if row.missing %} aria-describedby="{{ row.input_name }}-error"{% endif %}>
+  <legend class="text-lg font-semibold text-foreground">{{ row.number }}. {{ row.title }}</legend>
+  {% if row.description %}<p class="mt-1 text-sm text-muted-foreground"{% if row.is_bonus %} data-testid="review-criterion-bonus"{% endif %}>{{ row.description }}</p>{% elif row.is_bonus %}<p class="mt-1 text-sm text-muted-foreground" data-testid="review-criterion-bonus">Bonus, optional. Tick all that apply.</p>{% endif %}
+  {% if row.missing %}<p id="{{ row.input_name }}-error" class="mt-1 text-sm text-red-700 dark:text-red-400" data-testid="review-criterion-error">Choose an option for {{ row.title }}.</p>{% endif %}
+  <ul class="mt-3" data-homework-option-list="true">
+    {% for option in row.options %}
+    <li data-homework-option="true">
+      <label class="homework-option-label{% if option.readonly %} is-readonly{% endif %}">
+        <input type="{{ row.input_type }}" name="{{ row.input_name }}" value="{{ option.index }}" class="homework-option-control h-5 w-5 shrink-0 border-border text-accent{% if row.input_type == 'checkbox' %} rounded{% endif %}"{% if option.checked %} checked{% endif %}{% if option.readonly %} disabled{% endif %}>
+        <div class="homework-option-content">{{ option.text|default:option.label }}{% if option.points_label %} <span class="whitespace-nowrap text-muted-foreground" data-testid="review-option-points">({{ option.points_label }})</span>{% endif %}</div>
+      </label>
+    </li>
+    {% endfor %}
+  </ul>
+</fieldset>

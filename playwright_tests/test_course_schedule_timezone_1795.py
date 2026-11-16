@@ -135,6 +135,16 @@ def _stored_timezone(email):
     return value
 
 
+def _set_project_state(django_db_blocker, state):
+    from django.db import connection
+
+    from content.models.peer_review import CourseProject
+
+    with django_db_blocker.unblock():
+        CourseProject.objects.filter(slug='attempt-4').update(state=state)
+    connection.close()
+
+
 def _authed_context(browser, email, django_db_blocker, timezone_id):
     from django.db import connection
 
@@ -185,14 +195,14 @@ def _expect_attempt_pages_in(page, django_server, due, zone, review_url):
         wait_until='domcontentloaded',
     )
     expect(page.get_by_test_id('peer-review-meta')).to_have_text(
-        f'Attempt 4 · Reviews due {label} {zone}', use_inner_text=True,
+        f'Reviews due {label} {zone}', use_inner_text=True,
     )
     expect(page.locator('[data-timezone-notice-text]')).to_have_text(
         note, use_inner_text=True,
     )
     page.goto(f'{django_server}{review_url}', wait_until='domcontentloaded')
     expect(page.get_by_test_id('peer-review-meta')).to_have_text(
-        f'Attempt 4 · Due {label} {zone}', use_inner_text=True,
+        f'Attempt 4 · Reviews due {label} {zone}', use_inner_text=True,
     )
     expect(page.locator('[data-timezone-notice-text]')).to_have_text(
         note, use_inner_text=True,
@@ -273,14 +283,21 @@ def test_failed_backfill_still_localizes_attempt_header_consistently(
             wait_until='domcontentloaded',
         )
         meta = page.get_by_test_id('peer-review-meta')
+        label = _local_label(due, 'America/New_York')
         expect(meta).to_contain_text(
-            f'Submit by {_local_label(due, "America/New_York")} America/New_York',
-            use_inner_text=True,
+            f'Submit by {label} America/New_York', use_inner_text=True,
+        )
+        expect(meta).to_contain_text(
+            f'Reviews due {label}', use_inner_text=True,
         )
         expect(meta).not_to_contain_text('Europe/Berlin', use_inner_text=True)
-        expect(meta.locator('time')).to_have_attribute(
-            'datetime', due.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        )
+        instant = due.strftime('%Y-%m-%dT%H:%M:%SZ')
+        times = meta.locator('time[data-schedule-instant]')
+        expect(times).to_have_count(2)
+        expect(times.nth(0)).to_have_attribute('datetime', instant)
+        expect(times.nth(1)).to_have_attribute('datetime', instant)
+        expect(times).to_have_text([label, label])
+        _set_project_state(django_db_blocker, 'PR')
         _expect_attempt_pages_in(page, django_server, due, 'America/New_York', review_url)
     finally:
         context.close()

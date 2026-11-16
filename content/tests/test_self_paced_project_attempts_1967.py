@@ -1,5 +1,7 @@
 """Learner-facing self-paced CourseProject flows for issue #1967."""
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -20,6 +22,7 @@ from content.models import (
 User = get_user_model()
 
 
+@patch('content.services.project_form_adapter.resolve_commit', new=lambda link: 'a' * 40)
 class SelfPacedProjectAttemptTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
@@ -110,5 +113,5 @@ class SelfPacedProjectAttemptTest(TestCase):
         self.assertEqual(CourseCertificate.objects.filter(user=self.user).count(), 1)
         dashboard = self.client.get(response['Location'])
         self.assertContains(dashboard, 'peer-review-certificate-cta')
-        self.assertContains(dashboard, 'Reviews remain open until completed')
+        self.assertNotContains(dashboard, 'Reviews remain open until completed')
         self.assertNotContains(dashboard, 'Reviews due')

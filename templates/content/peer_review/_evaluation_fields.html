@@ -1,0 +1,9 @@
+{% if evaluation.rows %}
+<div id="homework-question-prompt">
+{% if not evaluation.readonly %}<p class="text-base text-muted-foreground">Evaluate the submission on each criterion.</p>{% endif %}
+<div class="mt-6 space-y-8" data-testid="review-criteria">
+  {% for row in evaluation.rows %}{% include "content/peer_review/_criterion_fieldset.html" with row=row only %}{% endfor %}
+</div>
+{% if review.is_complete %}<p class="mt-8 text-sm text-muted-foreground" data-testid="peer-review-total">Total: <span class="font-semibold text-foreground">{{ evaluation.total }}</span> points</p>{% endif %}
+</div>
+{% endif %}

@@ -1,0 +1,53 @@
+<section id="peer-feedback" class="mt-6 scroll-mt-24" aria-labelledby="peer-results-title" data-testid="peer-results">
+  <h2 id="peer-results-title" class="sr-only">Your results</h2>
+  {% if project_result %}
+  <div data-testid="peer-score-card">
+    <p class="text-sm text-muted-foreground">Your project: <span class="text-2xl font-semibold text-foreground" data-testid="peer-project-score">{{ project_result.total }}</span> points{% if phase.results_final and project_result.passed is not None %}<span aria-hidden="true"> · </span><span class="text-lg font-semibold {% if project_result.passed %}text-green-700 dark:text-green-400{% else %}text-red-700 dark:text-red-400{% endif %}" data-testid="peer-project-outcome">{% if project_result.passed %}Passed{% else %}Failed{% endif %}</span>{% endif %}</p>
+    {% if phase.results_final and project_result.passed is False %}
+    <p class="mt-1 text-sm text-foreground" data-testid="peer-results-fail-reason">{% if phase.reviews_pending %}You completed {{ phase.reviews_done }} of {{ phase.reviews_assigned }} assigned reviews. To pass, you need at least {{ project_result.passing_score }} points and all assigned reviews completed.{% else %}To pass, you need at least {{ project_result.passing_score }} points.{% endif %}</p>
+    {% endif %}
+    <ul class="mt-1 space-y-0.5 text-xs text-muted-foreground">
+      {% if not project_result.review_count %}<li data-testid="peer-results-default">No peer reviews received yet, scores shown are defaults.</li>{% endif %}
+      {% if project_result.passing_score and not phase.results_final or project_result.passing_score and project_result.passed %}<li>Passing score: {{ project_result.passing_score }} points, with all your assigned reviews completed.</li>{% endif %}
+      {% if not phase.results_final %}<li data-testid="peer-results-provisional">Scores can change until peer review closes.</li>{% endif %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <h3 class="mb-2 mt-6 text-base font-semibold text-foreground">Peer feedback</h3>
+  {% if peer_feedback %}
+  <ul class="space-y-4" data-testid="peer-feedback-list">
+    {% for item in peer_feedback %}
+    <li class="text-sm">
+      <p class="mb-1 text-xs font-medium text-muted-foreground">{{ item.label }}</p>
+      <p class="whitespace-pre-line break-words text-foreground">{{ item.feedback }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground">No written feedback yet.</p>
+  {% endif %}
+
+  {% if project_result %}
+  <h3 class="mb-1 mt-6 text-base font-semibold text-foreground">Criteria breakdown</h3>
+  <ul class="peer-result-rows" data-testid="peer-result-criteria">
+    {% for row in project_result.criteria %}
+    <li class="peer-result-row" data-testid="peer-result-criterion" data-criterion="{{ row.id }}">
+      <p class="peer-result-title">{{ row.title }}{% if row.bonus_marker %} <span class="peer-result-bonus" data-testid="peer-result-bonus">Bonus</span>{% endif %}</p>
+      {% if row.chosen_text %}<p class="peer-result-choice" data-testid="peer-result-criterion-choice">{{ row.chosen_text }}</p>{% endif %}
+      <p class="peer-result-points"><span data-testid="peer-result-criterion-score">{{ row.score }}</span><span class="peer-result-max"><span aria-hidden="true"> / </span><span class="sr-only"> of </span>{{ row.max_points }}</span></p>
+      {% if project_result.review_count %}
+      <details class="peer-result-votes" data-testid="peer-result-votes">
+        <summary>{{ project_result.review_count }} vote{{ project_result.review_count|pluralize }}</summary>
+        <ul>
+          {% for option in row.options %}
+          <li{% if option.chosen %} class="is-chosen"{% endif %}><span>{{ option.label }}</span><span>{{ option.votes }} vote{{ option.votes|pluralize }}</span></li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>

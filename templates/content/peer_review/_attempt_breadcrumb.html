@@ -1,0 +1,16 @@
+{% load course_links %}
+{% if reader_shell %}
+{% include "content/reader/_mobile_progress_bar.html" %}
+<nav class="mb-2 flex min-h-[44px] items-center gap-2 overflow-hidden text-sm text-muted-foreground lg:mb-4 lg:h-7 lg:min-h-0" aria-label="Breadcrumb" data-reader-breadcrumb>
+  <a href="{% course_entry_url course %}" class="flex-shrink-0 py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="reader-course-home">Home</a>
+  <i data-lucide="chevron-right" class="hidden h-3 w-3 flex-shrink-0 sm:block" aria-hidden="true"></i>
+  <a href="{{ module.get_absolute_url }}" class="hidden min-w-0 truncate transition-colors hover:text-foreground sm:inline">{{ module.title }}</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0" aria-hidden="true"></i>
+  <span class="min-w-0 truncate" aria-current="page">{% if course_project %}{{ course_project.title }}{% else %}Submit project{% endif %}</span>
+</nav>
+{% else %}
+<a href="{% course_entry_url course section='projects' %}" class="mb-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-review-back-link">
+  <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+  <span class="truncate">Back to {{ course.title }}</span>
+</a>
+{% endif %}

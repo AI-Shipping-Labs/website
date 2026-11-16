@@ -43,6 +43,11 @@ from content.models.cohort import (
 from content.models.peer_review import SUBMISSION_STATUS_CHOICES
 
 
+def _criteria_scored(review):
+    """A completed review that stored per-criterion answers (score is NULL)."""
+    return bool(review['is_complete'] and review['criteria_scores'])
+
+
 def _iso(value):
     return value.isoformat() if value else None
 
@@ -71,6 +76,7 @@ def build_coursework_inventory(course):
     reviews = list(
         PeerReview.objects.filter(submission__course=course).values(
             'reviewer_id', 'submission__course_project_id', 'score', 'is_complete',
+            'criteria_scores',
         )
     )
     enrollment_counts = Counter(
@@ -191,6 +197,7 @@ def build_coursework_inventory(course):
                     'cohort_id': p.cohort_id,
                     'submission_due_at': _iso(p.submission_due_at),
                     'review_due_at': _iso(p.review_due_at),
+                    'state': p.state,
                     'peer_review_count': p.peer_review_count,
                     'submission_count': submission_counts_by_project[p.pk],
                 }
@@ -213,7 +220,10 @@ def build_coursework_inventory(course):
             'complete': sum(1 for r in reviews if r['is_complete']),
             'incomplete': sum(1 for r in reviews if not r['is_complete']),
             'scored': sum(1 for r in reviews if r['score'] is not None),
-            'unscored': sum(1 for r in reviews if r['score'] is None),
+            'criteria_scored': sum(1 for r in reviews if _criteria_scored(r)),
+            'unscored': sum(
+                1 for r in reviews if r['score'] is None and not _criteria_scored(r)
+            ),
             'reviewers_without_submission': {
                 'pairs': len(orphan_pairs),
                 'reviews': len(orphan_reviews),

@@ -61,7 +61,7 @@ From `lg`, the reader top row is one `h-7` band: the sidebar back link and
 collapse control on the left, the breadcrumb on the right. Both columns then
 step down `mt-4`/`mb-4`, so every reader `h1` starts level with the sidebar
 card (`playwright_tests/test_design_layout_guard.py` measures it within 4px).
-The course breadcrumb leads with `Course home`; the course title lives only in
+The course breadcrumb leads with `Home`; the course title lives only in
 the sidebar back link. A session unit's date, `Event details`, and timezone
 note share one meta row under the title (title block `mb-2`); `.reader-prose` bodies drop the
 first child's top margin so the block above sets the gap.

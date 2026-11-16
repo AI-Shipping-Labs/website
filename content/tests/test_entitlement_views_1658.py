@@ -2,8 +2,8 @@
 
 Covers:
 - Course detail page: "External course" badge, enroll CTA (not tier
-  pricing), gated unit teaser, hidden cohort enroll/unenroll buttons +
-  "Enrolled" badge
+  pricing), gated unit teaser, next-cohort card without self-enroll
+  actions, learner state for entitled members
 - /courses catalog: "External courses" section, tag-filter isolation,
   empty-state hiding when no entitlement course is published
 - Cohort self-enroll/unenroll API: unconditional 403 refusal
@@ -197,20 +197,39 @@ class CourseUnitEntitlementTeaserTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class CourseDetailEntitlementCohortTest(TierSetupMixin, TestCase):
-    """Active Cohorts block hides self-enroll buttons for entitlement courses."""
+    """The next-cohort card never offers self-enroll on entitlement courses."""
 
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
         cls.course = _make_entitlement_course()
+        today = datetime.date.today()
         cls.cohort = Cohort.objects.create(
             course=cls.course, name='Cohort 4',
-            start_date=datetime.date(2026, 9, 21),
-            end_date=datetime.date(2026, 12, 1),
+            start_date=today - datetime.timedelta(days=7),
+            end_date=today + datetime.timedelta(days=30),
             is_active=True,
         )
 
-    def test_no_enroll_button_for_entitled_member(self):
+    def test_anonymous_sees_next_cohort_without_self_enroll_action(self):
+        response = self.client.get('/courses/ai-engineering-buildcamp')
+
+        self.assertContains(response, 'data-testid="course-detail-next-cohort"', count=1)
+        self.assertContains(response, 'Cohort 4')
+        self.assertNotContains(response, 'data-action="enroll"')
+
+    def test_main_member_without_grant_sees_no_self_enroll_action(self):
+        user = User.objects.create_user(email='main-cohort@test.com', password='testpass')
+        set_membership(user, tier=self.main_tier)
+        self.client.login(email='main-cohort@test.com', password='testpass')
+
+        response = self.client.get('/courses/ai-engineering-buildcamp')
+
+        self.assertContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertNotContains(response, 'data-action="enroll"')
+        self.assertNotContains(response, 'data-testid="enroll-button"')
+
+    def test_entitled_member_without_cohort_sees_learner_state(self):
         user = User.objects.create_user(email='entitled-cohort@test.com', password='testpass')
         set_membership(user, tier=self.free_tier)
         CourseAccess.objects.create(user=user, course=self.course, access_type='granted')
@@ -218,9 +237,10 @@ class CourseDetailEntitlementCohortTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/courses/ai-engineering-buildcamp')
 
-        self.assertContains(response, 'Cohort 4')
+        self.assertNotContains(response, 'data-testid="enroll-button"')
+        self.assertNotContains(response, 'data-testid="course-detail-next-cohort"')
         self.assertNotContains(response, 'data-action="enroll"')
-        self.assertNotContains(response, 'data-action="unenroll"')
+        self.assertContains(response, 'data-testid="course-detail-home-link"')
 
     def test_no_enroll_button_for_staff(self):
         User.objects.create_user(
@@ -232,7 +252,7 @@ class CourseDetailEntitlementCohortTest(TierSetupMixin, TestCase):
 
         self.assertNotContains(response, 'data-action="enroll"')
 
-    def test_enrolled_badge_shown_for_already_enrolled_user(self):
+    def test_cohort_member_sees_their_cohort_not_enroll(self):
         user = User.objects.create_user(email='enrolled-cohort@test.com', password='testpass')
         set_membership(user, tier=self.free_tier)
         CourseAccess.objects.create(user=user, course=self.course, access_type='granted')
@@ -241,17 +261,14 @@ class CourseDetailEntitlementCohortTest(TierSetupMixin, TestCase):
 
         response = self.client.get('/courses/ai-engineering-buildcamp')
 
-        self.assertContains(response, 'data-testid="cohort-enrolled-badge"')
-
-    def test_no_badge_for_entitled_user_not_enrolled_in_cohort(self):
-        user = User.objects.create_user(email='not-enrolled-cohort@test.com', password='testpass')
-        set_membership(user, tier=self.free_tier)
-        CourseAccess.objects.create(user=user, course=self.course, access_type='granted')
-        self.client.login(email='not-enrolled-cohort@test.com', password='testpass')
-
-        response = self.client.get('/courses/ai-engineering-buildcamp')
-
-        self.assertNotContains(response, 'data-testid="cohort-enrolled-badge"')
+        self.assertNotContains(response, 'data-testid="enroll-button"')
+        self.assertNotContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertContains(
+            response,
+            '<span class="text-sm text-muted-foreground" data-testid="course-detail-enrolled-cohort">'
+            "You're taking this course with Cohort 4.</span>",
+            html=True,
+        )
 
 
 @tag('core')

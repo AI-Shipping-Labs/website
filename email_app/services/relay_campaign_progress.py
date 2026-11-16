@@ -69,6 +69,58 @@ def _aggregate_status(native_statuses):
     return "sending"
 
 
+_CONFIRMED_SENT_STATUSES = frozenset({
+    "sent", "delivered", "bounced", "complained", "unsubscribed",
+})
+
+
+def _record_recipient_row(row, sets):
+    """Add one Relay recipient row into per-recipient deduplication sets."""
+    if not isinstance(row, dict) or not row.get("client_recipient_key"):
+        return
+    rkey = str(row["client_recipient_key"])
+    status = row.get("status")
+    if row.get("ses_message_id") or status in _CONFIRMED_SENT_STATUSES:
+        sets["sent"].add(rkey)
+    if status == "delivered" or row.get("delivered_at"):
+        sets["delivered"].add(rkey)
+    if status == "bounced":
+        sets["bounce"].add(rkey)
+    elif status == "complained":
+        sets["complaint"].add(rkey)
+    elif status == "unsubscribed":
+        sets["unsubscribe"].add(rkey)
+
+
+def _apply_per_recipient_totals(per_key, totals, *, session=None):
+    """Deduplicate multi-key counts by client_recipient_key."""
+    from email_app.services.relay_campaigns import (
+        RELAY_CAMPAIGN_AUDIENCE,
+        RELAY_CAMPAIGN_CLIENT,
+        _campaign_api_request,
+    )
+
+    scope = {"audience": RELAY_CAMPAIGN_AUDIENCE, "client": RELAY_CAMPAIGN_CLIENT}
+    sets = {name: set() for name in ("sent", "delivered", "bounce", "complaint", "unsubscribe")}
+    for key, _native in per_key:
+        resp = _campaign_api_request(
+            "GET",
+            f"/api/campaigns/{key}/recipients",
+            params=scope,
+            session=session,
+            allow_not_found=True,
+        )
+        if not isinstance(resp, dict) or not isinstance(resp.get("recipients"), list):
+            return
+        for row in resp["recipients"]:
+            _record_recipient_row(row, sets)
+    totals["sent_count"] = len(sets["sent"])
+    totals["delivered_count"] = len(sets["delivered"])
+    totals["bounce_count"] = len(sets["bounce"])
+    totals["complaint_count"] = len(sets["complaint"])
+    totals["unsubscribe_count"] = len(sets["unsubscribe"])
+
+
 def read_campaign_relay_progress(campaign, *, session=None):
     """Read and persist aggregate metrics from all native Relay campaign waves.
 
@@ -101,6 +153,8 @@ def read_campaign_relay_progress(campaign, *, session=None):
             totals[field] += native[field]
     if not per_key:
         return None
+    if len(per_key) > 1:
+        _apply_per_recipient_totals(per_key, totals, session=session)
     totals["status"] = _aggregate_status([native.get("status", "unknown") for _key, native in per_key])
     now = timezone.now()
     campaign.relay_campaign_stats = totals

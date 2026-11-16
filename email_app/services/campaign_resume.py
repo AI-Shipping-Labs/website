@@ -19,6 +19,7 @@ from email_app.services.relay_campaigns import (
     RELAY_CAMPAIGN_CLIENT,
     _campaign_api_request,
 )
+from email_app.tasks.campaign_delivery_recovery import live_batch_delivery_ids
 
 
 class CampaignResumeConflict(Exception):
@@ -189,13 +190,21 @@ def _validate_resumable_campaign(campaign: EmailCampaign) -> list[int]:
             "Campaign has no pending deliveries to resume.",
             code="campaign_no_pending_deliveries",
         )
+    if set(pending_ids) & live_batch_delivery_ids():
+        raise CampaignResumeConflict(
+            "Campaign already has a live batch queued for pending deliveries.",
+            code="campaign_resume_in_progress",
+        )
     return pending_ids
 
 
-def _mark_campaign_resuming(campaign: EmailCampaign):
+def _mark_campaign_resuming(campaign: EmailCampaign, external_key: str):
+    keys = list(campaign.relay_campaign_keys or [])
     campaign.status = "sending"
     campaign.relay_campaign_state = "pending"
     campaign.relay_campaign_error = ""
+    campaign.relay_campaign_key = campaign.relay_campaign_key or external_key
+    campaign.relay_campaign_keys = list(dict.fromkeys([*keys, external_key]))
     campaign.relay_campaign_progress_at = timezone.now()
     campaign.relay_campaign_attention_sent_count = None
     campaign.relay_campaign_attention_alerted_at = None
@@ -203,6 +212,8 @@ def _mark_campaign_resuming(campaign: EmailCampaign):
         "status",
         "relay_campaign_state",
         "relay_campaign_error",
+        "relay_campaign_key",
+        "relay_campaign_keys",
         "relay_campaign_progress_at",
         "relay_campaign_attention_sent_count",
         "relay_campaign_attention_alerted_at",
@@ -225,7 +236,7 @@ def resume_pending_campaign(campaign_id: int, *, source: str = "API campaign res
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
         pending_ids = _validate_resumable_campaign(campaign)
         external_key = _next_resume_key(campaign)
-        _mark_campaign_resuming(campaign)
+        _mark_campaign_resuming(campaign, external_key)
         task_id = async_task(
             "email_app.services.campaign_resume.resume_campaign_batch",
             campaign.pk,

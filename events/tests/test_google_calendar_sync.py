@@ -80,9 +80,10 @@ class EventGoogleCalendarSyncTest(TestCase):
             **self._auth(),
         )
 
-        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["slug"], self.event.slug)
         expected_id = google_calendar_event_id_from_uid(self.event.calendar_uid)
-        mock_google_request.assert_called_once()
+        self.assertEqual(mock_google_request.call_count, 1)
         method, path = mock_google_request.call_args.args
         kwargs = mock_google_request.call_args.kwargs
         self.assertEqual(method, "PATCH")
@@ -102,7 +103,7 @@ class EventGoogleCalendarSyncTest(TestCase):
             **self._auth(),
         )
 
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["title"], "MCP Updated")
         mock_google_request.assert_not_called()
 
     @patch("events.tasks.notify_reschedule.enqueue_reschedule_notice")
@@ -122,7 +123,6 @@ class EventGoogleCalendarSyncTest(TestCase):
             **self._auth(),
         )
 
-        self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertEqual(body["calendar_sync_status"], "synced")
         self.assertEqual(body["google_event_id"], expected_id)

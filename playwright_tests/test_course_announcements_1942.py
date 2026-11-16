@@ -128,7 +128,7 @@ def test_enrolled_learner_finds_empty_announcements_tab(django_server, browser):
         'When the instructor posts an update, it will show up here.',
     )
     page.get_by_role('link', name='Home', exact=True).click()
-    expect(page).to_have_url(re.compile(r'/courses/.+/home$'))
+    expect(page).to_have_url(re.compile(r'/courses/.+/home(\?cohort=4)?$'))
     context.close()
 
 

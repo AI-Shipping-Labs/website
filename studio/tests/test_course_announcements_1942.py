@@ -165,7 +165,6 @@ class StudioCourseAnnouncementTest(TestCase):
         response = self.client.post(create_url, {
             'title': 'No cohort', 'body': 'x', 'cohort_id': '',
         })
-        self.assertEqual(response.status_code, 200)
         self.assertContains(
             response, 'Choose the cohort this announcement is for.',
         )

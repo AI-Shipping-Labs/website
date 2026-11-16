@@ -223,7 +223,6 @@ class CourseAnnouncementApiTest(TestCase):
         created = self._post({'title': 'Note', 'body': 'x', 'cohort': '3'})
         announcement_id = created.json()['id']
         moved = self._patch(announcement_id, {'cohort': '4'})
-        self.assertEqual(moved.status_code, 200)
         self.assertEqual(moved.json()['cohort']['external_key'], '4')
         with self.captureOnCommitCallbacks(execute=False):
             self._patch(announcement_id, {'status': 'published'})

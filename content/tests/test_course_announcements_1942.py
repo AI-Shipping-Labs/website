@@ -234,7 +234,6 @@ class CourseAnnouncementMemberAccessTest(TestCase):
         response = self.client.get(
             reverse('course_announcements', kwargs={'slug': self.course.slug}),
         )
-        self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Week 2 office hours moved')
         self.assertContains(response, 'data-testid="course-announcements-empty"')
 

@@ -1,5 +1,6 @@
 """Learner flows for separate dated course project attempts."""
 
+import re
 from datetime import date, timedelta
 from html.parser import HTMLParser
 from unittest.mock import patch
@@ -192,6 +193,36 @@ class CourseProjectAttemptViewsTest(TestCase):
         self.assertFalse(ProjectSubmission.objects.filter(course_project=self.first).exists())
         response = self.client.get('/courses/ai-buildcamp/projects/second/submit')
         self.assertContains(response, 'data-testid="project-title">Second attempt</h1>')
+
+    def _meta(self, slug):
+        html = self.client.get(f'/courses/ai-buildcamp/projects/{slug}/submit').content.decode()
+        meta = re.search(r'data-testid="peer-review-meta">(.*?)</p>', html, flags=re.S).group(1)
+        pill = re.search(r'<span[^>]*data-testid="peer-submission-status"[^>]*>(.*?)</span>', html, flags=re.S)
+        return ' '.join(re.sub(r'<[^>]+>', ' ', meta).split()), re.sub(r'<[^>]+>', '', pill.group(1)).strip()
+
+    def test_submit_header_follows_state_while_collecting(self):
+        meta, pill = self._meta('first')
+        self.assertTrue(meta.startswith('Submit by'))
+        self.assertIn('Reviews due', meta)
+        self.assertNotIn('overdue', meta)
+        self.assertEqual(pill, 'Open')
+        self.first.submission_due_at = timezone.now() - timedelta(minutes=1)
+        self.first.save(update_fields=['submission_due_at'])
+        meta, _pill = self._meta('first')
+        self.assertIn('overdue, still open', meta)
+
+    def test_submit_header_has_no_dates_once_completed(self):
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course, cohort=self.cohort, course_project=self.first,
+            project_url='https://github.com/you/first', status='in_review',
+        )
+        for state, expected in (('PR', 'Submissions closed · Reviews due'), ('CO', 'Submissions closed · Peer review closed')):
+            self.first.state = state
+            self.first.save(update_fields=['state'])
+            meta, pill = self._meta('first')
+            self.assertTrue(meta.startswith(expected), meta)
+            self.assertNotEqual(pill, 'In review')
+        self.assertNotIn('<time', self.client.get('/courses/ai-buildcamp/projects/first/submit').content.decode().split('data-testid="peer-review-meta"', 1)[1].split('</p>', 1)[0])
 
     def test_submit_page_links_to_evaluation_criteria_page(self):
         criteria = [{

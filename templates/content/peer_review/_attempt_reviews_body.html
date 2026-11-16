@@ -29,15 +29,12 @@
 
 {% if evaluation_rows and phase.reviews_pending and phase.key != 'feedback' %}
 <section class="mt-8" aria-labelledby="peer-evaluations-title" data-testid="peer-evaluations">
-  <div class="mb-3 flex items-baseline justify-between gap-3">
-    <h2 id="peer-evaluations-title" class="text-lg font-semibold text-foreground">Assigned reviews</h2>
-    <p class="text-sm text-muted-foreground"><span class="font-medium text-foreground">{{ phase.reviews_done }} / {{ phase.reviews_assigned }}</span> evaluations done</p>
-  </div>
-  <ul class="divide-y divide-border border-y border-border">
+  <h2 id="peer-evaluations-title" class="mb-3 text-lg font-semibold text-foreground">Assigned reviews</h2>
+  <ul class="divide-y divide-border">
     {% for row in evaluation_rows %}
     <li>
       <a href="{% url 'course_project_review_form' slug=course.slug attempt_slug=course_project.slug submission_id=row.submission_id %}" class="flex min-h-[44px] items-center justify-between gap-3 px-2 py-3 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-evaluation-row">
-        <span class="min-w-0 break-words text-foreground">Evaluate: <span class="text-accent">{{ row.author_label }}'s submission</span></span>
+        <span class="min-w-0 break-words text-foreground">{{ row.author_label }}'s submission</span>
         {% member_status_badge row.status_label status=row.status_key testid="peer-review-status" %}
       </a>
     </li>

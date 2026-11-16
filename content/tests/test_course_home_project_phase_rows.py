@@ -68,6 +68,15 @@ class CourseHomeProjectPhaseRowTest(TestCase):
         self.assertIn('Review 0/1', row)
         self.assertNotIn('Completed work', content)
 
+    def test_completed_attempt_rows_show_no_due_date(self):
+        self.client.force_login(self.user)
+        CourseProject.objects.filter(slug='attempt-1').update(state='CO')
+        _content, rows = self._rows()
+        attempt_rows = [r.split('</li>', 1)[0] for r in rows if 'Capstone Attempt 1' in r]
+        self.assertTrue(attempt_rows)
+        for row in attempt_rows:
+            self.assertNotIn('Due <time', row)
+
     def test_projects_tab_lists_every_attempt_in_every_state(self):
         """CMP lists every project, whatever its state or whether it was submitted."""
         self.client.force_login(self.user)

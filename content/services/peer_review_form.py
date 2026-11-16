@@ -55,6 +55,7 @@ def evaluation_form(criteria, selected=None, missing=(), readonly=False):
         'rows': rows,
         'total': review_total(criteria, selected),
         'missing_titles': list(missing),
+        'readonly': readonly,
     }
 
 

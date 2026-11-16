@@ -128,7 +128,7 @@ def _deadline(project, key, now):
         return None, ''
     if key == SUBMIT:
         return project.submission_due_at, 'submission'
-    if key in (WAITING, REVIEW, FEEDBACK) and project.state != ProjectState.COMPLETED:
+    if key in (WAITING, REVIEW, FEEDBACK) and project.state == ProjectState.PEER_REVIEWING:
         return project.review_due_at, 'review'
     return None, ''
 

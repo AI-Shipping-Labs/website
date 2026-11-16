@@ -101,7 +101,7 @@ def phase_url(course, project, phase):
 
 def _phase_when(project, phase):
     """Submission deadline while submitting, review deadline afterwards."""
-    if project.is_self_paced:
+    if project.is_self_paced or project.is_completed():
         return None
     if phase.deadline is not None:
         return phase.deadline

@@ -204,7 +204,7 @@ class StatusPaletteContractTest(SimpleTestCase):
                 'testid="peer-review-status"',
             ),
             'templates/content/peer_review/_submit_content.html': (
-                'member_status_badge status_label status=submission.status',
+                'member_status_badge phase.badge_label tone=phase.badge_tone',
                 'testid="peer-submission-status"',
             ),
             'templates/events/event_series.html': (

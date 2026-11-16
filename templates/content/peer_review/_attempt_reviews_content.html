@@ -9,12 +9,12 @@
 <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">Reviews remain open until completed</p>
 {% elif phase.deadline %}
 <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if phase.deadline_kind == 'submission' %}Submissions{% else %}Reviews{% endif %} due <time class="font-medium text-foreground" datetime="{{ phase.deadline|schedule_instant }}" data-schedule-instant>{{ phase.deadline|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% if phase.deadline_overdue %} · overdue, still open{% endif %}</p>
+{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
 {% elif phase.key == 'missed' %}
-<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">Submissions were due <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">Submissions closed</p>
 {% else %}
-<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">Peer review was due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if course_project.is_completed %}Peer review closed{% else %}Submissions closed{% endif %}</p>
 {% endif %}
-{% if phase.key != 'feedback' %}{% if not self_paced_project and not phase.reviews_assigned or phase.reviews_pending and not self_paced_project %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}{% endif %}
 {% if submission %}
 <div class="mt-4" data-testid="attempt-submission-repo">{% include "content/peer_review/_repo_commit_line.html" with submission=submission testid_prefix="peer-submission" only %}</div>
 {% endif %}

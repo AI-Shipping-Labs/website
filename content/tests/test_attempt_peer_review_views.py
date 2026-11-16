@@ -400,6 +400,51 @@ class AttemptPeerReviewViewsTest(TestCase):
         self.assertNotIn(' vote', html.split('data-testid="peer-results"', 1)[1])
         self.assertNotIn('peer-result-criterion-choice', html)
 
+    def test_pending_list_has_one_progress_statement_and_plain_row_titles(self):
+        html = self.client.get(BASE).content.decode()
+        self.assertEqual(html.count('data-testid="peer-review-progress"'), 1)
+        self.assertNotIn('evaluations done', html)
+        self.assertNotIn('Evaluate:', html)
+
+    def test_open_form_is_titled_evaluate_with_instructions(self):
+        html = self.client.get(self._form_url()).content.decode()
+        author = peer_pseudonym(self.peers[0].pk, self.course.pk)
+        self.assertIn(f"Evaluate {author}'s submission</h1>", html)
+        self.assertIn('Evaluate the submission on each criterion.', html)
+        self.assertIn('Reviews due', html)
+
+    def test_closed_form_is_a_read_only_review_without_deadline(self):
+        CourseProject.objects.filter(pk=self.project.pk).update(state='CO')
+        html = self.client.get(self._form_url()).content.decode()
+        author = peer_pseudonym(self.peers[0].pk, self.course.pk)
+        self.assertIn(f"Review of {author}'s submission</h1>", html)
+        self.assertNotIn('Evaluate', html.split('data-testid="project-title"', 1)[1].split('</main>', 1)[0])
+        self.assertNotIn('Reviews due', html)
+        self.assertIn('You did not complete this review.', html)
+        self.assertIn('data-testid="peer-review-next"', html)
+
+    def test_closed_form_for_completed_review_has_no_missed_note(self):
+        self.client.post(self._form_url(), self._valid_post())
+        CourseProject.objects.filter(pk=self.project.pk).update(state='CO')
+        html = self.client.get(self._form_url()).content.decode()
+        self.assertIn('data-testid="peer-review-form-closed"', html)
+        self.assertNotIn('You did not complete this review.', html)
+
+    def test_completed_reviews_page_says_peer_review_closed_without_date(self):
+        CourseProject.objects.filter(pk=self.project.pk).update(state='CO')
+        html = self.client.get(BASE).content.decode()
+        self.assertNotIn('Reviews due', html)
+        self.assertNotIn('data-timezone-notice-text', html)
+        self.assertNotIn('Peer review was due', html)
+
+    def test_bonus_description_replaces_generic_bonus_line(self):
+        criteria = [dict(CRITERIA[0]), dict(CRITERIA[1]), {**CRITERIA[2], 'description': 'Extra effort.'}]
+        CourseProject.objects.filter(pk=self.project.pk).update(evaluation_criteria=criteria)
+        html = self.client.get(self._form_url()).content.decode()
+        self.assertIn('Extra effort.', html)
+        self.assertNotIn('Tick all that apply.', html)
+        self.assertEqual(html.count('data-testid="review-criterion-bonus"'), 1)
+
 
 class AttemptWithoutCriteriaTest(TestCase):
     def test_comment_only_review_records_no_score(self):

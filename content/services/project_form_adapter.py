@@ -135,6 +135,8 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
             user=user,
             **kwargs,
         )
+        if submission is not None and submission.project_url and 'github_link' in self.fields:
+            self.fields['github_link'].widget.attrs['title'] = submission.project_url
         if not commit_id_enabled:
             # Legacy API clients predate commit capture: the field disappears,
             # so an update keeps the stored commit id (see ``save``) instead of

@@ -468,7 +468,8 @@ def _project_rows(course, user, cohort, timezone_name, now):
         elif action:
             review_url = reviews_url
         row = _row(
-            'Peer reviews', project.title, when=project.review_due_at,
+            'Peer reviews', project.title,
+            when=None if project.is_completed() else project.review_due_at,
             status=status, url=review_url, action=action,
             detail=_review_schedule_detail(project, completed, target),
             complete=remaining == 0, closed=remaining > 0 and not review_open,

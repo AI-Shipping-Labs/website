@@ -258,6 +258,7 @@ class ScheduleZoneRenderingTest(TestCase):
             cohort=self.c4, project_url='https://github.com/example/b',
         )
         PeerReview.objects.create(submission=authored, reviewer=user)
+        CourseProject.objects.filter(pk=self.attempt.pk).update(state='PR')
         self.client.force_login(user)
         kwargs = {'slug': 'ai-buildcamp', 'attempt_slug': 'attempt-4'}
         dashboard = self.client.get(reverse('course_project_reviews', kwargs=kwargs))

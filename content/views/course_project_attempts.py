@@ -39,10 +39,7 @@ from content.services.project_form_adapter import (
     update_commit_action,
 )
 from content.services.project_phase import attempt_phase
-from content.services.project_reader import (
-    STATUS_LABELS,
-    project_reader_context,
-)
+from content.services.project_reader import project_reader_context
 from content.views.peer_review import _require_course_access
 from events.services.display_time import should_use_browser_timezone
 
@@ -124,12 +121,13 @@ def _submit_context(
         'phase': _current_phase(reader, request.user, project, submission),
         'course': course, 'course_project': project,
         'submission': submission, 'readonly': readonly,
-        'submission_status_label': STATUS_LABELS.get(
-            submission.status if submission else None, 'Submitted',
-        ),
         'project_criteria': criteria_summary(project.evaluation_criteria),
         'criteria_lesson_url': _criteria_lesson_url(course),
         'deadline_passed': deadline_passed,
+        'submission_overdue': not deadline_passed and project.submission_due_at is not None
+        and project.submission_due_at <= timezone.now(),
+        'review_open': project.is_review_open(),
+        'project_completed': project.is_completed(),
         'self_paced_project': project.is_self_paced,
         'project_form': build_submission_form(
             project=project, submission=submission,
@@ -174,7 +172,6 @@ def _handle_attempt_submit(
     )
     context.update(
         submission=submission, just_submitted=True,
-        submission_status_label=STATUS_LABELS.get(submission.status, 'Submitted'),
         reader_project_rows=reader.get('reader_project_rows', []),
         phase=_current_phase(reader, request.user, project, submission),
     )

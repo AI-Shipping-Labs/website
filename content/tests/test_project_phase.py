@@ -125,6 +125,12 @@ class DatedPhaseTest(SimpleTestCase):
             phase = attempt_phase(dated_project('CL'), sub, [], BEFORE)
             self.assertEqual((phase.key, phase.badge_label), (key, 'Closed'))
 
+    def test_review_deadline_only_while_peer_reviewing(self):
+        for state, expected in (('PR', REVIEW_DUE), ('CO', None), ('CL', None)):
+            with self.subTest(state=state):
+                phase = attempt_phase(dated_project(state), submission(), reviews(False), REVIEWING)
+                self.assertEqual(phase.deadline, expected)
+
     def test_steps_link_only_to_reachable_pages(self):
         submit = attempt_phase(dated_project(), None, [], BEFORE)
         self.assertEqual([s.url_name for s in submit.steps], ['course_project_submit', '', ''])

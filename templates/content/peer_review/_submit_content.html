@@ -4,18 +4,18 @@
 <div class="mb-8" data-testid="attempt-page-header">
 <div class="mb-2 flex flex-wrap items-start justify-between gap-3">
   <h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="project-title">{% if course_project %}{{ course_project.title }}{% else %}Submit project{% endif %}</h1>
-  {% firstof submission_status_label submission.get_status_display "Not submitted" as status_label %}{% member_status_badge status_label status=submission.status testid="peer-submission-status" extra_class="mt-1 flex-shrink-0" %}
+  {% if phase %}{% member_status_badge phase.badge_label tone=phase.badge_tone testid="peer-submission-status" extra_class="mt-1 flex-shrink-0" %}{% else %}{% firstof submission.get_status_display "Not submitted" as status_label %}{% member_status_badge status_label status=submission.status testid="peer-submission-status" extra_class="mt-1 flex-shrink-0" %}{% endif %}
 </div>
 
 {% if course_project and not self_paced_project %}
 <div data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
   <p class="text-sm text-muted-foreground" data-testid="peer-review-meta">
-    {% if deadline_passed %}Submissions closed{% else %}Submit by{% endif %}
+    {% if deadline_passed %}Submissions closed{% else %}Submit by
     <time class="font-medium text-foreground" datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time>
-    <span data-schedule-zone-label>{{ schedule_timezone }}</span>
-    {% if course_project.review_due_at %}<span aria-hidden="true">·</span> Peer review until <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time>{% endif %}
+    <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% if submission_overdue %} · overdue, still open{% endif %}{% endif %}
+    {% if review_open and course_project.review_due_at or not deadline_passed and course_project.review_due_at %}<span aria-hidden="true">·</span> Reviews due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time>{% if deadline_passed %} <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% endif %}{% elif project_completed %}<span aria-hidden="true">·</span> Peer review closed{% endif %}
   </p>
-  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
+  {% if not deadline_passed or review_open and course_project.review_due_at %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}
 </div>
 {% elif course_project %}
 <p class="text-sm text-muted-foreground" data-testid="peer-review-meta">No fixed deadline. Peer review starts once enough learners have submitted.</p>
@@ -53,6 +53,7 @@
 .aisl-project-form .cb-label { display: block; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); }
 .aisl-project-form .cb-card-meta { font-size: 0.875rem; font-weight: 400; color: hsl(var(--muted-foreground)); }
 .aisl-project-form .cb-input { display: block; min-height: 44px; width: 100%; margin-top: 0.5rem; border-radius: 0.375rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+.aisl-project-form input.cb-input { text-overflow: ellipsis; }
 .aisl-project-form textarea.cb-input { min-height: 6rem; }
 .aisl-project-form [data-learning-in-public-slots] .cb-input + .cb-input { margin-top: 0.5rem; }
 .aisl-project-form .cb-form-help { margin-top: 0.125rem; font-size: 0.8125rem; color: hsl(var(--muted-foreground)); }

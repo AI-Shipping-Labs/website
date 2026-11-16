@@ -1,6 +1,6 @@
 {% if evaluation.rows %}
 <div id="homework-question-prompt">
-<p class="text-base text-muted-foreground">Evaluate the submission on each criterion.</p>
+{% if not evaluation.readonly %}<p class="text-base text-muted-foreground">Evaluate the submission on each criterion.</p>{% endif %}
 <div class="mt-6 space-y-8" data-testid="review-criteria">
   {% for row in evaluation.rows %}{% include "content/peer_review/_criterion_fieldset.html" with row=row only %}{% endfor %}
 </div>

@@ -278,7 +278,7 @@ def test_failed_backfill_still_localizes_attempt_header_consistently(
             f'Submit by {label} America/New_York', use_inner_text=True,
         )
         expect(meta).to_contain_text(
-            f'Peer review until {label}', use_inner_text=True,
+            f'Reviews due {label}', use_inner_text=True,
         )
         expect(meta).not_to_contain_text('Europe/Berlin', use_inner_text=True)
         instant = due.strftime('%Y-%m-%dT%H:%M:%SZ')

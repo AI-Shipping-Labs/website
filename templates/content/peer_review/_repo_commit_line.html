@@ -1,13 +1,13 @@
 {% load github_links %}
 {% commit_url submission as commit_link %}
-<p class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="{{ testid_prefix|default:'peer-review' }}-repo-line">
-  <a href="{{ submission.project_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex min-w-0 max-w-full items-center gap-1.5 break-all text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="{{ testid_prefix|default:'peer-review' }}-github-link">{% include "includes/_icon_github.html" with css="h-4 w-4 flex-shrink-0" %}<span class="min-w-0 break-all">{{ submission.project_url }}</span></a>
+<p class="flex min-w-0 items-center gap-x-2 text-sm" data-testid="{{ testid_prefix|default:'peer-review' }}-repo-line">
+  <a href="{{ submission.project_url }}" target="_blank" rel="noopener noreferrer" title="{{ submission.project_url }}" class="inline-flex min-w-0 max-w-full items-center gap-1.5 text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="{{ testid_prefix|default:'peer-review' }}-github-link">{% include "includes/_icon_github.html" with css="h-4 w-4 flex-shrink-0" %}<span class="min-w-0 truncate">{{ submission.project_url }}</span></a>
   {% if submission.commit_id %}
-  <span class="text-muted-foreground" aria-hidden="true">·</span>
+  <span class="flex-shrink-0 text-muted-foreground" aria-hidden="true">·</span>
   {% if commit_link %}
-  <a href="{{ commit_link }}" target="_blank" rel="noopener noreferrer" class="text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" title="Commit {{ submission.commit_id }}" aria-label="Commit {{ submission.commit_id|slice:':7' }}" data-testid="{{ testid_prefix|default:'peer-review' }}-commit">{{ submission.commit_id|slice:":7" }}</a>
+  <a href="{{ commit_link }}" target="_blank" rel="noopener noreferrer" class="flex-shrink-0 text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" title="Commit {{ submission.commit_id }}" aria-label="Commit {{ submission.commit_id|slice:':7' }}" data-testid="{{ testid_prefix|default:'peer-review' }}-commit">{{ submission.commit_id|slice:":7" }}</a>
   {% else %}
-  <span class="text-foreground" title="Commit {{ submission.commit_id }}" data-testid="{{ testid_prefix|default:'peer-review' }}-commit">{{ submission.commit_id|slice:":7" }}</span>
+  <span class="flex-shrink-0 text-foreground" title="Commit {{ submission.commit_id }}" data-testid="{{ testid_prefix|default:'peer-review' }}-commit">{{ submission.commit_id|slice:":7" }}</span>
   {% endif %}
   {% endif %}
 </p>

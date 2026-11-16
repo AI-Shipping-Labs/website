@@ -17,13 +17,6 @@ from content.services.learner_attempt_phases import (
 )
 from content.services.project_phase import SUBMIT_URL
 
-STATUS_LABELS = {
-    None: 'Not submitted',
-    'submitted': 'Submitted',
-    'in_review': 'In review',
-    'review_complete': 'Reviewed',
-    'certified': 'Passed',
-}
 CRITERIA_ROW_TITLE = 'Evaluation criteria'
 
 

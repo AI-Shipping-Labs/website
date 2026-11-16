@@ -2,13 +2,13 @@
 {% include "content/peer_review/_attempt_breadcrumb.html" %}
 
 <div{% if not self_paced_project %} data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}"{% endif %}>
-<h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="project-title">Evaluate {{ author_label }}'s submission</h1>
-<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if self_paced_project %}{{ course_project.title }} · Reviews remain open until completed{% else %}{{ course_project.title }} · Reviews due <time class="font-medium text-foreground" datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% endif %}</p>
-{% if not self_paced_project %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}
+<h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="project-title">{% if review_open %}Evaluate {{ author_label }}'s submission{% else %}Review of {{ author_label }}'s submission{% endif %}</h1>
+<p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if self_paced_project %}{{ course_project.title }} · Reviews remain open until completed{% elif review_open and course_project.review_due_at %}{{ course_project.title }} · Reviews due <time class="font-medium text-foreground" datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% else %}{{ course_project.title }}{% endif %}</p>
+{% if not self_paced_project and review_open and course_project.review_due_at %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}
 </div>
 
 {% if not review_open %}
-<p class="mt-6 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm font-medium text-foreground" data-testid="peer-review-form-closed">The peer review form is closed.</p>
+<p class="mt-6 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm font-medium text-foreground" data-testid="peer-review-form-closed">The peer review form is closed.{% if not review.is_complete %} You did not complete this review.{% endif %}</p>
 {% elif phase.reviews_assigned and phase.reviews_pending %}
 <div class="mt-6 rounded-md border px-4 py-3 text-sm {% if phase.certificate_blocked %}border-yellow-500/30 bg-yellow-500/10{% else %}border-green-500/30 bg-green-500/10{% endif %}" data-testid="peer-review-certificate-requirement">
   <p class="font-medium text-foreground">Complete all {{ phase.reviews_assigned }} reviews to be eligible for your certificate.</p>

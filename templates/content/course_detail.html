@@ -17,9 +17,9 @@
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-      <a href="{% if user_is_enrolled and has_access %}{% url 'course_home' slug=course.slug %}{% else %}/courses{% endif %}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+      <a href="{% if takes_course and has_access %}{% url 'course_home' slug=course.slug %}{% else %}/courses{% endif %}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        {% if user_is_enrolled and has_access %}Back to course home{% else %}Back to Courses{% endif %}
+        {% if takes_course and has_access %}Back to course home{% else %}Back to Courses{% endif %}
       </a>
 
       <header class="mb-12">
@@ -93,7 +93,7 @@
       <!-- Enroll / Continue (issue #236) -->
       {% if has_access and user_authenticated %}
       <div class="mb-10" data-testid="enrollment-cta">
-        {% if user_is_enrolled %}
+        {% if takes_course %}
         <div class="rounded-lg border border-accent/30 bg-accent/5 p-5 sm:p-6">
           <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             {% member_badge "Enrolled" tone="success" size="md" icon="check-circle-2" extra_class="px-3 py-1" %}
@@ -122,6 +122,7 @@
                  class="{% if next_unit_for_user %}{% button_classes 'secondary' size='md' extra='w-full justify-center sm:w-auto' %}{% else %}{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}{% endif %}"
                  data-testid="course-detail-home-link">Open course</a>
             </div>
+            {% if user_is_enrolled %}
             <form method="post" action="/courses/{{ course.slug }}/unenroll" class="self-end sm:self-auto"
                   onsubmit="return confirm('Unenroll from this course? Your progress will be preserved.')">
               {% csrf_token %}
@@ -131,6 +132,7 @@
                 Unenroll
               </button>
             </form>
+            {% endif %}
           </div>
         </div>
         {% else %}
@@ -169,70 +171,22 @@
       </section>
       {% endif %}
 
-      <!-- Active Cohorts -->
-      {% if active_cohorts %}
-      <div class="mb-8">
-        {% for cohort in active_cohorts %}
-        <div class="rounded-lg border border-border bg-card p-6 {% if not forloop.last %}mb-4{% endif %}">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <p class="text-sm text-muted-foreground">
-                {% if cohort.end_date and cohort.end_date < cohort_today %}Past cohort
-                {% elif cohort.start_date and cohort.start_date <= cohort_today %}Current cohort
-                {% else %}Next cohort{% endif %}
-              </p>
-              <p class="text-lg font-semibold text-foreground">{{ cohort.name }}</p>
-              <p class="text-sm text-muted-foreground mt-1">
-                {% if cohort.start_date and cohort.start_date <= cohort_today %}Started{% else %}Starts{% endif %} {{ cohort.start_date|member_full_date }}
-                {% if cohort.max_participants %}
-                <span class="ml-2">{{ cohort.spots_remaining }} of {{ cohort.max_participants }} spots remaining</span>
-                {% endif %}
-              </p>
-            </div>
-            {% if course.access_mode == "entitlement" %}
-              {% comment %}
-                Issue #1658: self-enroll into an official cohort is not a
-                student action for entitlement-mode courses — enrollment
-                comes only from staff admin or the enrollment integration.
-                Show the badge for cohorts the user already belongs to
-                (e.g. staff-granted); render nothing otherwise.
-              {% endcomment %}
-              {% if user_authenticated and cohort.pk in user_enrolled_cohort_ids %}
-              {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="cohort-enrolled-badge" %}
+      {% if next_cohort %}
+      <div class="mb-8 rounded-lg border border-border bg-card p-6" data-testid="course-detail-next-cohort">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p class="text-sm text-muted-foreground">
+              {% if next_cohort.start_date and next_cohort.start_date <= cohort_today %}Current cohort{% else %}Next cohort{% endif %}
+            </p>
+            <p class="text-lg font-semibold text-foreground">{{ next_cohort.name }}</p>
+            <p class="text-sm text-muted-foreground mt-1">
+              {% if next_cohort.start_date and next_cohort.start_date <= cohort_today %}Started{% else %}Starts{% endif %} {{ next_cohort.start_date|member_full_date }}
+              {% if next_cohort.max_participants %}
+              <span class="ml-2">{{ next_cohort.spots_remaining }} of {{ next_cohort.max_participants }} spots remaining</span>
               {% endif %}
-            {% elif has_access and user_authenticated %}
-              {% if cohort.pk in user_enrolled_cohort_ids %}
-              <button
-                type="button"
-                class="{% button_classes 'secondary' size='md' extra='cohort-action-btn' %}"
-                data-testid="cohort-unenroll-{{ cohort.pk }}"
-                data-cohort-id="{{ cohort.pk }}"
-                data-course-slug="{{ course.slug }}"
-                data-action="unenroll"
-              >
-                <i data-lucide="check-circle-2" class="h-4 w-4"></i>
-                Enrolled
-              </button>
-              {% elif cohort.is_full %}
-              <span class="inline-flex items-center gap-2 rounded-lg border border-border bg-muted px-5 py-2.5 text-sm font-medium text-muted-foreground">
-                Cohort is full
-              </span>
-              {% else %}
-              <button
-                type="button"
-                class="{% button_classes 'primary' size='md' extra='cohort-action-btn' %}"
-                data-testid="cohort-enroll-{{ cohort.pk }}"
-                data-cohort-id="{{ cohort.pk }}"
-                data-course-slug="{{ course.slug }}"
-                data-action="enroll"
-              >
-                Enroll
-              </button>
-              {% endif %}
-            {% endif %}
+            </p>
           </div>
         </div>
-        {% endfor %}
       </div>
       {% endif %}
 
@@ -284,47 +238,4 @@
 {{ block.super }}
 {% include "_partials/mermaid_script.html" %}
 {% include "_partials/course_schedule_script.html" %}
-<script>
-  function getCsrfToken() {
-    var cookies = document.cookie.split(';');
-    for (var i = 0; i < cookies.length; i++) {
-      var cookie = cookies[i].trim();
-      if (cookie.startsWith('csrftoken=')) {
-        return cookie.substring('csrftoken='.length);
-      }
-    }
-    return '';
-  }
-
-  (function() {
-    var buttons = document.querySelectorAll('.cohort-action-btn');
-    buttons.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var cohortId = btn.dataset.cohortId;
-        var courseSlug = btn.dataset.courseSlug;
-        var action = btn.dataset.action;
-        var url = '/api/courses/' + courseSlug + '/cohorts/' + cohortId + '/' + action;
-
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCsrfToken(),
-            'Content-Type': 'application/json',
-          },
-          credentials: 'same-origin',
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-          if (data.enrolled !== undefined) {
-            // Reload to reflect new state
-            window.location.reload();
-          } else if (data.error) {
-            alert(data.error);
-          }
-        });
-      });
-    });
-  })();
-
-</script>
 {% endblock %}

@@ -26,7 +26,10 @@ deliverables and its live session.
       {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
       {% endfor %}
     </ol>
-    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-homework">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    <div class="flex flex-wrap gap-x-6">
+      {% if card.show_homework_link %}<a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-homework">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+      {% if card.show_projects_link %}<a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-projects">See all projects <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+    </div>
   </div>
   {% endif %}
   {% if card.sessions %}

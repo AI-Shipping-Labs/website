@@ -106,6 +106,7 @@ class CourseAdminCRUDTest(TestCase):
             'aisl_extension-0-program_label': '',
             'aisl_extension-0-peer_review_count': '3',
             'aisl_extension-0-peer_review_deadline_days': '7',
+            'aisl_extension-0-project_passing_score': '0',
         })
         # Should redirect after successful creation
         self.assertEqual(response.status_code, 302)

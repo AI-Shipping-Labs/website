@@ -6,7 +6,7 @@ top-level module (the Buildcamp "Course Logistics" shape) and on module
 overview pages whose sidebar lists sibling submodules.
 
 Breadcrumb: no ``Courses`` catalog crumb; the crumb starts at the
-personalized course destination labelled ``My learning`` (keeping
+personalized course destination labelled ``Home`` (keeping
 ``?cohort=``) for enrolled learners and at the public landing for
 everyone else, then names the parent module for nested units and marks
 the current lesson with ``aria-current="page"`` (issue #1793).
@@ -178,7 +178,7 @@ class ReaderBreadcrumbCourseCrumbTest(TestCase):
         self._enroll()
         crumb = _breadcrumb(self.client.get(self.unit.get_absolute_url() + '?cohort=4'))
         self.assertIn('href="/courses/crumb-course/home?cohort=4"', crumb)
-        self.assertIn('>My learning</a>', crumb)
+        self.assertIn('>Home</a>', crumb)
         self.assertNotIn('Crumb course', crumb)
         self.assertNotIn('href="/courses"', crumb)
 
@@ -209,8 +209,6 @@ class ReaderBreadcrumbLandmarkTest(TestCase):
             title='Landmark course', slug='landmark-course', status='published',
             required_level=0, reader_navigation_scope='module',
         )
-        # Leaf top-level module: the short "Course Logistics" shape —
-        # the breadcrumb must be `My learning > current lesson`.
         cls.logistics = Module.objects.create(
             course=cls.course, title='Logistics', slug='logistics', sort_order=0,
         )
@@ -240,7 +238,7 @@ class ReaderBreadcrumbLandmarkTest(TestCase):
 
     def test_leaf_unit_shows_my_learning_then_current_lesson(self):
         crumb = _breadcrumb(self.client.get(self.logistics_unit.get_absolute_url()))
-        self.assertIn('>My learning</a>', crumb)
+        self.assertIn('>Home</a>', crumb)
         self.assertNotIn('breadcrumb-parent-module', crumb)
         self.assertIn('aria-current="page"', crumb)
         self.assertIn('>Communication</span>', crumb)
@@ -257,7 +255,7 @@ class ReaderBreadcrumbLandmarkTest(TestCase):
 
     def test_module_overview_marks_current_module(self):
         crumb = _breadcrumb(self.client.get('/courses/landmark-course/week-1'))
-        self.assertIn('>My learning</a>', crumb)
+        self.assertIn('>Home</a>', crumb)
         self.assertIn('aria-current="page"', crumb)
         self.assertIn('data-testid="breadcrumb-current-module"', crumb)
         self.assertIn('>Week 1</span>', crumb)

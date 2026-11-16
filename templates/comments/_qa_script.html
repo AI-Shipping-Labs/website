@@ -136,7 +136,14 @@
         escapeHtml(copy) + '</p></div>';
     }
 
+    function syncSubmit(textarea) {
+      var scope = textarea.closest('.qa-composer, .qa-reply-form');
+      var btn = scope && scope.querySelector('.qa-post-btn, .qa-reply-btn');
+      if (btn) btn.disabled = textarea.value.trim().length === 0;
+    }
+
     function syncGuideline(textarea) {
+      syncSubmit(textarea);
       var composer = textarea.closest('.qa-composer');
       var caption = composer && composer.querySelector('.qa-answer-guideline');
       if (!caption) return;
@@ -154,7 +161,7 @@
         form: '<div class="qa-composer qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
           '<textarea rows="2" placeholder="Write a reply..." class="qa-reply-textarea w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
           renderGuideline(guidelineCopy) +
-          '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
+          '<button disabled class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
         '</div>',
       };
     }
@@ -218,18 +225,15 @@
       var guidelineCopy = readOnly ? '' : (section.dataset.answerGuideline || '');
       if (!listEl) return;
 
-      if (guidelineCopy) {
-        if (textarea) textarea.insertAdjacentHTML('afterend', renderGuideline(guidelineCopy));
-        // One delegated listener covers the top-level composer and every
-        // reply composer, including ones re-rendered by loadComments().
-        // `input` fires for typing, paste, and cut alike.
-        section.addEventListener('input', function(event) {
-          var target = event.target;
-          if (target.matches && target.matches('.qa-new-question, .qa-reply-textarea')) {
-            syncGuideline(target);
-          }
-        });
+      if (guidelineCopy && textarea) {
+        textarea.insertAdjacentHTML('afterend', renderGuideline(guidelineCopy));
       }
+      section.addEventListener('input', function(event) {
+        var target = event.target;
+        if (target.matches && target.matches('.qa-new-question, .qa-reply-textarea')) {
+          if (guidelineCopy) syncGuideline(target); else syncSubmit(target);
+        }
+      });
 
       function loadComments() {
         fetch('/api/comments/' + contentId, { credentials: 'same-origin' })

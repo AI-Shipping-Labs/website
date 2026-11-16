@@ -19,6 +19,7 @@ import json
 import uuid
 from datetime import date, timedelta
 from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -214,6 +215,7 @@ class CourseCertificateModelTest(TestCase):
 # ============================================================
 
 
+@patch('content.services.project_form_adapter.resolve_commit', new=lambda link: 'a' * 40)
 class ProjectSubmitViewTest(TestCase):
     """Test the project submission page."""
 
@@ -231,15 +233,16 @@ class ProjectSubmitViewTest(TestCase):
     def test_submit_project(self):
         response = self.client.post('/courses/test-course/submit', {
             'github_link': 'https://github.com/test/project',
-            'commit_id': 'a1b2c3d',
-            'description': 'My project',
+            'description': 'Posted by an old client.',
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Your project has been submitted')
+        self.assertContains(response, "We'll email you when your peer reviews are assigned.")
         sub = ProjectSubmission.objects.get(user=self.user, course=self.course)
         self.assertEqual(sub.project_url, 'https://github.com/test/project')
-        self.assertEqual(sub.description, 'My project')
-        self.assertEqual(sub.commit_id, 'a1b2c3d')
+        self.assertEqual(sub.description, '')
+        self.assertEqual(sub.commit_id, 'a' * 40)
+        self.assertContains(response, 'Commit recorded:')
+        self.assertContains(response, 'aaaaaaa')
 
     def test_self_paced_enrollment_enters_review_pool(self):
         cohort = Cohort.objects.create(
@@ -260,13 +263,12 @@ class ProjectSubmitViewTest(TestCase):
         )
         response = self.client.post('/courses/test-course/submit', {
             'github_link': 'https://github.com/test/new',
-            'commit_id': 'a1b2c3d',
             'description': 'Updated',
         })
         self.assertEqual(response.status_code, 200)
         sub = ProjectSubmission.objects.get(user=self.user, course=self.course)
         self.assertEqual(sub.project_url, 'https://github.com/test/new')
-        self.assertEqual(sub.commit_id, 'a1b2c3d')
+        self.assertEqual(sub.commit_id, 'a' * 40)
 
     def test_cannot_update_after_review_started(self):
         sub = ProjectSubmission.objects.create(
@@ -326,7 +328,8 @@ class ProjectSubmitViewTest(TestCase):
         response = self.client.get('/courses/test-course/submit')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'In Review')
-        self.assertContains(response, 'Go to review dashboard')
+        self.assertNotContains(response, 'Go to review dashboard')
+        self.assertNotContains(response, 'See peer reviews')
 
 
 # ============================================================
@@ -419,8 +422,8 @@ class ReviewDashboardViewTest(TestCase):
             time_spent=6.5,
         )
         response = self.client.get('/courses/test-course/reviews')
-        self.assertContains(response, 'data-testid="peer-submission-commit-id"')
-        self.assertContains(response, 'abc1234def5678901234')
+        self.assertContains(response, 'data-testid="peer-submission-commit"')
+        self.assertContains(response, 'title="Commit abc1234def5678901234"')
         self.assertContains(response, 'data-testid="peer-submission-learning-in-public"')
         self.assertContains(response, 'href="https://dev.to/test/post"')
         self.assertContains(response, 'data-testid="peer-submission-time-spent"')
@@ -432,7 +435,7 @@ class ReviewDashboardViewTest(TestCase):
             project_url='https://github.com/test/project',
         )
         response = self.client.get('/courses/test-course/reviews')
-        self.assertContains(response, 'data-testid="peer-submission-commit-missing"')
+        self.assertNotContains(response, 'data-testid="peer-submission-commit"')
         self.assertContains(response, 'data-testid="peer-submission-time-spent-missing"')
         self.assertNotContains(response, 'data-testid="peer-submission-learning-in-public"')
 
@@ -745,7 +748,7 @@ class BatchFormationTest(TestCase):
                 user=reviewer, course_project=project, cohort=sub.cohort,
             ).exists())
 
-    def test_late_submission_does_not_enter_attempt_batch(self):
+    def test_batch_formation_includes_late_submissions_and_starts_peer_reviewing(self):
         now = timezone.now()
         project = CourseProject.objects.create(
             course=self.course, slug='cutoff', title='Cutoff',
@@ -754,42 +757,51 @@ class BatchFormationTest(TestCase):
         )
         for number in range(2):
             user = _create_user(f'cutoff{number}@test.com')
-            sub = ProjectSubmission.objects.create(
+            ProjectSubmission.objects.create(
                 user=user, course=self.course, course_project=project,
                 project_url=f'https://example.com/{number}',
             )
-            if number == 0:
-                ProjectSubmission.objects.filter(pk=sub.pk).update(
-                    submitted_at=now - timedelta(hours=2),
+
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result['batched'], 2)
+        project.refresh_from_db()
+        self.assertEqual(project.state, 'PR')
+
+    def test_project_past_collecting_does_not_start_batch(self):
+        now = timezone.now()
+        for state in ('CL', 'PR', 'CO'):
+            project = CourseProject.objects.create(
+                course=self.course, slug=f'done-{state}', title='Not collecting', state=state,
+                submission_due_at=now - timedelta(days=2),
+                review_due_at=now - timedelta(days=1), peer_review_count=1,
+            )
+            for number in range(2):
+                user = _create_user(f'{state}{number}@test.com')
+                ProjectSubmission.objects.create(
+                    user=user, course=self.course, course_project=project,
+                    project_url=f'https://example.com/{number}',
                 )
 
         result = PeerReviewService.form_batches_for_course(self.course)
         self.assertEqual(result, {'batched': 0, 'reviews_assigned': 0})
         self.assertFalse(PeerReview.objects.exists())
 
-    def test_expired_review_deadline_does_not_start_batch(self):
+    def test_collecting_project_with_future_submission_deadline_is_not_batched(self):
         now = timezone.now()
         project = CourseProject.objects.create(
-            course=self.course, slug='expired', title='Expired review window',
-            submission_due_at=now - timedelta(days=2),
-            review_due_at=now - timedelta(days=1), peer_review_count=1,
+            course=self.course, slug='early', title='Early',
+            submission_due_at=now + timedelta(days=1),
+            review_due_at=now + timedelta(days=8), peer_review_count=1,
         )
         for number in range(2):
-            user = _create_user(f'expired{number}@test.com')
-            sub = ProjectSubmission.objects.create(
-                user=user, course=self.course, course_project=project,
-                project_url=f'https://example.com/{number}',
+            ProjectSubmission.objects.create(
+                user=_create_user(f'early{number}@test.com'), course=self.course,
+                course_project=project, project_url='https://example.com/x',
             )
-            ProjectSubmission.objects.filter(pk=sub.pk).update(
-                submitted_at=now - timedelta(days=3),
-            )
-
-        result = PeerReviewService.form_batches_for_course(self.course)
-        self.assertEqual(result, {'batched': 0, 'reviews_assigned': 0})
         self.assertEqual(
-            ProjectSubmission.objects.filter(course_project=project, status='submitted').count(), 2,
+            PeerReviewService.form_batches_for_course(self.course),
+            {'batched': 0, 'reviews_assigned': 0},
         )
-        self.assertFalse(PeerReview.objects.exists())
 
 
 # ============================================================

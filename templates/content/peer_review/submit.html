@@ -1,118 +1,28 @@
 {% extends "base.html" %}
 {% load course_links %}
-{% load member_badges accounts_extras date_formatting schedule_tags %}
 
-{% block title %}Submit project - {{ course.title }} | {{ site_name }}{% endblock %}
+{% block title %}{{ course_project.title }} - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
+{% include "includes/header.html" with studio_obj=course %}
 <main class="min-h-screen">
-  {% include "includes/header.html" with studio_obj=course %}
-
+  {% if reader_shell %}
+  {% course_entry_url course as reader_course_url %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/peer_review/_submit_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
+  {% else %}
+  {% include "content/reader/_styles.html" %}
   <section class="pt-16 pb-12 sm:pb-16">
     <div class="mx-auto max-w-2xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8">
-
-  <a href="{% course_entry_url course cohort=request.GET.cohort section='projects' %}" class="mb-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-review-back-link">
-    <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-    <span class="truncate">Back to {{ course.title }}</span>
-  </a>
-
-  <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Submit project</h1>
-  {% if course_project and not self_paced_project %}
-  {% comment %}
-  Issue #1795: the Submit by header shares the syllabus display-zone rule —
-  server renders the explicit fallback zone, the client localizes the
-  instant and the zone label together on first visit.
-  {% endcomment %}
-  <div data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
-  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Submit by <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
-  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
-  </div>
-  {% elif course_project %}
-  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · No fixed submission deadline</p>
-  {% endif %}
-
-  <div class="mt-6">
-  {% if deadline_passed %}
-  <p class="mb-6 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">The submission deadline has passed. You can still see your submission and peer reviews.</p>
-  {% endif %}
-
-  {% if just_submitted %}
-  <p class="mb-6 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status">Your project has been submitted. You will be notified when your review batch is ready.</p>
-  {% endif %}
-
-  {% if error %}
-  <p class="mb-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert">{{ error }}</p>
-  {% endif %}
-
-  {% if submission %}
-  <dl class="mb-6 divide-y divide-border border-y border-border text-sm" data-testid="peer-submission-summary">
-    <div class="flex items-center justify-between gap-3 py-3">
-      <dt class="text-muted-foreground">Status</dt>
-      <dd>{% member_status_badge submission.get_status_display status=submission.status testid="peer-submission-status" %}</dd>
-    </div>
-    {% if submission.description %}
-    <div class="py-3">
-      <dt class="text-muted-foreground">Description</dt>
-      <dd class="mt-1 whitespace-pre-line text-foreground">{{ submission.description }}</dd>
-    </div>
-    {% endif %}
-  </dl>
-  {% endif %}
-
-  {# The shared community-base form (issue #1777): one field contract with DataTalksClub, AISL page chrome and shell styling stay local. #}
-  {% include "coursework/_project_submission_form.html" with project_form=project_form %}
-
-  {% if submission and not submission.commit_id %}
-  <p class="mt-3 text-sm text-muted-foreground" data-testid="peer-submission-commit-missing">No commit ID was collected for this submission.</p>
-  {% endif %}
-
-  {% if submission and readonly %}
-  <div class="mt-6">
-    {% if course_project %}<a href="{% url 'course_project_reviews' slug=course.slug attempt_slug=course_project.slug %}" class="{% button_classes 'secondary' extra='w-full sm:w-auto' %}">See peer reviews</a>{% else %}<a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="{% button_classes 'secondary' extra='w-full sm:w-auto' %}">Go to review dashboard</a>{% endif %}
-  </div>
-  {% endif %}
-  </div>
-
+      {% include "content/peer_review/_submit_content.html" %}
     </div>
   </section>
-
-  <style>
-  /* AISL shell for the shared community-base form partial (issue #1777).
-     The cb- classes are owned by the package partial; this block maps them
-     onto the site design tokens (see _docs/design-system.md, Buttons and
-     Form Controls, for the referenced values). AISL does not offer
-     submission removal (#1777), so the partial's Remove button stays hidden
-     and the views reject action=delete POSTs. */
-  .cb-project-submission .cb-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; letter-spacing: -0.025em; color: hsl(var(--foreground)); }
-  .cb-project-submission .cb-card-meta { font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
-  .cb-project-submission .cb-field { margin-top: 1.25rem; }
-  .cb-project-submission .cb-label { display: block; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); margin-bottom: 0.5rem; }
-  .cb-project-submission .cb-input { min-height: 44px; width: 100%; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--background)); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: hsl(var(--foreground)); }
-  .cb-project-submission .cb-input:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--accent)); }
-  .cb-project-submission textarea.cb-input { min-height: 0; }
-  .cb-project-submission .cb-form-help { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; }
-  .cb-project-submission .cb-form-help summary { cursor: pointer; display: inline-flex; height: 1.5rem; width: 1.5rem; align-items: center; justify-content: center; border-radius: 9999px; border: 1px solid hsl(var(--border)); }
-  .cb-project-submission .cb-disclosure { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; }
-  .cb-project-submission .cb-disclosure summary { cursor: pointer; color: hsl(var(--accent)); }
-  .cb-project-submission .cb-form-error { margin-top: 0.375rem; font-size: 0.875rem; color: hsl(var(--destructive)); }
-  .cb-project-submission .cb-alert { margin-bottom: 1.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--secondary)); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
-  .cb-project-submission .cb-list { font-size: 0.875rem; color: hsl(var(--foreground)); }
-  .cb-project-submission .cb-empty { color: hsl(var(--muted-foreground)); }
-  .cb-project-submission .cb-form-status { margin-top: 1.5rem; border-top: 1px solid hsl(var(--border)); padding-top: 1rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
-  .cb-project-submission .cb-form-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
-  @media (min-width: 640px) { .cb-project-submission .cb-form-actions { flex-direction: row; } }
-  .cb-project-submission .cb-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: transparent; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); transition-property: color, background-color, border-color; }
-  .cb-project-submission .cb-button:hover { background-color: hsl(var(--secondary)); }
-  .cb-project-submission .cb-button-primary { border-color: transparent; background-color: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
-  .cb-project-submission .cb-button-primary:hover { background-color: hsl(var(--accent) / 0.9); }
-  .cb-project-submission [data-project-remove] { display: none; }
-  </style>
-
-  {% include "includes/footer.html" %}
+  {% endif %}
 </main>
+{% include "includes/footer.html" %}
 {% endblock %}
 
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/course_schedule_script.html" %}
+{% if reader_shell %}{% include "content/reader/_scripts.html" %}{% endif %}
 {% endblock %}

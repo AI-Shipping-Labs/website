@@ -1,0 +1,17 @@
+{% load layout_components %}
+{% if prompt.state == 'pending' %}
+<section class="rounded-lg border border-accent/30 bg-accent/5 p-4 sm:p-5" aria-labelledby="peer-review-prompt-heading" data-testid="peer-review-prompt" data-state="pending">
+  <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Peer reviews · {{ prompt.project_title }}</p>
+  <h2 id="peer-review-prompt-heading" class="mt-1 text-base font-semibold text-foreground sm:text-lg">Complete your peer reviews</h2>
+  <p class="mt-1 text-sm text-muted-foreground"><span class="font-medium text-foreground">Required for your certificate.</span>{% if prompt.deadline %} Due <time class="font-medium text-foreground" datetime="{{ prompt.deadline.isoformat }}" data-schedule-instant data-schedule-format="short" data-testid="peer-review-prompt-deadline">{{ prompt.deadline_label }}</time>{% else %} Reviews remain open until completed.{% endif %}</p>
+  <div class="mt-3">
+    {% progress_block prompt.done prompt.total label="Peer review progress" summary_word="complete" action_url=prompt.action_url action_label="Continue reviews" testid="peer-review-prompt-progress" summary_testid="peer-review-prompt-count" action_testid="peer-review-prompt-action" %}
+  </div>
+</section>
+{% elif prompt.state == 'waiting' %}
+<section class="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="peer-review-prompt-heading" data-testid="peer-review-prompt" data-state="waiting">
+  <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Peer reviews · {{ prompt.project_title }}</p>
+  <h2 id="peer-review-prompt-heading" class="mt-1 text-base font-semibold text-muted-foreground">Waiting for your review group</h2>
+  <p class="mt-1 text-sm text-muted-foreground">We'll notify you when your peer reviews are assigned.</p>
+</section>
+{% endif %}

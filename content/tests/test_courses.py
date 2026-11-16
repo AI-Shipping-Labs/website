@@ -25,6 +25,7 @@ from content.models import (
     Cohort,
     Course,
     CourseInstructor,
+    Enrollment,
     Instructor,
     Module,
     Unit,
@@ -604,29 +605,6 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
     def test_shows_instructor_bio(self):
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, 'Expert in AI.')
-
-    def test_cohort_actions_use_primary_and_secondary_canonical_chrome(self):
-        cohort = Cohort.objects.create(
-            course=self.course, name='Action Cohort',
-            start_date=timezone.now().date() + datetime.timedelta(days=7),
-            end_date=timezone.now().date() + datetime.timedelta(days=35),
-            is_active=True,
-        )
-        user = User.objects.create_user(email='cohort-actions@test.com', password='pw', email_verified=True)
-        set_membership(user, tier=self.main_tier)
-        self.client.force_login(user)
-        response = self.client.get('/courses/detail-course')
-        self.assertContains(response, f'data-testid="cohort-enroll-{cohort.pk}"')
-        self.assertContains(response, 'data-action="enroll"')
-        self.assertContains(response, 'bg-accent')
-        self.assertContains(response, 'min-h-[44px]')
-
-        CohortEnrollment.objects.create(user=user, cohort=cohort)
-        response = self.client.get('/courses/detail-course')
-        self.assertContains(response, f'data-testid="cohort-unenroll-{cohort.pk}"')
-        self.assertContains(response, 'data-action="unenroll"')
-        self.assertContains(response, 'border-border bg-transparent')
-        self.assertNotContains(response, 'bg-green-500/10')
 
     def test_instructor_bio_uses_rendered_bio_html(self):
         course = Course.objects.create(
@@ -1741,3 +1719,100 @@ class CourseDetailFreeSignupActionsTest(TierSetupMixin, TestCase):
         )
         # OAuth buttons render inline — no disclosure/toggle machinery.
         self.assertNotContains(response, 'More sign-in options')
+
+
+class CourseDetailNextCohortTest(TierSetupMixin, TestCase):
+    """The landing advertises one open cohort, only to viewers not yet taking the course."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        today = timezone.localdate()
+        cls.course = Course.objects.create(
+            title='Cohort Landing', slug='cohort-landing',
+            status='published', required_level=LEVEL_MAIN,
+        )
+        cls.past = Cohort.objects.create(
+            course=cls.course, name='Finished Cohort',
+            start_date=today - datetime.timedelta(days=90),
+            end_date=today - datetime.timedelta(days=30),
+            is_active=True,
+        )
+        cls.current = Cohort.objects.create(
+            course=cls.course, name='Running Cohort',
+            start_date=today - datetime.timedelta(days=7),
+            end_date=today + datetime.timedelta(days=30),
+            is_active=True,
+        )
+        cls.upcoming = Cohort.objects.create(
+            course=cls.course, name='Later Cohort',
+            start_date=today + datetime.timedelta(days=60),
+            end_date=today + datetime.timedelta(days=120),
+            is_active=True,
+        )
+
+    def _member(self, email):
+        user = User.objects.create_user(email=email, password='pw', email_verified=True)
+        set_membership(user, tier=self.main_tier)
+        self.client.force_login(user)
+        return user
+
+    def test_anonymous_sees_only_the_earliest_open_cohort(self):
+        response = self.client.get('/courses/cohort-landing')
+
+        self.assertContains(response, 'data-testid="course-detail-next-cohort"', count=1)
+        self.assertContains(response, 'Running Cohort')
+        self.assertNotContains(response, 'Finished Cohort')
+        self.assertNotContains(response, 'Later Cohort')
+        self.assertNotContains(response, 'Past cohort')
+        self.assertNotContains(response, 'data-action="enroll"')
+
+    def test_no_cohort_card_when_only_past_cohorts_exist(self):
+        Cohort.objects.filter(pk__in=[self.current.pk, self.upcoming.pk]).update(is_active=False)
+
+        response = self.client.get('/courses/cohort-landing')
+
+        self.assertNotContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertNotContains(response, 'Finished Cohort')
+
+    def test_member_not_enrolled_sees_one_enroll_action_and_next_cohort_info(self):
+        self._member('next-cohort@test.com')
+
+        response = self.client.get('/courses/cohort-landing')
+
+        self.assertContains(response, 'data-testid="enroll-button"', count=1)
+        self.assertContains(response, 'data-testid="course-detail-next-cohort"', count=1)
+        self.assertContains(response, 'Running Cohort')
+        self.assertNotContains(response, 'Later Cohort')
+        self.assertNotContains(response, 'Finished Cohort')
+        self.assertNotContains(response, 'data-action="enroll"')
+        self.assertNotContains(response, 'cohort-enroll-')
+
+    def test_cohort_member_without_course_enrollment_sees_learner_state(self):
+        user = self._member('cohort-only@test.com')
+        CohortEnrollment.objects.create(user=user, cohort=self.current)
+
+        response = self.client.get('/courses/cohort-landing?view=overview')
+
+        self.assertNotContains(response, 'data-testid="enroll-button"')
+        self.assertNotContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertNotContains(response, 'data-action="enroll"')
+        self.assertContains(
+            response,
+            '<span class="text-sm text-muted-foreground" data-testid="course-detail-enrolled-cohort">'
+            "You're taking this course with Running Cohort.</span>",
+            html=True,
+        )
+        self.assertContains(response, 'data-testid="course-detail-home-link"')
+        self.assertNotContains(response, 'data-testid="unenroll-button"')
+
+    def test_enrolled_learner_sees_no_cohort_card(self):
+        user = self._member('enrolled-landing@test.com')
+        Enrollment.objects.create(user=user, course=self.course)
+        CohortEnrollment.objects.create(user=user, cohort=self.current)
+
+        response = self.client.get('/courses/cohort-landing?view=overview')
+
+        self.assertNotContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertNotContains(response, 'data-testid="enroll-button"')
+        self.assertContains(response, 'data-testid="unenroll-button"')

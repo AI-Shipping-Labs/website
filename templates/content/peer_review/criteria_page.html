@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load course_links %}
+
+{% block title %}Evaluation criteria - {{ course.title }} | {{ site_name }}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" with studio_obj=course %}
+<main class="min-h-screen">
+  {% if reader_shell %}
+  {% course_entry_url course as reader_course_url %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/peer_review/_criteria_page_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
+  {% else %}
+  <section class="pt-16 pb-12 sm:pb-16">
+    <div class="mx-auto max-w-2xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8">
+      {% include "content/peer_review/_criteria_page_content.html" %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% if reader_shell %}{% include "content/reader/_scripts.html" %}{% endif %}
+{% endblock %}

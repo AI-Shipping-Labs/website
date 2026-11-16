@@ -82,6 +82,18 @@ the course edit page in one click.
       <span class="text-muted-foreground">No fixed schedule</span>
       {% else %}
       <span class="text-muted-foreground">Submit {{ project.submission_due_at|operator_datetime_tz }} · Review {{ project.review_due_at|operator_datetime_tz }}</span>
+      <span class="flex flex-wrap items-center gap-2" data-testid="project-state-controls" data-project="{{ project.slug }}">
+        <span class="rounded-full border border-border bg-secondary px-2 py-0.5 text-xs text-foreground" data-testid="project-state">{{ project.get_state_display }}</span>
+        {% if project.state == 'CS' or project.state == 'CL' %}
+        <form method="post" action="{% url 'studio_peer_review_set_state' course_id=course.pk project_id=project.pk %}" onsubmit="return confirm('Start peer review for {{ project.title|escapejs }}? Submissions stop; learners can do their assigned reviews.');">{% csrf_token %}<input type="hidden" name="state" value="PR"><button type="submit" data-testid="project-start-peer-review" class="rounded-lg border border-border bg-secondary px-3 py-1 text-xs text-foreground hover:bg-muted">Start peer review</button></form>
+        {% endif %}
+        {% if project.state == 'PR' %}
+        <form method="post" action="{% url 'studio_peer_review_set_state' course_id=course.pk project_id=project.pk %}" onsubmit="return confirm('Close peer review for {{ project.title|escapejs }}? Learners will see their results and feedback and can no longer submit reviews.');">{% csrf_token %}<input type="hidden" name="state" value="CO"><button type="submit" data-testid="project-close-peer-review" class="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-foreground hover:opacity-90">Close peer review</button></form>
+        {% endif %}
+        {% if project.state == 'CO' or project.state == 'PR' %}
+        <form method="post" action="{% url 'studio_peer_review_set_state' course_id=course.pk project_id=project.pk %}" onsubmit="return confirm('{% if project.state == 'CO' %}Reopen peer review for {{ project.title|escapejs }}? Results and feedback are hidden again and learners can submit reviews.{% else %}Reopen submissions for {{ project.title|escapejs }}?{% endif %}');">{% csrf_token %}<input type="hidden" name="state" value="{% if project.state == 'CO' %}PR{% else %}CS{% endif %}"><button type="submit" data-testid="project-reopen" class="rounded-lg border border-border bg-secondary px-3 py-1 text-xs text-foreground hover:bg-muted">{% if project.state == 'CO' %}Reopen peer review{% else %}Reopen submissions{% endif %}</button></form>
+        {% endif %}
+      </span>
       {% endif %}
     </div>
     {% endfor %}

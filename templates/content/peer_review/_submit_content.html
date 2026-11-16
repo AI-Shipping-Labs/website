@@ -1,0 +1,87 @@
+{% load member_badges layout_components accounts_extras date_formatting schedule_tags course_links %}
+{% include "content/peer_review/_attempt_breadcrumb.html" %}
+
+<div class="mb-8" data-testid="attempt-page-header">
+<div class="mb-2 flex flex-wrap items-start justify-between gap-3">
+  <h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="project-title">{% if course_project %}{{ course_project.title }}{% else %}Submit project{% endif %}</h1>
+  {% firstof submission_status_label submission.get_status_display "Not submitted" as status_label %}{% member_status_badge status_label status=submission.status testid="peer-submission-status" extra_class="mt-1 flex-shrink-0" %}
+</div>
+
+{% if course_project and not self_paced_project %}
+<div data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
+  <p class="text-sm text-muted-foreground" data-testid="peer-review-meta">
+    {% if deadline_passed %}Submissions closed{% else %}Submit by{% endif %}
+    <time class="font-medium text-foreground" datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time>
+    <span data-schedule-zone-label>{{ schedule_timezone }}</span>
+    {% if course_project.review_due_at %}<span aria-hidden="true">·</span> Peer review until <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time>{% endif %}
+  </p>
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
+</div>
+{% elif course_project %}
+<p class="text-sm text-muted-foreground" data-testid="peer-review-meta">No fixed deadline. Peer review starts once enough learners have submitted.</p>
+{% endif %}
+</div>
+
+{% if just_submitted %}
+<p class="mb-6 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status">Your project is saved. You can update it until the deadline. We'll email you when your peer reviews are assigned.</p>
+{% endif %}
+{% if error %}
+<p class="mb-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert">{{ error }}</p>
+{% endif %}
+
+<div class="aisl-project-form">
+{% include "coursework/_project_submission_form.html" with project_form=project_form %}
+</div>
+{% include "content/peer_review/_commit_status.html" %}
+
+{% if submission and not submission.commit_id %}
+<p class="mt-3 text-sm text-muted-foreground" data-testid="peer-submission-commit-missing">No commit ID was collected for this submission.</p>
+{% endif %}
+
+{% if project_criteria.criteria %}
+<section class="mt-14" aria-labelledby="project-criteria-title" data-testid="project-criteria">
+  {% section_header "How your project is evaluated" heading_id="project-criteria-title" %}
+  <p class="mt-1 text-sm text-muted-foreground">Peers score your project on the course criteria: {{ project_criteria.totals_label }}.{% if criteria_lesson_url %} <a href="{{ criteria_lesson_url }}" class="text-accent underline underline-offset-2 hover:text-foreground" data-testid="criteria-lesson-link">Read the evaluation criteria</a>{% endif %}</p>
+</section>
+{% endif %}
+
+<style>
+.aisl-project-form .cb-project-submission > header { display: none; }
+.aisl-project-form [data-project-closed] { display: none; }
+.aisl-project-form .cb-field { display: block; min-height: 0; border: 0; padding: 0; background: none; border-radius: 0; margin-top: 1.5rem; }
+.aisl-project-form .cb-form > .cb-field:first-of-type { margin-top: 0; }
+.aisl-project-form .cb-label { display: block; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); }
+.aisl-project-form .cb-card-meta { font-size: 0.875rem; font-weight: 400; color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-input { display: block; min-height: 44px; width: 100%; margin-top: 0.5rem; border-radius: 0.375rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; }
+.aisl-project-form textarea.cb-input { min-height: 6rem; }
+.aisl-project-form [data-learning-in-public-slots] .cb-input + .cb-input { margin-top: 0.5rem; }
+.aisl-project-form .cb-form-help { margin-top: 0.125rem; font-size: 0.8125rem; color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-form-help[data-inline] summary { display: none; }
+.aisl-project-form .cb-form-help summary { cursor: pointer; display: inline-flex; height: 1.25rem; width: 1.25rem; align-items: center; justify-content: center; border-radius: 9999px; border: 1px solid hsl(var(--border)); font-size: 0.75rem; }
+.aisl-project-form .cb-disclosure { margin-top: 0.25rem; font-size: 0.8125rem; color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-disclosure summary { cursor: pointer; color: hsl(var(--accent)); }
+.aisl-project-form .cb-disclosure p { margin-top: 0.25rem; }
+.aisl-project-form .cb-disclosure code { font-size: 0.75rem; border-radius: 0.25rem; background: hsl(var(--muted)); padding: 0.05rem 0.3rem; }
+.aisl-project-form .cb-form-error { margin-top: 0.375rem; font-size: 0.875rem; color: hsl(var(--destructive)); }
+.aisl-project-form .cb-alert { margin-bottom: 1.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--secondary)); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-list { margin-top: 0.5rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-list > li + li { margin-top: 0.25rem; }
+.aisl-project-form .cb-list a { overflow-wrap: anywhere; text-decoration: underline; text-underline-offset: 2px; }
+.aisl-project-form .cb-list a:hover { color: hsl(var(--foreground)); }
+.aisl-project-form [data-project-field="github_link"] .cb-form-help p > button { color: hsl(var(--muted-foreground)); }
+.aisl-project-form [data-project-field="github_link"] .cb-form-help p > button:hover { color: hsl(var(--foreground)); }
+.aisl-project-form .cb-empty { color: hsl(var(--muted-foreground)); }
+.aisl-project-form .cb-form-status { margin-top: 2rem; font-size: 0.8125rem; color: hsl(var(--muted-foreground)); }
+.aisl-project-form [data-project-status-help] { display: none; }
+.aisl-project-form .cb-form-actions { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+@media (min-width: 640px) { .aisl-project-form .cb-form-actions { flex-direction: row; } }
+.aisl-project-form .cb-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: transparent; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); }
+.aisl-project-form .cb-button:hover { background-color: hsl(var(--secondary)); }
+.aisl-project-form [data-add-learning-in-public-link] { margin-top: 0.5rem; min-height: 36px; padding: 0.25rem 0.75rem; }
+.aisl-project-form .cb-button-primary { border-color: transparent; background-color: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.aisl-project-form .cb-button-primary:hover { background-color: hsl(var(--accent) / 0.9); }
+.aisl-project-form [data-project-remove] { display: none; }
+</style>
+<script>
+document.querySelectorAll('.aisl-project-form details.cb-form-help').forEach(function (d) { d.open = true; d.setAttribute('data-inline', ''); });
+</script>

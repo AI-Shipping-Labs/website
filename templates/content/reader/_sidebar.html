@@ -152,6 +152,23 @@
             {% endfor %}
           </ul>
           {% endfor %}
+          {% if reader_project_rows %}
+          <ul class="reader-nav-list" data-testid="reader-project-rows">
+            {% for row in reader_project_rows %}
+            <li>
+              {% include "includes/_list_row.html" with href=row.url title=row.title is_current=row.is_current marker_kind="custom" marker_html=row|project_row_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs=row.is_current|yesno:'aria-current="page",' status_meta=row.status %}
+              {% if row.nav_items %}{% include "content/reader/_attempt_step_nav.html" with items=row.nav_items %}{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if reader_criteria_row %}
+          <ul class="reader-nav-list">
+            <li>
+              {% include "includes/_list_row.html" with href=reader_criteria_row.url title=reader_criteria_row.title is_current=reader_criteria_row.is_current marker_kind="custom" marker_html=reader_criteria_row|project_row_marker_html trailing_icon="" testid="reader-criteria-row" extra_anchor_class="reader-scoped-unit" extra_attrs=reader_criteria_row.is_current|yesno:'aria-current="page",' %}
+            </li>
+          </ul>
+          {% endif %}
         </div>
         {% else %}
         {% for nav_module in modules %}

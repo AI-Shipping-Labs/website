@@ -247,6 +247,7 @@ from studio.views.peer_reviews import (
     peer_review_form_batch,
     peer_review_issue_certificates,
     peer_review_management,
+    peer_review_set_state,
 )
 from studio.views.personas import (
     persona_create,
@@ -492,6 +493,7 @@ urlpatterns = [
     path('homeworks/<int:homework_id>/submissions', homework_submissions, name='studio_homework_submissions'),
     path('courses/<int:course_id>/peer-reviews', peer_review_management, name='studio_peer_review_management'),
     path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
+    path('courses/<int:course_id>/peer-reviews/projects/<int:project_id>/state', peer_review_set_state, name='studio_peer_review_set_state'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
     path('courses/<int:course_id>/peer-reviews/extend-deadline', peer_review_extend_deadline, name='studio_peer_review_extend_deadline'),
     # Course certificate soft-revoke controls (issue #949). UUID pk; reached

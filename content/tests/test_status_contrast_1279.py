@@ -203,8 +203,8 @@ class StatusPaletteContractTest(SimpleTestCase):
                 'member_status_badge submission.get_status_display',
                 'testid="peer-review-status"',
             ),
-            'templates/content/peer_review/submit.html': (
-                'member_status_badge submission.get_status_display',
+            'templates/content/peer_review/_submit_content.html': (
+                'member_status_badge status_label status=submission.status',
                 'testid="peer-submission-status"',
             ),
             'templates/events/event_series.html': (

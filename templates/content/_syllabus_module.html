@@ -14,7 +14,7 @@
   <summary class="cursor-pointer list-none grid min-h-[44px] w-full items-center {% if counter %}grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if not counter %}<i data-lucide="chevron-right" class="topic-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
     <span class="min-w-0 {% if counter %}col-start-1{% else %}col-start-2{% endif %}">
-      <span class="block break-words {% if counter %}text-base font-semibold{% else %}text-sm font-normal{% endif %}">{% if counter and course_slug == 'ai-buildcamp' and module.sort_order > 0 and module.sort_order < 10 and module.sort_order != 7 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}</span>
+      <span class="block break-words {% if counter %}text-base font-semibold{% else %}text-sm font-normal{% endif %}">{% if counter and course_slug == 'ai-buildcamp' and module.sort_order > 0 and module.sort_order < 10 and module.sort_order != 7 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title|title_under_section:section_heading }}</span>
       {% if counter %}
       <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-muted-foreground" data-testid="syllabus-module-meta">
         {% if module_week_range %}<span data-testid="syllabus-module-week-range">{{ module_week_range }}</span>{% endif %}
@@ -52,7 +52,7 @@
       {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endfor %}
       {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
+      {% include "content/_syllabus_module.html" with module=child section_heading="" parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
       {% endif %}
       {% endwith %}
       {% endfor %}
@@ -66,7 +66,7 @@
       {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endfor %}
       {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
+      {% include "content/_syllabus_module.html" with module=child section_heading=child|syllabus_section_heading:bonus_children parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
       {% endif %}
       {% endwith %}
       {% endfor %}
@@ -86,8 +86,8 @@
     {% endif %}
     {% with module_projects=projects_by_module|dict_get:module.id %}
     {% if module_projects %}
-    {% for project in module_projects %}
-    {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
+    {% for row in module_projects %}
+    {% include "content/_syllabus_project_row.html" with row=row schedule_timezone=schedule_timezone only %}
     {% endfor %}
     {% endif %}
     {% endwith %}

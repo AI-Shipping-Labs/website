@@ -59,8 +59,10 @@ from content.services.course_navigation import (
     opens_course_home,
 )
 from content.services.course_schedule import (
+    already_takes_course,
     build_deadline_context,
     cohort_projects,
+    next_open_cohort,
     pickable_cohorts,
     schedule_timezone_name,
     select_display_cohort,
@@ -120,6 +122,8 @@ from content.services.module_home import (
     module_reader_navigation,
     module_tree_units,
 )
+from content.services.peer_review_prompt import peer_review_prompt
+from content.services.project_reader import module_project_rows
 from content.utils.tags import resolve_bounded_selected_tags
 from content.views.pages import _filter_by_tags
 from events.services.display_time import (
@@ -143,18 +147,11 @@ def _course_home_projects_by_module(
     projects = list(
         cohort_projects(course, cohort).select_related('cohort', 'module')
     )
-    submitted_ids = set()
-    if include_reviews:
-        submitted_ids = set(ProjectSubmission.objects.filter(
-            user=user, course_project__in=projects,
-        ).values_list('course_project_id', flat=True))
-    projects_by_module = {}
     for project in projects:
         project.hide_dates = self_paced_view
-        project.show_reviews = project.pk in submitted_ids
-        if project.module_id:
-            projects_by_module.setdefault(project.module_id, []).append(project)
-    return projects_by_module
+    return module_project_rows(
+        user, course, projects, with_phases=include_reviews,
+    )
 
 
 def _course_grid_classes(count):
@@ -374,13 +371,13 @@ def course_detail(request, slug):
         cta_message = 'Sign up free to start this course'
         cta_url = f'/accounts/signup/?{urlencode({"next": course_url})}'
 
-    # Active cohorts
-    # Issue #1674: the self-enroll block is dated-cohort-only — a
-    # self-paced cohort is never shown as something to manually join,
-    # membership in it is implicit.
-    active_cohorts = course.aisl_cohorts.filter(
-        is_active=True, mode='cohort',
-    ).order_by('start_date')
+    user_is_enrolled = is_enrolled(user, course)
+    takes_course = already_takes_course(
+        user, course, course_enrolled=user_is_enrolled,
+    )
+    next_cohort = None
+    if not takes_course:
+        next_cohort = next_open_cohort(course)
     user_enrolled_cohort_ids = set()
     if user.is_authenticated:
         user_enrolled_cohort_ids = set(
@@ -400,6 +397,7 @@ def course_detail(request, slug):
         enrolled_cohort = self_paced_enrollment.cohort if self_paced_enrollment else None
 
     course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
+    all_course_projects = course_projects
     has_configured_projects = bool(course_projects)
     project_cohort = viewer_cohort
     if not request.GET.get('cohort') and enrolled_cohort is not None:
@@ -422,19 +420,12 @@ def course_detail(request, slug):
                 or (project.cohort_id and project.cohort_id not in user_enrolled_cohort_ids)
             )
         }
-    projects_by_module = {}
-    submitted_project_ids = set()
-    if user.is_authenticated and course_projects:
-        submitted_project_ids = set(ProjectSubmission.objects.filter(
-            user=user, course_project__in=course_projects,
-        ).values_list('course_project_id', flat=True))
-    for project in course_projects:
-        project.show_reviews = (
-            project.pk in submitted_project_ids
-            and project.pk not in preview_project_ids
-        )
-        if project.module_id:
-            projects_by_module.setdefault(project.module_id, []).append(project)
+    projects_by_module = module_project_rows(
+        user, course, course_projects,
+        preview_ids=preview_project_ids,
+        course_projects=all_course_projects,
+        can_open_criteria=user.is_authenticated and has_access,
+    )
 
     # Discussion button: visible only on paid courses for Main+ tier users with community access.
     show_discussion = (
@@ -444,9 +435,8 @@ def course_detail(request, slug):
     )
 
     # Enrollment state (issue #236). Drives the Enroll / Continue buttons.
-    user_is_enrolled = is_enrolled(user, course)
     next_unit_for_user = None
-    if user_is_enrolled:
+    if takes_course:
         next_unit_for_user = get_next_incomplete_unit_for_view(
             course, user, self_paced_view,
         )
@@ -465,7 +455,7 @@ def course_detail(request, slug):
         ),
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
-        'active_cohorts': active_cohorts,
+        'next_cohort': next_cohort,
         'cohort_today': timezone.localdate(),
         'module_week_ranges': module_week_ranges,
         'schedule_cohort': viewer_cohort,
@@ -475,7 +465,6 @@ def course_detail(request, slug):
         'schedule_can_localize': should_use_browser_timezone(user),
         'unit_deadlines': unit_deadlines,
         'module_deadline_summaries': module_deadline_summaries,
-        'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
         'enrolled_cohort': enrolled_cohort,
         'course_projects': course_projects,
         'projects_by_module': projects_by_module,
@@ -486,6 +475,7 @@ def course_detail(request, slug):
         'testimonials': course.testimonials,
         'show_discussion': show_discussion,
         'user_is_enrolled': user_is_enrolled,
+        'takes_course': takes_course,
         'next_unit_for_user': next_unit_for_user,
         'course_enrollment_count': active_enrollment_count(course),
     }
@@ -610,6 +600,9 @@ def course_home(request, slug, section='home'):
             course, request.user, cohort, focus_module=context['current_module'],
         )
         context.update(commitments)
+        context['peer_review_prompt'] = peer_review_prompt(
+            request.user, course, cohort, timezone.now(), context['commitment_timezone'],
+        )
         # Session cards are pure Python over the schedule rows above (no
         # queries); Home's tests and template helpers read them directly.
         session_cards = [
@@ -754,6 +747,10 @@ def course_home(request, slug, section='home'):
     elif section in ('sessions', 'homework', 'projects'):
         commitments = build_course_commitments(course, request.user, cohort)
         context.update(commitments)
+        if section == 'projects':
+            context['peer_review_prompt'] = peer_review_prompt(
+                request.user, course, cohort, timezone.now(), context['commitment_timezone'],
+            )
         if section == 'sessions':
             # Every scheduled course session card offers one action, to its
             # syllabus unit (``session_item``), which holds the recording,
@@ -779,30 +776,30 @@ def course_home(request, slug, section='home'):
                 context['open_assignments'],
                 key=lambda row: (row['when'] is None, row['when'] or timezone.now()),
             )
-            context['completed_deadline_rows'] = sorted(
-                context['completed_assignments'],
-                key=lambda row: row['when'] or timezone.now(), reverse=True,
+            context['homework_rows'] = sorted(
+                (
+                    row for row in context['open_assignments'] + context['completed_assignments']
+                    if row['kind'] == 'Homework'
+                ),
+                key=lambda row: (row['when'] is None, row['when'] or timezone.now()),
             )
-            context['homework_rows'] = [
-                row for row in context['deadline_rows']
-                if row['kind'] == 'Homework'
-            ]
-            context['project_rows'] = [
-                row for row in context['deadline_rows']
-                if row['kind'] == 'Project'
-            ]
+            context['project_rows'] = sorted(
+                (
+                    row for row in context['open_assignments'] + context['completed_assignments']
+                    if row['kind'] == 'Project'
+                ),
+                key=lambda row: row['project_order'],
+            )
             context['review_rows'] = [
                 row for row in context['deadline_rows']
                 if row['kind'] == 'Peer reviews' and row['action']
             ]
-            context['completed_homework_rows'] = [
-                row for row in context['completed_deadline_rows']
-                if row['kind'] == 'Homework'
-            ]
-            context['completed_project_rows'] = [
-                row for row in context['completed_deadline_rows']
-                if row['kind'] == 'Project'
-            ]
+            prompt = context.get('peer_review_prompt')
+            if prompt is not None:
+                context['review_rows'] = [
+                    row for row in context['review_rows']
+                    if row.get('project_id') != prompt.project.pk
+                ]
             # Only a dated cohort gives these assignments a learner-specific
             # calendar. Generic project rows remain useful as a course-work
             # preview, but their stored dates must not read as this learner's

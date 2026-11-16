@@ -34,9 +34,9 @@
     {% endfor %}
   {% endif %}
   {% with module_projects=projects_by_module|dict_get:module.id %}
-    {% for project in module_projects %}
-      <a href="{% url 'course_project_submit' slug=course.slug attempt_slug=project.slug %}" data-cb-syllabus-search-item data-search-title="{{ project.title }}">{{ project.title }}</a>
-    {% endfor %}
+    {% for row in module_projects %}{% if row.url %}
+      <a href="{{ row.url }}" data-cb-syllabus-search-item data-search-title="{{ row.title }}">{{ row.title }}</a>
+    {% endif %}{% endfor %}
   {% endwith %}
 </div>
 {% endwith %}

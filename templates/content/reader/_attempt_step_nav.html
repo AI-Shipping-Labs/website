@@ -1,0 +1,17 @@
+<div role="group" aria-label="Project steps" data-testid="attempt-step-nav">
+<ul class="reader-nav-list ml-4 mt-0.5">
+  {% for item in items %}
+  <li data-attempt-step="{{ item.key }}">
+    {% if item.done and item.current %}
+      {% include "includes/_list_row.html" with href=item.url title=item.title is_current=True marker_kind="check" marker_testid="attempt-step-done" sr_suffix=", done" trailing_icon="" testid="attempt-step-current" extra_attrs='aria-current="step" data-reader-current data-attempt-step-done="true"' scoped_module='' reader_cohort_param='' %}
+    {% elif item.done %}
+      {% include "includes/_list_row.html" with href=item.url title=item.title marker_kind="check" marker_testid="attempt-step-done" sr_suffix=", done" trailing_icon="" extra_attrs='data-attempt-step-done="true"' scoped_module='' reader_cohort_param='' %}
+    {% elif item.current %}
+      {% include "includes/_list_row.html" with href=item.url title=item.title is_current=True marker_kind="circle" trailing_icon="" testid="attempt-step-current" extra_attrs='aria-current="step" data-reader-current' scoped_module='' reader_cohort_param='' %}
+    {% else %}
+      {% include "includes/_list_row.html" with href=item.url title=item.title marker_kind="circle" trailing_icon="" scoped_module='' reader_cohort_param='' %}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+</div>

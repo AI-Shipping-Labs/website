@@ -1,0 +1,12 @@
+{% with level=criteria_heading_level|default:2 %}
+{% for criterion in project_criteria.criteria %}
+<h{{ level }} id="{{ criteria_id_prefix }}{{ criterion.id }}">{{ criterion.title }}</h{{ level }}>
+{% if criterion.description %}<p>{{ criterion.description }}</p>{% endif %}
+<p>{{ criterion.list_intro }}</p>
+<ul data-criterion="{{ criterion.id }}">
+  {% for option in criterion.options %}
+  <li>{{ option.label }}</li>
+  {% endfor %}
+</ul>
+{% endfor %}
+{% endwith %}

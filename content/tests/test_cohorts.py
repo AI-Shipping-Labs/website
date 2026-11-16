@@ -230,7 +230,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/cohort-course')
         self.assertContains(response, 'Enrolled')
 
-    def test_shows_full_message_when_cohort_is_full(self):
+    def test_full_cohort_card_shows_no_spots_and_no_cohort_enroll(self):
         self.cohort.max_participants = 1
         self.cohort.save()
         existing_user = User.objects.create_user(email='existing@test.com')
@@ -242,7 +242,9 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/cohort-course')
-        self.assertContains(response, 'Cohort is full')
+        self.assertContains(response, 'data-testid="course-detail-next-cohort"')
+        self.assertContains(response, '0 of 1 spots remaining')
+        self.assertNotContains(response, 'data-action="enroll"')
 
     def test_no_enroll_button_for_unauthorized_user(self):
         """Anonymous users should not see enroll/unenroll buttons."""

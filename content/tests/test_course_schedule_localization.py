@@ -237,9 +237,11 @@ class ScheduleZoneRenderingTest(TestCase):
         response = self.client.get(url)
         self.assertContains(
             response,
-            '<time datetime="2026-10-05T23:59:59Z" data-schedule-instant>'
-            'Oct 5, 2026 19:59</time> '
-            '<span data-schedule-zone-label>America/New_York</span>',
+            '<time class="font-medium text-foreground" datetime="2026-10-05T23:59:59Z" data-schedule-instant>'
+            'Oct 5, 2026 19:59</time>',
+        )
+        self.assertContains(
+            response, '<span data-schedule-zone-label>America/New_York</span>',
         )
         self.assertNotContains(response, 'data-localize="true"')
 
@@ -267,13 +269,12 @@ class ScheduleZoneRenderingTest(TestCase):
 
     def test_review_pages_render_explicit_fallback_on_first_visit(self):
         dashboard, form = self._peer_review_pages(self.invalid)
-        header = (
-            '<time datetime="2026-10-05T23:59:59Z" data-schedule-instant>'
-            'Oct 6, 2026 01:59</time> '
-            '<span data-schedule-zone-label>Europe/Berlin</span>'
-        )
         for response in (dashboard, form):
-            self.assertContains(response, header)
+            self.assertContains(
+                response,
+                'datetime="2026-10-05T23:59:59Z" data-schedule-instant>Oct 6, 2026 01:59</time>',
+            )
+            self.assertContains(response, '<span data-schedule-zone-label>Europe/Berlin</span>')
             self.assertContains(response, BERLIN_NOTICE)
             self.assertContains(response, 'data-localize="true"')
             self.assertNotContains(response, 'Shown in your timezone.')
@@ -281,13 +282,14 @@ class ScheduleZoneRenderingTest(TestCase):
 
     def test_review_pages_use_saved_preference_without_localizing(self):
         dashboard, form = self._peer_review_pages(self.saved)
-        header = (
-            '<time datetime="2026-10-05T23:59:59Z" data-schedule-instant>'
-            'Oct 5, 2026 19:59</time> '
-            '<span data-schedule-zone-label>America/New_York</span>'
-        )
         for response in (dashboard, form):
-            self.assertContains(response, header)
+            self.assertContains(
+                response,
+                'datetime="2026-10-05T23:59:59Z" data-schedule-instant>Oct 5, 2026 19:59</time>',
+            )
+            self.assertContains(
+                response, '<span data-schedule-zone-label>America/New_York</span>',
+            )
             self.assertNotContains(response, 'data-localize="true"')
 
 

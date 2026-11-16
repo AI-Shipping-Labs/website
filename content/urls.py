@@ -63,6 +63,7 @@ from content.views.peer_review import (
     review_dashboard,
     review_form,
 )
+from content.views.project_criteria_page import course_project_criteria
 from content.views.request_call import request_a_call
 from content.views.share_links import content_share_link, invalid_content_share_link
 from content.views.tags import tags_detail, tags_index
@@ -195,6 +196,7 @@ urlpatterns = [
     path('courses/<slug:slug>/enroll', enroll_course, name='enroll_course'),
     path('courses/<slug:slug>/unenroll', unenroll_course, name='unenroll_course'),
     # Peer review (must be before the catch-all slug-based unit URL)
+    path('courses/<slug:slug>/project-criteria', course_project_criteria, name='course_project_criteria'),
     path('courses/<slug:slug>/projects/<slug:attempt_slug>/submit', attempt_submit, name='course_project_submit'),
     path('courses/<slug:slug>/projects/<slug:attempt_slug>/reviews', attempt_reviews, name='course_project_reviews'),
     path('courses/<slug:slug>/projects/<slug:attempt_slug>/reviews/<int:submission_id>', attempt_review_form, name='course_project_review_form'),

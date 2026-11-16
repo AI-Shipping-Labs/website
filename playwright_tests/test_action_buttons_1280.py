@@ -16,11 +16,9 @@ from events.tests.test_cancel_registration_view import (
 from playwright_tests.conftest import auth_context
 from playwright_tests.test_course_cohorts import (
     _clear_courses,
-    _create_cohort,
     _create_course,
     _create_user,
     _ensure_tiers,
-    _future_cohort_window,
 )
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -206,85 +204,3 @@ def test_cancellation_actions_preserve_get_keep_and_post_semantics(
     expect(page.get_by_test_id("cancel-registration-invalid-destination")).to_be_visible()
     expect(page.get_by_test_id("cancel-registration-submit")).to_have_count(0)
     connection.close()
-
-
-@pytest.mark.django_db(transaction=True)
-def test_cohort_actions_keep_endpoint_behavior_and_canonical_opposite_states(
-    django_server, browser,
-):
-    _clear_courses()
-    _ensure_tiers()
-    user = _create_user("cohort-actions-1280@example.com", tier_slug="main")
-    course = _create_course("Cohort Actions", "cohort-actions", required_level=20)
-    start, end = _future_cohort_window()
-    cohort = _create_cohort(course, "Action Cohort", start, end)
-
-    context = auth_context(browser, user.email)
-    _set_analytics_off(context)
-    page = context.new_page()
-    page.set_viewport_size({"width": 1440, "height": 900})
-    page.goto(f"{django_server}/courses/cohort-actions", wait_until="domcontentloaded")
-    enroll = page.get_by_test_id(f"cohort-enroll-{cohort.pk}")
-    _assert_focus(enroll)
-    expect(enroll).to_have_attribute("data-action", "enroll")
-    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-enroll-light-desktop.png")
-    page.evaluate("localStorage.setItem('theme', 'dark')")
-    page.reload(wait_until="domcontentloaded")
-    enroll = page.get_by_test_id(f"cohort-enroll-{cohort.pk}")
-    _assert_focus(enroll)
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-enroll-dark-desktop.png")
-    enroll.click()
-    unenroll = page.get_by_test_id(f"cohort-unenroll-{cohort.pk}")
-    expect(unenroll).to_be_visible(timeout=10000)
-    _assert_focus(unenroll)
-    expect(unenroll).to_have_attribute("data-action", "unenroll")
-    page.evaluate("localStorage.setItem('theme', 'light')")
-    page.reload(wait_until="domcontentloaded")
-    unenroll = page.get_by_test_id(f"cohort-unenroll-{cohort.pk}")
-    _assert_focus(unenroll)
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-unenroll-light-desktop.png")
-    page.evaluate("localStorage.setItem('theme', 'dark')")
-    page.reload(wait_until="domcontentloaded")
-    unenroll = page.get_by_test_id(f"cohort-unenroll-{cohort.pk}")
-    _assert_focus(unenroll)
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-unenroll-dark-desktop.png")
-    unenroll.click()
-    enroll = page.get_by_test_id(f"cohort-enroll-{cohort.pk}")
-    expect(enroll).to_be_visible(timeout=10000)
-    page.set_viewport_size({"width": 320, "height": 720})
-    page.evaluate("localStorage.setItem('theme', 'light')")
-    page.reload(wait_until="domcontentloaded")
-    enroll = page.get_by_test_id(f"cohort-enroll-{cohort.pk}")
-    _assert_focus(enroll)
-    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-enroll-light-mobile.png")
-    enroll.click()
-    expect(page.get_by_test_id(f"cohort-unenroll-{cohort.pk}")).to_be_visible(timeout=10000)
-    page.evaluate("localStorage.setItem('theme', 'dark')")
-    page.reload(wait_until="domcontentloaded")
-    unenroll = page.get_by_test_id(f"cohort-unenroll-{cohort.pk}")
-    _assert_focus(unenroll)
-    page.screenshot(path=SCREENSHOT_DIR / "cohort-unenroll-dark-mobile.png")
-
-    for theme in ("light", "dark"):
-        page.evaluate("theme => localStorage.setItem('theme', theme)", theme)
-        page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        header = page.get_by_test_id("dashboard-header")
-        onboarding = page.get_by_test_id("onboarding-prompt")
-        onboarding_cta = page.get_by_test_id("onboarding-prompt-cta")
-        expect(header).to_be_visible()
-        expect(onboarding).to_be_visible()
-        expect(onboarding_cta).to_have_attribute("href", "/onboarding/")
-        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-        page.screenshot(
-            path=SCREENSHOT_DIR / f"dashboard-header-{theme}-mobile.png",
-        )
-        onboarding.scroll_into_view_if_needed()
-        _assert_focus(onboarding_cta)
-        page.screenshot(
-            path=SCREENSHOT_DIR / f"dashboard-onboarding-{theme}-mobile.png",
-        )
-    with page.expect_request(f"{django_server}/onboarding/") as navigation:
-        onboarding_cta.press("Enter")
-    assert navigation.value.url == f"{django_server}/onboarding/"

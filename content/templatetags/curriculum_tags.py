@@ -18,6 +18,7 @@ from content.services.course_inline import (
     inline_units_for,
 )
 from content.services.course_view_units import course_units_for_view
+from content.services.syllabus_titles import section_heading_for, title_under_heading
 
 register = template.Library()
 
@@ -32,6 +33,18 @@ def required_only(items):
 def bonus_only(items):
     """Return the bonus items from ``items``, order preserved."""
     return [item for item in items if getattr(item, 'is_bonus', False)]
+
+
+@register.filter
+def syllabus_section_heading(module, siblings):
+    """The syllabus group heading ``module`` sits under among ``siblings``."""
+    return section_heading_for(module, siblings)
+
+
+@register.filter
+def title_under_section(title, heading):
+    """Module title without a "Week N" prefix the group heading already shows."""
+    return title_under_heading(title, heading)
 
 
 @register.filter
@@ -125,6 +138,33 @@ def homework_step_nav_marker_html(title):
     return format_html(
         '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>',
         icon,
+    )
+
+
+ATTEMPT_STEP_ICONS = {'submit': 'upload', 'review': 'user-check', 'feedback': 'message-square'}
+
+
+@register.filter
+def attempt_step_marker_html(key):
+    """Type icon of a project attempt sub-item (attempt_nav), like homework steps."""
+    return format_html(
+        '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>',
+        ATTEMPT_STEP_ICONS.get(key, 'circle'),
+    )
+
+
+@register.filter
+def project_row_marker_html(row, testid=''):
+    """Leading icon of a module project row (``project_reader`` attempt or criteria)."""
+    if testid:
+        return format_html(
+            '<i data-lucide="{}" class="h-4 w-4 flex-shrink-0 text-muted-foreground" '
+            'data-testid="{}" aria-hidden="true"></i>',
+            row.icon, testid,
+        )
+    return format_html(
+        '<i data-lucide="{}" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>',
+        row.icon,
     )
 
 

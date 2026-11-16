@@ -87,6 +87,11 @@ class CourseExtension(models.Model):
     peer_review_deadline_days = models.IntegerField(default=7)
     peer_review_criteria = models.TextField(blank=True, default='')
     peer_review_criteria_html = models.TextField(blank=True, default='')
+    project_passing_score = models.PositiveIntegerField(default=0, db_default=0)
+    project_criteria_intro = models.TextField(blank=True, default='', db_default='')
+    project_criteria_intro_html = models.TextField(blank=True, default='', db_default='')
+    project_criteria_outro = models.TextField(blank=True, default='', db_default='')
+    project_criteria_outro_html = models.TextField(blank=True, default='', db_default='')
 
     def __str__(self):
         return f'AISL extension for {self.course.slug}'

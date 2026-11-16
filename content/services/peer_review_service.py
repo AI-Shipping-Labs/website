@@ -18,8 +18,14 @@ from content.services.peer_review_batches import (
     form_self_paced_project_batches,
 )
 from content.services.peer_review_notifications import notify_reviews_complete
+from content.services.project_criteria import settle_completion
 
 logger = logging.getLogger(__name__)
+
+
+def _criteria(submission):
+    project = submission.course_project
+    return project.evaluation_criteria if project else []
 
 
 def certificate_required_units(queryset, course_project):
@@ -152,7 +158,8 @@ class PeerReviewService:
         all_reviews = submission.reviews.all()
         if not all_reviews.exists():
             return
-        all_complete = all(r.is_complete for r in all_reviews)
+        criteria = _criteria(submission)
+        all_complete = all(r.is_complete for r in settle_completion(all_reviews, criteria))
         if all_complete and submission.status == 'in_review':
             submission.status = 'review_complete'
             submission.save(update_fields=['status'])
@@ -247,15 +254,18 @@ class PeerReviewService:
             submission__course_project=submission.course_project,
         )
         received = submission.reviews.all()
-        if assigned.filter(is_complete=False).exists():
-            return False
-        if not received.exists() or received.filter(is_complete=False).exists():
-            return False
         project = submission.course_project
+        criteria = _criteria(submission)
+        assigned = settle_completion(assigned, criteria)
+        received = settle_completion(received, criteria)
+        if not all(r.is_complete for r in assigned):
+            return False
+        if not received or not all(r.is_complete for r in received):
+            return False
         if not project or not project.is_self_paced:
             return True
         required = project.peer_review_count or course.peer_review_count
-        return assigned.count() >= required and received.count() >= required
+        return len(assigned) >= required and len(received) >= required
 
     @staticmethod
     def issue_certificates_for_course(course):

@@ -1,0 +1,20 @@
+{% load github_links %}
+{% if submission %}
+{% commit_url submission as commit_link %}
+<div class="cb-form-help" data-testid="commit-status">
+  <p>
+    {% if submission.commit_id %}<span>Commit recorded: {% if commit_link %}<a href="{{ commit_link }}" target="_blank" rel="noopener noreferrer" class="text-accent underline underline-offset-2 hover:text-foreground" data-testid="commit-recorded">{{ submission.commit_id|slice:":7" }}</a>{% else %}<span data-testid="commit-recorded">{{ submission.commit_id|slice:":7" }}</span>{% endif %}</span>{% else %}<span>No commit recorded yet.</span>{% endif %}
+    {% if not readonly %}<button type="submit" name="action" value="update_commit" formnovalidate class="text-accent underline underline-offset-2 hover:text-foreground" style="font:inherit;background:none;border:0;cursor:pointer;padding:0.75rem 0.5rem;margin:-0.75rem 0" data-testid="update-commit-button">update</button>{% endif %}
+  </p>
+  {% if commit_notice %}
+  <p role="status" data-testid="commit-notice">{{ commit_notice }}</p>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var block = document.querySelector('[data-testid="commit-status"]');
+  var field = document.querySelector('.aisl-project-form [data-project-field="github_link"]');
+  if (block && field) { field.appendChild(block); }
+})();
+</script>
+{% endif %}

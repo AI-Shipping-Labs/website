@@ -1,0 +1,30 @@
+{% load course_links %}
+{% if reader_shell %}
+{% include "content/reader/_mobile_progress_bar.html" %}
+<nav class="mb-2 flex min-h-[44px] items-center gap-2 overflow-hidden text-sm text-muted-foreground lg:mb-4 lg:h-7 lg:min-h-0" aria-label="Breadcrumb" data-reader-breadcrumb>
+  <a href="{% course_entry_url course %}" class="flex-shrink-0 py-3 transition-colors hover:text-foreground lg:py-0">Home</a>
+  <i data-lucide="chevron-right" class="hidden h-3 w-3 flex-shrink-0 sm:block" aria-hidden="true"></i>
+  <a href="{{ module.get_absolute_url }}" class="hidden min-w-0 truncate transition-colors hover:text-foreground sm:inline">{{ module.title }}</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0" aria-hidden="true"></i>
+  <span class="min-w-0 truncate" aria-current="page">Evaluation criteria</span>
+</nav>
+{% else %}
+<a href="{% course_entry_url course section='projects' %}" class="mb-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+  <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+  <span class="truncate">Back to {{ course.title }}</span>
+</a>
+{% endif %}
+
+<div class="mb-4 lg:mb-8">
+  <h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="criteria-page-title">Evaluation criteria</h1>
+</div>
+
+<div class="prose reader-prose mb-12" data-testid="criteria-page-body">
+  {% if criteria_intro_html %}<div data-testid="criteria-page-intro">{{ criteria_intro_html|safe }}</div>{% endif %}
+  <p data-testid="criteria-page-totals">{{ project_criteria.totals_label|capfirst }}.</p>
+  {% include "content/peer_review/_criteria.html" %}
+  {% if criteria_outro_html %}<div data-testid="criteria-page-outro">{{ criteria_outro_html|safe }}</div>{% endif %}
+  {% if criteria_cta %}
+  <p data-testid="criteria-page-cta">Ready to submit? <a href="{{ criteria_cta.url }}">Open {{ criteria_cta.title }}</a>{% if criteria_cta.due %}, due {{ criteria_cta.due }}{% endif %}</p>
+  {% endif %}
+</div>

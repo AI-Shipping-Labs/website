@@ -8,7 +8,9 @@ removal, certificate name to the curriculum enrollment, legacy round-trip).
 """
 
 import json
+import re
 from datetime import timedelta
+from unittest.mock import patch
 
 from community_base.curriculum.models import Enrollment as CurriculumEnrollment
 from django.contrib.auth import get_user_model
@@ -19,6 +21,7 @@ from django.utils import timezone
 from content.models import Cohort, Course, ProjectSubmission
 from content.models.cohort import CohortEnrollment
 from content.models.peer_review import CourseProject
+from content.services.github_commit import GitHubUnavailable, RepositoryNotFound
 from content.services.project_form_adapter import (
     LEARNING_IN_PUBLIC_CAP,
     REMOVAL_UNAVAILABLE_MESSAGE,
@@ -29,6 +32,9 @@ User = get_user_model()
 
 GITHUB_URL = 'https://github.com/learner/project'
 COMMIT = 'a1b2c3d'
+FULL_SHA = 'a1b2c3d' + '0' * 33
+NEWER_SHA = 'b2c3d4e' + '0' * 33
+RESOLVER = 'content.services.project_form_adapter.resolve_commit'
 CERT_NAME = 'Learner A. Display'
 
 
@@ -66,6 +72,9 @@ class _SharedFormCourseTest(TestCase):
 
     def setUp(self):
         self.client.force_login(self.user)
+        patcher = patch(RESOLVER, return_value=FULL_SHA)
+        self.resolver = patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class DatedAttemptSharedFormTest(_SharedFormCourseTest):
@@ -79,19 +88,18 @@ class DatedAttemptSharedFormTest(_SharedFormCourseTest):
         content = response.content.decode()
         # The shared contract's labels and help, in the shared order.
         self.assertIn('GitHub link to the project', content)
-        self.assertIn('Commit ID', content)
+        self.assertNotIn('Commit ID', content)
         self.assertIn('Learning in public links', content)
         self.assertIn('Time spent on project (hours)', content)
         self.assertIn('Certificate name', content)
-        self.assertIn('Where do I find the commit ID?', content)
+        self.assertNotIn('Where do I find the commit ID?', content)
         # Commit id is on and required for AISL attempts; the link cap is the
         # package default. FAQ contribution is a DataTalksClub-only field.
         self.assertIn('name="github_link"', content)
-        self.assertIn('name="commit_id"', content)
+        self.assertNotIn('name="commit_id"', content)
         self.assertIn('Add up to 14 public progress links', content)
         self.assertNotIn('name="faq_contribution_url"', content)
-        # The AISL-only legacy description rides along as the extra field.
-        self.assertIn('name="description"', content)
+        self.assertNotIn('description', response.context['project_form'].fields)
         # Status line with save-now semantics.
         self.assertIn('Status: Not saved yet', content)
         self.assertIn('You can save your project now', content)
@@ -108,17 +116,16 @@ class DatedAttemptSharedFormTest(_SharedFormCourseTest):
             'learning_in_public_links': _links(2),
             'time_spent': '6.5',
             'certificate_name': CERT_NAME,
-            'description': 'Built with FastAPI.',
         })
-        self.assertContains(response, 'Your project has been submitted')
+        self.assertContains(response, 'Your project is saved')
         submission = ProjectSubmission.objects.get(
             user=self.user, course_project=self.attempt,
         )
         self.assertEqual(submission.project_url, GITHUB_URL)
-        self.assertEqual(submission.commit_id, COMMIT)
+        self.assertEqual(submission.commit_id, FULL_SHA)
         self.assertEqual(submission.learning_in_public_links, _links(2))
         self.assertEqual(submission.time_spent, 6.5)
-        self.assertEqual(submission.description, 'Built with FastAPI.')
+        self.assertEqual(submission.description, '')
         self.assertEqual(submission.cohort, self.cohort)
         # Certificate name goes to the curriculum enrollment, not the project.
         enrollment = CurriculumEnrollment.objects.get(
@@ -131,17 +138,17 @@ class DatedAttemptSharedFormTest(_SharedFormCourseTest):
 
     def test_invalid_post_re_renders_entries_without_writes(self):
         before = CurriculumEnrollment.objects.count()
+        self.resolver.side_effect = RepositoryNotFound(
+            'Make sure the repository exists and is public.',
+        )
         response = self.client.post(self.submit_url, {
             'github_link': GITHUB_URL,
-            'commit_id': 'not-hex',
             'time_spent': '3',
-            'description': 'A draft.',
         })
         self.assertEqual(response.status_code, 400)
         content = response.content.decode()
-        self.assertIn('7 to 40 hexadecimal characters', content)
-        self.assertIn('not-hex', content)  # raw entry echoed back
-        self.assertIn('A draft.', content)
+        self.assertIn('Make sure the repository exists and is public.', content)
+        self.assertIn(GITHUB_URL, content)
         self.assertFalse(
             ProjectSubmission.objects.filter(
                 user=self.user, course_project=self.attempt,
@@ -198,9 +205,9 @@ class DatedAttemptSharedFormTest(_SharedFormCourseTest):
         )
         self.assertFalse(ProjectSubmission.objects.filter(user=self.user).exists())
 
-    def test_forged_post_after_deadline_changes_nothing(self):
-        self.attempt.submission_due_at = timezone.now() - timedelta(minutes=1)
-        self.attempt.save(update_fields=['submission_due_at'])
+    def test_forged_post_after_submissions_close_changes_nothing(self):
+        self.attempt.state = 'PR'
+        self.attempt.save(update_fields=['state'])
         response = self.client.post(self.submit_url, {
             'github_link': GITHUB_URL,
             'commit_id': COMMIT,
@@ -254,17 +261,16 @@ class DatedAttemptSharedFormTest(_SharedFormCourseTest):
         self.assertContains(
             response, 'No commit ID was collected for this submission.',
         )
-        self.assertIn('Legacy description.', content)
+        self.assertNotIn('description', response.context['project_form'].fields)
         response = self.client.post(self.submit_url, {
             'github_link': GITHUB_URL,
             'commit_id': COMMIT,
             'time_spent': '4',
-            'description': 'Legacy description.',
         })
-        self.assertContains(response, 'Your project has been submitted')
+        self.assertContains(response, 'Your project is saved')
         submission.refresh_from_db()
-        self.assertEqual(submission.commit_id, COMMIT)
         self.assertEqual(submission.time_spent, 4)
+        self.assertEqual(submission.commit_id, FULL_SHA)
         self.assertEqual(submission.description, 'Legacy description.')
 
     def test_certificate_name_field_hidden_without_bridgeable_cohort(self):
@@ -293,9 +299,8 @@ class DatedAttemptDashboardCommitTest(_SharedFormCourseTest):
         )
         response = self.client.get(self.dashboard_url)
         self.assertTemplateUsed(response, 'content/peer_review/dashboard.html')
-        self.assertContains(response, 'Commit ID')
-        self.assertContains(response, 'data-testid="peer-submission-commit-id"')
-        self.assertContains(response, COMMIT)
+        self.assertContains(response, 'data-testid="peer-submission-commit"')
+        self.assertContains(response, f'title="Commit {COMMIT}"')
 
     def test_dashboard_shows_historical_commit_id_as_missing(self):
         ProjectSubmission.objects.create(
@@ -303,9 +308,8 @@ class DatedAttemptDashboardCommitTest(_SharedFormCourseTest):
             cohort=self.cohort, project_url=GITHUB_URL,
         )
         response = self.client.get(self.dashboard_url)
-        self.assertContains(response, 'data-testid="peer-submission-commit-missing"')
-        self.assertContains(response, 'Not collected')
-        self.assertNotContains(response, 'data-testid="peer-submission-commit-id"')
+        self.assertContains(response, 'data-testid="peer-submission-github-link"')
+        self.assertNotContains(response, 'data-testid="peer-submission-commit"')
 
 
 
@@ -327,7 +331,7 @@ class UndatedSubmitSharedFormTest(_SharedFormCourseTest):
         self.assertTemplateUsed(response, 'content/peer_review/submit.html')
         content = response.content.decode()
         self.assertIn('GitHub link to the project', content)
-        self.assertIn('name="commit_id"', content)
+        self.assertNotIn('name="commit_id"', content)
         self.assertIn('name="learning_in_public_links"', content)
         self.assertIn('Time spent on project (hours)', content)
         self.assertIn('name="certificate_name"', content)
@@ -342,12 +346,12 @@ class UndatedSubmitSharedFormTest(_SharedFormCourseTest):
             'time_spent': '2',
             'certificate_name': CERT_NAME,
         })
-        self.assertContains(response, 'Your project has been submitted')
+        self.assertContains(response, 'Your project is saved')
         submission = ProjectSubmission.objects.get(
             user=self.user, course=self.course, course_project__isnull=True,
         )
         self.assertIsNone(submission.cohort_id)
-        self.assertEqual(submission.commit_id, COMMIT)
+        self.assertEqual(submission.commit_id, FULL_SHA)
         enrollment = CurriculumEnrollment.objects.get(
             user=self.user,
             cohort=self.cohort.curriculum_cohort,
@@ -365,6 +369,10 @@ class UndatedSubmitSharedFormTest(_SharedFormCourseTest):
             'commit_id': 'ffffff1',
         })
         self.assertContains(response, 'The submission form is closed.')
+        self.assertNotContains(response, 'You can still see your submission and peer reviews')
+        self.assertContains(
+            response, '.aisl-project-form [data-project-closed] { display: none; }',
+        )
         submission.refresh_from_db()
         self.assertEqual(submission.project_url, GITHUB_URL)
 
@@ -416,6 +424,7 @@ class ApiSubmitSharedFieldsTest(_SharedFormCourseTest):
         self.assertIn('id', data)
         self.assertIn('project_url', data)
         self.assertIn('description', data)
+        self.assertEqual(submission.description, '')
 
     def test_new_fields_accepted_and_persisted(self):
         self._post({
@@ -485,3 +494,247 @@ class SubmissionTargetTest(_SharedFormCourseTest):
 
     def test_undated_slot_has_no_deadline(self):
         self.assertIsNone(CourseProjectSubmissionTarget(None).submission_due_date)
+
+
+def _certificate_name_value(response):
+    """The ``value`` attribute of the rendered certificate_name input."""
+    form = response.context['project_form']
+    html = str(form['certificate_name'])
+    match = re.search(r'value="([^"]*)"', html)
+    return match.group(1) if match else ''
+
+
+class CertificateNamePrefillTest(TestCase):
+    """The certificate name starts as the account's real name."""
+
+    submit_url = '/courses/prefill-course/projects/first/submit'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.named = User.objects.create_user(
+            email='ada.prefill@example.com', password='pw',
+            email_verified=True, first_name='Ada', last_name='Learner',
+        )
+        cls.unnamed = User.objects.create_user(
+            email='nameless.prefill@example.com', password='pw',
+            email_verified=True,
+        )
+        cls.course = Course.objects.create(
+            title='Prefill Course', slug='prefill-course',
+            status='published', peer_review_enabled=True, peer_review_count=2,
+        )
+        today = timezone.localdate()
+        cls.cohort = Cohort.objects.create(
+            course=cls.course, name='Prefill Cohort', external_key='prefill',
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=90),
+        )
+        for user in (cls.named, cls.unnamed):
+            CohortEnrollment.objects.create(cohort=cls.cohort, user=user)
+        now = timezone.now()
+        CourseProject.objects.create(
+            course=cls.course, cohort=cls.cohort, slug='first',
+            title='First attempt',
+            submission_due_at=now + timedelta(days=1),
+            review_due_at=now + timedelta(days=8),
+        )
+
+    def setUp(self):
+        patcher = patch(RESOLVER, return_value=FULL_SHA)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _curriculum_enrollment(self, user):
+        return CurriculumEnrollment.objects.filter(
+            user=user, cohort=self.cohort.curriculum_cohort,
+        ).first()
+
+    def test_no_enrollment_row_prefills_account_full_name(self):
+        self.client.force_login(self.named)
+        self.assertIsNone(self._curriculum_enrollment(self.named))
+        response = self.client.get(self.submit_url)
+        self.assertEqual(_certificate_name_value(response), 'Ada Learner')
+
+    def test_saved_certificate_name_wins_over_account_name(self):
+        from content.services.coursework_bridge import ensure_curriculum_enrollment
+
+        enrollment = ensure_curriculum_enrollment(self.named, self.cohort)
+        enrollment.certificate_name = CERT_NAME
+        enrollment.save(update_fields=['certificate_name'])
+        self.client.force_login(self.named)
+        response = self.client.get(self.submit_url)
+        self.assertEqual(_certificate_name_value(response), CERT_NAME)
+
+    def test_user_without_names_gets_empty_field_not_email_handle(self):
+        self.client.force_login(self.unnamed)
+        response = self.client.get(self.submit_url)
+        self.assertEqual(_certificate_name_value(response), '')
+        self.assertNotIn(
+            'nameless.prefill', str(response.context['project_form']['certificate_name']),
+        )
+
+    def test_post_with_edited_name_saves_edit_not_account_name(self):
+        self.client.force_login(self.named)
+        response = self.client.post(self.submit_url, {
+            'github_link': GITHUB_URL,
+            'commit_id': COMMIT,
+            'time_spent': '2',
+            'certificate_name': 'Ada L. Edited',
+        })
+        self.assertContains(response, 'Your project is saved')
+        enrollment = self._curriculum_enrollment(self.named)
+        self.assertEqual(enrollment.certificate_name, 'Ada L. Edited')
+
+
+class CommitPinningTest(_SharedFormCourseTest):
+    """The commit is resolved from the GitHub link, pinned, and refreshed on demand."""
+
+    submit_url = '/courses/shared-form/projects/first/submit'
+
+    def _save(self, **extra):
+        payload = {'github_link': GITHUB_URL, 'time_spent': '2'}
+        payload.update(extra)
+        return self.client.post(self.submit_url, payload)
+
+    def _submission(self):
+        return ProjectSubmission.objects.get(
+            user=self.user, course_project=self.attempt,
+        )
+
+    def test_form_has_no_commit_input_and_no_description_input(self):
+        response = self.client.get(self.submit_url)
+        fields = response.context['project_form'].fields
+        self.assertNotIn('commit_id', fields)
+        self.assertNotIn('description', fields)
+        self.assertNotContains(response, 'Where do I find the commit ID?')
+
+    def test_commit_line_is_one_line_with_update_control(self):
+        self._save()
+        response = self.client.get(self.submit_url)
+        self.assertContains(response, f'Commit recorded: <a href="https://github.com/learner/project/commit/{FULL_SHA}" target="_blank" rel="noopener noreferrer"')
+        self.assertContains(response, 'data-testid="commit-recorded">a1b2c3d</a>')
+        self.assertContains(response, 'data-testid="update-commit-button">update</button>')
+        self.assertContains(response, 'name="action" value="update_commit"')
+        self.assertNotContains(response, 'Pushed more changes')
+        self.assertNotContains(response, 'Only the commit changes')
+
+    def test_commit_line_hidden_without_submission(self):
+        response = self.client.get(self.submit_url)
+        self.assertNotContains(response, 'data-testid="commit-status"')
+        self.assertNotContains(response, 'update-commit-button')
+
+    def test_first_save_stores_resolved_commit(self):
+        self._save()
+        self.resolver.assert_called_once_with(GITHUB_URL)
+        self.assertEqual(self._submission().commit_id, FULL_SHA)
+
+    def test_plain_resave_keeps_pinned_commit(self):
+        self._save()
+        self.resolver.return_value = NEWER_SHA
+        self._save(time_spent='5')
+        submission = self._submission()
+        self.assertEqual(submission.time_spent, 5)
+        self.assertEqual(submission.commit_id, FULL_SHA)
+        self.assertEqual(self.resolver.call_count, 1)
+
+    def test_changed_repository_link_re_resolves(self):
+        self._save()
+        self.resolver.return_value = NEWER_SHA
+        self._save(github_link='https://github.com/learner/other')
+        self.assertEqual(self._submission().commit_id, NEWER_SHA)
+
+    def test_not_public_repository_shows_field_error_and_saves_nothing(self):
+        self.resolver.side_effect = RepositoryNotFound(
+            'Make sure the repository exists and is public.',
+        )
+        response = self._save()
+        self.assertEqual(response.status_code, 400)
+        form = response.context['project_form']
+        self.assertEqual(
+            form.errors['github_link'],
+            ['Make sure the repository exists and is public.'],
+        )
+        self.assertFalse(ProjectSubmission.objects.filter(user=self.user).exists())
+
+    def test_outage_on_first_save_still_saves_with_notice(self):
+        self.resolver.side_effect = GitHubUnavailable('GitHub is unreachable.')
+        response = self._save()
+        self.assertContains(response, 'GitHub is unreachable.')
+        self.assertEqual(self._submission().commit_id, '')
+        self.assertIn('GitHub is unreachable.', response.context['commit_notice'])
+
+    def _update(self, **extra):
+        payload = {'action': 'update_commit', 'github_link': GITHUB_URL, 'time_spent': '9'}
+        payload.update(extra)
+        return self.client.post(self.submit_url, payload)
+
+    def test_update_with_same_link_refreshes_commit_only(self):
+        self._save()
+        self.resolver.return_value = NEWER_SHA
+        response = self._update()
+        submission = self._submission()
+        self.assertEqual(submission.commit_id, NEWER_SHA)
+        self.assertEqual(submission.project_url, GITHUB_URL)
+        self.assertEqual(submission.time_spent, 2)
+        self.assertEqual(response.context['commit_notice'], '')
+        self.assertNotContains(response, 'Commit updated')
+        self.assertNotContains(response, 'data-testid="commit-notice"')
+        self.assertContains(response, 'data-testid="commit-recorded">b2c3d4e</a>')
+        self.assertContains(response, 'value="9"')
+
+    def test_update_with_typed_new_link_stores_link_and_commit(self):
+        self._save()
+        self.resolver.return_value = NEWER_SHA
+        new_link = 'https://github.com/learner/other/tree/main'
+        response = self._update(github_link=new_link)
+        self.assertContains(response, f'data-testid="commit-recorded">{NEWER_SHA[:7]}</a>')
+        self.resolver.assert_called_with(new_link)
+        submission = self._submission()
+        self.assertEqual(submission.project_url, new_link)
+        self.assertEqual(submission.commit_id, NEWER_SHA)
+
+    def test_update_with_unresolvable_link_stores_nothing_and_keeps_input(self):
+        self._save()
+        self.resolver.side_effect = RepositoryNotFound(
+            'Make sure the repository exists and is public.',
+        )
+        typed = 'https://github.com/learner/missing'
+        response = self._update(github_link=typed)
+        self.assertEqual(response.status_code, 400)
+        submission = self._submission()
+        self.assertEqual(submission.project_url, GITHUB_URL)
+        self.assertEqual(submission.commit_id, FULL_SHA)
+        self.assertEqual(
+            response.context['project_form'].errors['github_link'],
+            ['Make sure the repository exists and is public.'],
+        )
+        self.assertContains(response, f'value="{typed}"', status_code=400)
+
+    def test_update_with_github_outage_stores_nothing(self):
+        self._save()
+        self.resolver.side_effect = GitHubUnavailable('GitHub is unreachable.')
+        response = self._update(github_link='https://github.com/learner/other')
+        self.assertEqual(response.status_code, 400)
+        submission = self._submission()
+        self.assertEqual(submission.project_url, GITHUB_URL)
+        self.assertEqual(submission.commit_id, FULL_SHA)
+        self.assertContains(response, 'GitHub is unreachable.', status_code=400)
+
+    def test_update_with_empty_or_invalid_link_is_a_field_error(self):
+        self._save()
+        for typed in ('', 'not a url'):
+            with self.subTest(typed=typed):
+                response = self._update(github_link=typed)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('github_link', response.context['project_form'].errors)
+                self.assertEqual(self._submission().commit_id, FULL_SHA)
+                self.assertEqual(self._submission().project_url, GITHUB_URL)
+
+    def test_update_commit_rejected_once_submissions_close(self):
+        self._save()
+        self.attempt.state = 'PR'
+        self.attempt.save(update_fields=['state'])
+        self.resolver.return_value = NEWER_SHA
+        response = self._update()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._submission().commit_id, FULL_SHA)

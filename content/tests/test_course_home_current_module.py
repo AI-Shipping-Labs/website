@@ -281,6 +281,80 @@ class CurrentModuleHomeTests(CurrentModuleFixture):
         self.assertEqual(response.context['current_module']['deliverables'], [])
         self.assertContains(response, 'Retrieval homework</h4>', count=1)
 
+    def _add_project(self, slug='cap-1'):
+        due = timezone.now() + datetime.timedelta(days=21)
+        return CourseProject.objects.create(
+            course=self.course, cohort=self.cohort, module=self.second, slug=slug,
+            title='Capstone ' + slug, submission_due_at=due,
+            review_due_at=due + datetime.timedelta(days=7),
+        )
+
+    def _footer_links(self, response):
+        html = response.content.decode()
+        return (
+            'data-testid="course-home-see-all-homework"' in html,
+            'data-testid="course-home-see-all-projects"' in html,
+        )
+
+    def test_footer_links_homework_only_deliverables_to_homework_tab(self):
+        self._due_in(self.homework, 40)
+        self._due_in(self.earlier_homework, 20)
+        response = self._home()
+        kinds = {r['kind'] for r in response.context['current_module']['deliverables']}
+        self.assertEqual(kinds, {'Homework'})
+        self.assertEqual(self._footer_links(response), (True, False))
+        self.assertContains(
+            response, f'/courses/{self.course.slug}/home/homework?cohort=4',
+        )
+
+    def test_footer_links_project_only_deliverables_to_projects_tab(self):
+        Homework.objects.filter(pk=self.homework.pk).delete()
+        self._add_project()
+        response = self._home()
+        kinds = {r['kind'] for r in response.context['current_module']['deliverables']}
+        self.assertEqual(kinds, {'Project'})
+        self.assertEqual(self._footer_links(response), (False, True))
+        self.assertContains(
+            response, f'href="/courses/{self.course.slug}/home/projects?cohort=4"',
+        )
+
+    def test_footer_links_both_for_mixed_deliverables(self):
+        self._due_in(self.homework, 40)
+        self._due_in(self.earlier_homework, 20)
+        self._add_project()
+        response = self._home()
+        kinds = {r['kind'] for r in response.context['current_module']['deliverables']}
+        self.assertEqual(kinds, {'Homework', 'Project'})
+        self.assertEqual(self._footer_links(response), (True, True))
+
+    def test_card_keeps_attempt_due_today_alongside_the_later_attempt(self):
+        self._due_in(self.homework, 40)
+        self._due_in(self.earlier_homework, 20)
+        now = timezone.now()
+        for slug, title, due in (
+            ('attempt-1', 'Capstone Project Attempt 1', now + datetime.timedelta(hours=1)),
+            ('attempt-2', 'Capstone Project Attempt 2', now + datetime.timedelta(days=21)),
+        ):
+            CourseProject.objects.create(
+                course=self.course, cohort=self.cohort, module=self.second, slug=slug,
+                title=title, submission_due_at=due,
+                review_due_at=due + datetime.timedelta(days=7),
+            )
+        response = self._home()
+        self.assertIn(
+            'Capstone Project Attempt 1',
+            [row['title'] for row in response.context['due_next']['rows']],
+        )
+        projects = [
+            (row['title'], row['status'], row['action'])
+            for row in response.context['current_module']['deliverables']
+            if row['kind'] == 'Project'
+        ]
+        self.assertEqual(projects, [
+            ('Capstone Project Attempt 1', 'Open', 'Submit project'),
+            ('Capstone Project Attempt 2', 'Open', 'Submit project'),
+        ])
+
     def test_progress_counts_units_and_each_homework_question_but_not_optional_or_sessions(self):
         self._complete(self.lesson_a, self.optional_lesson, self.session_two_unit)
         progress = module_progress(self.second, self.user, self.cohort, self._completed_ids())

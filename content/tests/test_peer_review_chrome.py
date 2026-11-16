@@ -25,6 +25,7 @@ if the header partial stops being included for any reason.
 """
 
 import uuid
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -115,6 +116,7 @@ def _assert_header_chrome(test, response, url):
     )
 
 
+@patch('content.services.project_form_adapter.resolve_commit', new=lambda link: 'a' * 40)
 class PeerReviewSubmitChromeTest(TestCase):
     """``/courses/<slug>/submit`` must render the standard header + footer."""
 
@@ -148,7 +150,7 @@ class PeerReviewSubmitChromeTest(TestCase):
             'description': 'desc',
         })
         _assert_header_chrome(self, response, url)
-        self.assertContains(response, 'Your project has been submitted')
+        self.assertContains(response, "Your project is saved. You can update it until the deadline.")
 
 
 class PeerReviewDashboardChromeTest(TestCase):

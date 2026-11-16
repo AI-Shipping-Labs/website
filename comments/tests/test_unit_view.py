@@ -126,3 +126,14 @@ class CourseUnitDetailContentIdTest(TestCase):
         self.assertContains(response, 'Post question')
         self.assertNotContains(response, '/accounts/signup/?next=')
         self.assertNotContains(response, 'Already have an account? Sign in')
+
+    def test_post_question_button_server_rendered_disabled(self):
+        """Post question is disabled on first paint until JS sees text."""
+        self.client.login(email='test@test.com', password='pass')
+        response = self.client.get('/courses/test-course/module-1/unit-1')
+        self.assertRegex(
+            response.content.decode(),
+            r'<button\s+type="button"\s+disabled\s+id="qa-post-btn"',
+        )
+        self.assertContains(response, '<button disabled class="')
+        self.assertContains(response, 'Post reply')

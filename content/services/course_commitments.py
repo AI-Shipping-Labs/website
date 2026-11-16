@@ -19,7 +19,8 @@ from content.models import Cohort, CohortEnrollment, CourseAccess
 from content.models.cohort import COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.homework import Homework, Submission
-from content.models.peer_review import PeerReview, ProjectSubmission
+from content.models.peer_review import PeerReview, ProjectState, ProjectSubmission
+from content.services.attempt_reviews import next_pending_url
 from content.services.course_home import (
     _all_module_units,
     _can_open_unit,
@@ -34,6 +35,8 @@ from content.services.course_units import (
     decide_course_unit_drip_lock,
     preferred_dated_enrollment_cohorts,
 )
+from content.services.learner_attempt_phases import learner_attempt_phases, phase_row_fields
+from content.services.project_criteria import settle_completion
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.display_time import (
@@ -49,6 +52,10 @@ def _short_when_label(when, timezone_name):
         timezone_name = DEFAULT_EVENT_DISPLAY_TIMEZONE
     local = when.astimezone(ZoneInfo(timezone_name))
     return f'{local:%a %b} {local.day}, {local:%H:%M}'
+
+
+short_when_label = _short_when_label
+PEER_REVIEW_ROW_TONES = {'Continue reviews': 'warning', 'View reviews': 'success'}
 
 
 def _session_position_label(title, position):
@@ -392,47 +399,42 @@ def _project_rows(course, user, cohort, timezone_name, now):
         )
     }
     reviews_by_project = defaultdict(list)
+    criteria_by_project = {project.pk: project.evaluation_criteria for project in projects}
     for review in PeerReview.objects.filter(
         reviewer=user, submission__course_project__in=projects,
-    ).select_related('submission'):
+    ).select_related('submission').order_by('pk'):
+        settle_completion(
+            [review], criteria_by_project.get(review.submission.course_project_id),
+        )
         reviews_by_project[review.submission.course_project_id].append(review)
+    phases = learner_attempt_phases(
+        user, course, projects, now,
+        submissions=submissions, assigned=reviews_by_project,
+    )
     rows = []
-    for project in projects:
+    for order, project in enumerate(projects):
         submission = submissions.get(project.pk)
-        submit_url = f'/courses/{course.slug}/projects/{project.slug}/submit'
         reviews_url = f'/courses/{course.slug}/projects/{project.slug}/reviews'
-        if submission:
-            row = _row(
-                'Project', project.title, when=project.submission_due_at,
-                status='Submitted', url=submit_url, action='View project',
-                detail=_project_schedule_detail(project), complete=True,
-                timezone_name=timezone_name,
-                project_group_id=project.module.parent_id or project.module_id
-                if project.module_id else project.title,
-                project_group_title=(
-                    project.module.parent.title if project.module_id and project.module.parent_id
-                    else project.module.title if project.module_id else project.title
-                ),
-            )
-        else:
-            open_for_submission = project.is_submission_open(now)
-            row = _row(
-                'Project', project.title, when=project.submission_due_at,
-                status='Not submitted' if open_for_submission else 'Closed',
-                url=submit_url if open_for_submission else '',
-                action='Submit project' if open_for_submission else '',
-                detail=_project_schedule_detail(project),
-                closed=not open_for_submission, timezone_name=timezone_name,
-                project_group_id=project.module.parent_id or project.module_id
-                if project.module_id else project.title,
-                project_group_title=(
-                    project.module.parent.title if project.module_id and project.module.parent_id
-                    else project.module.title if project.module_id else project.title
-                ),
-            )
+        fields = phase_row_fields(course, project, phases[project.pk])
+        row = _row(
+            'Project', project.title, when=fields['when'],
+            status=fields['status'], url=fields['url'], action=fields['action'],
+            detail=_project_schedule_detail(project),
+            complete=submission is not None,
+            closed=submission is None and not project.is_submission_open(now),
+            timezone_name=timezone_name,
+            project_group_id=project.module.parent_id or project.module_id
+            if project.module_id else project.title,
+            project_group_title=(
+                project.module.parent.title if project.module_id and project.module.parent_id
+                else project.module.title if project.module_id else project.title
+            ),
+        )
+        row['status_tone'] = fields['status_tone']
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
         row['module_title'] = row['project_group_title'] if project.module_id else ''
         row['project_id'] = project.pk
+        row['project_order'] = order
         row['show_open_review_window'] = bool(
             submission and project.is_self_paced and course.peer_review_enabled
             and (project.peer_review_count or course.peer_review_count)
@@ -446,7 +448,9 @@ def _project_rows(course, user, cohort, timezone_name, now):
         unfinished_assigned = any(not review.is_complete for review in reviews)
         target = project.peer_review_count or course.peer_review_count
         remaining = max(target - completed, 0)
-        review_open = project.is_review_open(now)
+        review_open = project.is_review_open(now) or (
+            project.state == ProjectState.COLLECTING_SUBMISSIONS
+        )
         if not reviews and remaining:
             status = 'Waiting for reviews' if review_open else 'Closed'
             action = ''
@@ -458,9 +462,14 @@ def _project_rows(course, user, cohort, timezone_name, now):
             status, action = 'Closed', ''
         else:
             status, action = 'Completed', 'View reviews'
+        review_url = ''
+        if action == 'Continue reviews':
+            review_url = next_pending_url(course, project, reviews)
+        elif action:
+            review_url = reviews_url
         row = _row(
             'Peer reviews', project.title, when=project.review_due_at,
-            status=status, url=reviews_url if action else '', action=action,
+            status=status, url=review_url, action=action,
             detail=_review_schedule_detail(project, completed, target),
             complete=remaining == 0, closed=remaining > 0 and not review_open,
             timezone_name=timezone_name,
@@ -472,6 +481,9 @@ def _project_rows(course, user, cohort, timezone_name, now):
             ),
         )
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
+        row['project_id'] = project.pk
+        row['review_pending'] = action == 'Continue reviews'
+        row['status_tone'] = PEER_REVIEW_ROW_TONES.get(action, 'muted')
         rows.append(row)
     return rows
 

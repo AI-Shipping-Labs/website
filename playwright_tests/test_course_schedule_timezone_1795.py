@@ -185,14 +185,14 @@ def _expect_attempt_pages_in(page, django_server, due, zone, review_url):
         wait_until='domcontentloaded',
     )
     expect(page.get_by_test_id('peer-review-meta')).to_have_text(
-        f'Attempt 4 · Reviews due {label} {zone}', use_inner_text=True,
+        f'Reviews due {label} {zone}', use_inner_text=True,
     )
     expect(page.locator('[data-timezone-notice-text]')).to_have_text(
         note, use_inner_text=True,
     )
     page.goto(f'{django_server}{review_url}', wait_until='domcontentloaded')
     expect(page.get_by_test_id('peer-review-meta')).to_have_text(
-        f'Attempt 4 · Due {label} {zone}', use_inner_text=True,
+        f'Attempt 4 · Reviews due {label} {zone}', use_inner_text=True,
     )
     expect(page.locator('[data-timezone-notice-text]')).to_have_text(
         note, use_inner_text=True,
@@ -273,14 +273,20 @@ def test_failed_backfill_still_localizes_attempt_header_consistently(
             wait_until='domcontentloaded',
         )
         meta = page.get_by_test_id('peer-review-meta')
+        label = _local_label(due, 'America/New_York')
         expect(meta).to_contain_text(
-            f'Submit by {_local_label(due, "America/New_York")} America/New_York',
-            use_inner_text=True,
+            f'Submit by {label} America/New_York', use_inner_text=True,
+        )
+        expect(meta).to_contain_text(
+            f'Peer review until {label}', use_inner_text=True,
         )
         expect(meta).not_to_contain_text('Europe/Berlin', use_inner_text=True)
-        expect(meta.locator('time')).to_have_attribute(
-            'datetime', due.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        )
+        instant = due.strftime('%Y-%m-%dT%H:%M:%SZ')
+        times = meta.locator('time[data-schedule-instant]')
+        expect(times).to_have_count(2)
+        expect(times.nth(0)).to_have_attribute('datetime', instant)
+        expect(times.nth(1)).to_have_attribute('datetime', instant)
+        expect(times).to_have_text([label, label])
         _expect_attempt_pages_in(page, django_server, due, 'America/New_York', review_url)
     finally:
         context.close()

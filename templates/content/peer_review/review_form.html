@@ -1,9 +1,26 @@
 {% extends "base.html" %}
-{% load accounts_extras date_formatting schedule_tags %}
+{% load static accounts_extras course_links date_formatting github_links schedule_tags %}
 
-{% block title %}Review submission - {{ course.title }} | {{ site_name }}{% endblock %}
+{% block title %}{% if course_project %}Evaluate project{% else %}Review submission{% endif %} - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
+{% if course_project %}
+{% include "includes/header.html" with studio_obj=course %}
+<main class="min-h-screen">
+  {% if reader_shell %}
+  {% course_entry_url course as reader_course_url %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/peer_review/_review_form_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
+  {% else %}
+  {% include "content/reader/_styles.html" %}
+  <section class="pt-16 pb-12 sm:pb-16">
+    <div class="mx-auto max-w-3xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8">
+      {% include "content/peer_review/_review_form_content.html" %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% include "includes/footer.html" %}
+{% else %}
 <main class="min-h-screen">
   {% include "includes/header.html" with studio_obj=course %}
 
@@ -15,20 +32,29 @@
     <span class="truncate">Back to peer reviews</span>
   </a>
 
-  <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Peer review</h1>
+  <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{% if course_project %}Evaluate project{% else %}Peer review{% endif %}</h1>
   <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if self_paced_project %}{{ course_project.title }} · Reviews remain open until completed{% elif course_project %}{{ course_project.title }} · Due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% else %}{{ course.title }}{% endif %}</p>
   {% if course_project and not self_paced_project %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}
 
+  {% if phase.reviews_assigned %}
+  <p class="mt-6 rounded-md border px-4 py-3 text-sm text-foreground {% if phase.certificate_blocked %}border-yellow-500/30 bg-yellow-500/10{% else %}border-green-500/30 bg-green-500/10{% endif %}" data-testid="peer-review-certificate-requirement">Complete all {{ phase.reviews_assigned }} reviews to be eligible for your certificate. <span class="text-muted-foreground" data-testid="peer-review-progress">{{ phase.reviews_done }} of {{ phase.reviews_assigned }} complete.</span></p>
+  {% endif %}
+
   {% if error %}
-  <p class="mt-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert">{{ error }}</p>
+  <p class="mt-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="peer-review-error">{{ error }}</p>
   {% endif %}
 
   <section class="mt-8" aria-labelledby="peer-review-submission-title">
-    <h2 id="peer-review-submission-title" class="mb-3 text-lg font-semibold text-foreground">Submission</h2>
+    <h2 id="peer-review-submission-title" class="mb-3 text-lg font-semibold text-foreground">{% if author_label %}Evaluate {{ author_label }}'s submission{% else %}Submission{% endif %}</h2>
     <dl class="divide-y divide-border border-y border-border text-sm">
       <div class="py-3">
-        <dt class="text-muted-foreground">Project URL</dt>
-        <dd class="mt-1"><a href="{{ submission.project_url }}" target="_blank" rel="noopener" class="break-all text-accent hover:underline">{{ submission.project_url }}</a></dd>
+        <dt class="text-muted-foreground">GitHub link</dt>
+        <dd class="mt-1"><a href="{{ submission.project_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex max-w-full items-start gap-1.5 break-all text-accent underline-offset-2 hover:underline" data-testid="peer-review-github-link">{% include "includes/_icon_github.html" with css="mt-0.5 h-4 w-4 flex-shrink-0" %}<span>{{ submission.project_url }}</span></a></dd>
+      </div>
+      <div class="py-3">
+        <dt class="text-muted-foreground">Commit hash</dt>
+        {% commit_url submission as commit_link %}
+        {% if submission.commit_id and commit_link %}<dd class="mt-1 font-mono text-sm"><a href="{{ commit_link }}" target="_blank" rel="noopener noreferrer" class="text-accent underline-offset-2 hover:underline" title="{{ submission.commit_id }}" data-testid="peer-review-commit">{{ submission.commit_id|slice:":7" }}</a></dd>{% elif submission.commit_id %}<dd class="mt-1 font-mono text-sm text-foreground" title="{{ submission.commit_id }}" data-testid="peer-review-commit">{{ submission.commit_id|slice:":7" }}</dd>{% else %}<dd class="mt-1 text-muted-foreground">Not provided</dd>{% endif %}
       </div>
       {% if submission.description %}
       <div class="py-3">
@@ -39,7 +65,7 @@
     </dl>
   </section>
 
-  {% if course.peer_review_criteria_html %}
+  {% if not course_project and course.peer_review_criteria_html %}
   <section class="mt-8" aria-labelledby="peer-review-criteria-title">
     <h2 id="peer-review-criteria-title" class="mb-3 text-lg font-semibold text-foreground">Review criteria</h2>
     <div class="prose prose-sm max-w-none">
@@ -49,52 +75,36 @@
   {% endif %}
 
   <section class="mt-8" aria-labelledby="peer-review-yours-title">
-  {% if review.is_complete %}
-    <h2 id="peer-review-yours-title" class="mb-3 text-lg font-semibold text-foreground">Your review (submitted)</h2>
-    <dl class="divide-y divide-border border-y border-border text-sm">
-      {% if review.score %}
-      <div class="flex items-center justify-between gap-3 py-3">
-        <dt class="text-muted-foreground">Score</dt>
-        <dd class="font-medium text-foreground">{{ review.score }}/5</dd>
+  {% if review_open or not course_project and not review.is_complete and not deadline_passed %}
+    <h2 id="peer-review-yours-title" class="sr-only">Your evaluation</h2>
+    <form method="post" data-testid="peer-review-form">
+      {% csrf_token %}
+      {% include "content/peer_review/_evaluation_fields.html" %}
+      <div class="mt-6">
+        <label for="peer-review-feedback" class="block text-base font-medium text-foreground">Review comments{% if course_project %} <span class="text-sm font-normal text-muted-foreground">(optional)</span>{% endif %}</label>
+        <p id="peer-review-feedback-help" class="mt-1 text-sm text-muted-foreground">A note to the project author: what works well and what to improve. Shown to them anonymously.</p>
+        <textarea id="peer-review-feedback" name="feedback" rows="5" aria-describedby="peer-review-feedback-help"{% if not course_project %} required{% endif %}
+                  class="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">{{ feedback_value }}</textarea>
       </div>
-      {% endif %}
-      <div class="py-3">
-        <dt class="text-muted-foreground">Feedback</dt>
-        <dd class="mt-1 whitespace-pre-line text-foreground">{{ review.feedback }}</dd>
-      </div>
-    </dl>
+      <button type="submit" class="{% button_classes 'primary' size='md' extra='mt-6 w-full sm:w-auto' %}" data-testid="peer-review-submit">{% if review.is_complete %}Update review{% else %}Submit{% endif %}</button>
+      {% if review.is_complete %}<p class="mt-2 text-sm text-muted-foreground">Saved. You can update this review until peer review closes.</p>{% endif %}
+    </form>
 
-  {% elif deadline_passed %}
-    <h2 id="peer-review-yours-title" class="mb-3 text-lg font-semibold text-foreground">Your review</h2>
-    <p class="rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">The peer review deadline has passed.</p>
+  {% elif review.is_complete %}
+    <h2 id="peer-review-yours-title" class="mb-1 text-lg font-semibold text-foreground">Your review (submitted)</h2>
+    {% if course_project %}<p class="text-sm text-muted-foreground">The peer review form is closed.</p>{% endif %}
+    {% include "content/peer_review/_evaluation_fields.html" %}
+    {% if review.score and not evaluation.rows %}<p class="mt-4 text-sm text-muted-foreground">Score <span class="font-medium text-foreground">{{ review.score }}/5</span></p>{% endif %}
+    {% if review.feedback %}
+    <div class="mt-6 text-sm">
+      <p class="font-medium text-foreground">Review comments</p>
+      <p class="mt-1 whitespace-pre-line break-words text-foreground" data-testid="peer-review-saved-feedback">{{ review.feedback }}</p>
+    </div>
+    {% endif %}
 
   {% else %}
     <h2 id="peer-review-yours-title" class="mb-3 text-lg font-semibold text-foreground">Your review</h2>
-    <form method="post" class="space-y-5">
-      {% csrf_token %}
-      <fieldset>
-        <legend class="mb-2 block text-sm font-medium text-foreground">Score (1-5)</legend>
-        <div class="flex flex-wrap gap-2">
-          {% for i in "12345" %}
-          <label class="inline-flex min-h-[44px] min-w-[44px] cursor-pointer items-center justify-center gap-2 rounded-md border border-border px-3 text-sm text-foreground has-[:checked]:border-accent has-[:checked]:bg-accent/10">
-            <input type="radio" name="score" value="{{ i }}" class="h-5 w-5 text-accent focus:ring-accent">
-            <span>{{ i }}</span>
-          </label>
-          {% endfor %}
-        </div>
-      </fieldset>
-
-      <div>
-        <label for="peer-review-feedback" class="mb-2 block text-sm font-medium text-foreground">Feedback</label>
-        <textarea id="peer-review-feedback" name="feedback" rows="6" required
-                  class="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm"
-                  placeholder="Provide constructive feedback on the project..."></textarea>
-      </div>
-
-      <button type="submit" class="{% button_classes 'primary' size='md' extra='w-full sm:w-auto' %}">
-        Submit review
-      </button>
-    </form>
+    <p class="rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">Peer review is closed.</p>
   {% endif %}
   </section>
 
@@ -103,9 +113,12 @@
 
   {% include "includes/footer.html" %}
 </main>
+{% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
 {{ block.super }}
 {% include "_partials/course_schedule_script.html" %}
+{% if reader_shell %}{% include "content/reader/_scripts.html" %}{% endif %}
+<script src="{% static 'js/peer-review-autosave.js' %}" defer></script>
 {% endblock %}

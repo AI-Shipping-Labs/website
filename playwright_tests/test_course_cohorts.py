@@ -2,8 +2,8 @@
 Playwright E2E tests for Course Cohorts (Issue #81).
 
 Tests cover all 10 BDD scenarios from the issue:
-- Main member discovers an upcoming cohort and enrolls from the course page
-- Enrolled member unenrolls from a cohort
+- Main member sees next-cohort info and uses the single course Enroll
+- Enrolled member unenrolls from the course landing page
 - Member cannot enroll when a cohort is full
 - Free member sees the cohort but cannot enroll due to tier restriction
 - Anonymous visitor browses a course with cohorts and sees the sign-up path
@@ -205,10 +205,7 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
 
     @pytest.mark.core
     def test_main_member_sees_cohort_info_and_enrolls(self, django_server, browser):
-        """Given a Main-tier user, a published course with required_level=20,
-        and an active upcoming cohort with 30 max_participants. Navigate
-        to /courses, click the course, verify cohort
-        info, enroll, and verify the button changes to Enrolled."""
+        """Main member sees the cohort info and enrolls via the single course Enroll."""
         _clear_courses()
         _ensure_tiers()
         _create_user("main@test.com", tier_slug="main")
@@ -261,41 +258,33 @@ class TestScenario1MainMemberDiscoversCohortAndEnrolls:
         # Then: Shows "30 of 30 spots remaining"
         assert "30 of 30 spots remaining" in body
 
-        # Step 3: Click the "Enroll" button
-        enroll_btn = page.locator(
-            'button[data-action="enroll"]'
+        assert page.locator('button[data-action="enroll"]').count() == 0
+        enroll_btn = page.get_by_test_id("enroll-button")
+        assert enroll_btn.count() == 1
+        enroll_btn.click()
+
+        page.wait_for_load_state("domcontentloaded")
+        page.goto(
+            f"{django_server}/courses/llm-engineering?view=overview",
+            wait_until="domcontentloaded",
         )
-        assert enroll_btn.count() >= 1
-        enroll_btn.first.click()
-
-        # The JS calls fetch() then window.location.reload().
-        # Wait for the unenroll button to appear after reload.
-        enrolled_btn = page.locator(
-            'button[data-action="unenroll"]'
+        page.get_by_test_id("unenroll-button").wait_for(
+            state="visible", timeout=10000,
         )
-        enrolled_btn.wait_for(state="visible", timeout=10000)
+        assert page.get_by_test_id("enroll-button").count() == 0
+        assert page.get_by_test_id("course-detail-home-link").count() == 1
 
-        body = page.content()
-
-        # Then: Button changes to "Enrolled"
-        assert enrolled_btn.count() >= 1
-        assert "Enrolled" in enrolled_btn.first.inner_text()
-
-        # Then: Spots remaining decreases to "29 of 30 spots remaining"
-        assert "29 of 30 spots remaining" in body
 # ---------------------------------------------------------------
 # Scenario 2: Enrolled member unenrolls from a cohort
 # ---------------------------------------------------------------
 
 @pytest.mark.django_db(transaction=True)
 class TestScenario2EnrolledMemberUnenrolls:
-    """Enrolled member unenrolls from a cohort."""
+    """Enrolled member unenrolls from the course landing page."""
 
     @pytest.mark.core
     def test_enrolled_member_unenrolls(self, django_server, browser):
-        """Given a Main-tier user already enrolled in the upcoming cohort
-        of LLM Engineering. Navigate to the course page, verify Enrolled
-        button, click to unenroll, verify button changes back to Enroll."""
+        """Given a Main-tier user with a course Enrollment."""
         _clear_courses()
         _ensure_tiers()
         user = _create_user("main@test.com", tier_slug="main")
@@ -309,47 +298,30 @@ class TestScenario2EnrolledMemberUnenrolls:
         mod = _create_module(course, "Module 1", sort_order=1)
         _create_unit(mod, "Lesson 1", sort_order=1, body="# Lesson 1\nContent.")
 
-        start_date, end_date = _future_cohort_window()
-        cohort = _create_cohort(
-            course=course,
-            name=_cohort_name(start_date),
-            start_date=start_date,
-            end_date=end_date,
-            max_participants=30,
-        )
-        _enroll_user_in_cohort(user, cohort)
+        from content.models import Enrollment
+
+        Enrollment.objects.create(user=user, course=course)
+        connection.close()
 
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()
-        # Step 1: Navigate to /courses/llm-engineering
         page.goto(
-            f"{django_server}/courses/llm-engineering",
+            f"{django_server}/courses/llm-engineering?view=overview",
             wait_until="domcontentloaded",
         )
-        page.content()
 
-        # Then: The cohort card shows an "Enrolled" button
-        enrolled_btn = page.locator(
-            'button[data-action="unenroll"]'
+        assert page.get_by_test_id("enroll-button").count() == 0
+        unenroll_btn = page.get_by_test_id("unenroll-button")
+        assert unenroll_btn.count() == 1
+
+        page.once("dialog", lambda dialog: dialog.accept())
+        unenroll_btn.click()
+
+        page.get_by_test_id("enroll-button").wait_for(
+            state="visible", timeout=10000,
         )
-        assert enrolled_btn.count() >= 1
-        assert "Enrolled" in enrolled_btn.first.inner_text()
+        assert page.get_by_test_id("unenroll-button").count() == 0
 
-        # Step 2: Click the "Enrolled" button to unenroll
-        enrolled_btn.first.click()
-
-        # The JS calls fetch() then window.location.reload().
-        # Wait for the enroll button to appear after reload.
-        enroll_btn = page.locator(
-            'button[data-action="enroll"]'
-        )
-        enroll_btn.wait_for(state="visible", timeout=10000)
-
-        page.content()
-
-        # Then: Button changes back to "Enroll"
-        assert enroll_btn.count() >= 1
-        assert "Enroll" in enroll_btn.first.inner_text()
 # ---------------------------------------------------------------
 # Scenario 3: Member cannot enroll when a cohort is full
 # ---------------------------------------------------------------
@@ -359,9 +331,7 @@ class TestScenario3CohortFullCannotEnroll:
     """Member cannot enroll when a cohort is full."""
 
     def test_full_cohort_shows_full_message(self, django_server, browser):
-        """Given a Main-tier user and a cohort with max_participants=1 that
-        already has 1 enrolled user. The cohort card shows 'Cohort is full'
-        instead of an Enroll button."""
+        """A full cohort shows 0 spots remaining and no Enroll button of its own."""
         _clear_courses()
         _ensure_tiers()
         _create_user("main@test.com", tier_slug="main")
@@ -397,10 +367,8 @@ class TestScenario3CohortFullCannotEnroll:
         )
         body = page.content()
 
-        # Then: Shows "Cohort is full" instead of an Enroll button
-        assert "Cohort is full" in body
+        assert "0 of 1 spots remaining" in body
 
-        # Then: No Enroll button is shown
         enroll_btn = page.locator(
             'button[data-action="enroll"]'
         )
@@ -455,10 +423,8 @@ class TestScenario4FreeMemberCannotEnroll:
         assert _display_date(start_date) in body
 
         # Then: No Enroll button is shown
-        enroll_btn = page.locator(
-            'button[data-action="enroll"]'
-        )
-        assert enroll_btn.count() == 0
+        assert page.get_by_test_id("enroll-button").count() == 0
+        assert page.locator('button[data-action="enroll"]').count() == 0
 
         # Then: Upgrade CTA links to /membership
         pricing_link = page.get_by_test_id("course-gated-cta-button")
@@ -513,10 +479,8 @@ class TestScenario5AnonymousVisitorSeesCohortAndPricing:
         assert _display_date(start_date) in body
 
         # Then: No Enroll button
-        enroll_btn = page.locator(
-            'button[data-action="enroll"]'
-        )
-        assert enroll_btn.count() == 0
+        assert page.get_by_test_id("enroll-button").count() == 0
+        assert page.locator('button[data-action="enroll"]').count() == 0
 
         # Then: An Upgrade CTA is visible
         pricing_link = page.get_by_test_id("course-gated-cta-button")
@@ -761,9 +725,7 @@ class TestScenario9FreeCourseEnrollment:
 
     @pytest.mark.core
     def test_free_tier_user_enrolls_in_free_course_cohort(self, django_server, browser):
-        """Given a Free-tier user and a published free course 'Intro to AI'
-        with required_level=0 and an active upcoming cohort. The
-        cohort card shows an Enroll button, and clicking it enrolls the user."""
+        """Free member enrolls in a free course via the single Enroll button."""
         _clear_courses()
         _ensure_tiers()
         _create_user("free-user@test.com", tier_slug="free")
@@ -796,29 +758,23 @@ class TestScenario9FreeCourseEnrollment:
         )
         body = page.content()
 
-        # Then: Cohort card shows the upcoming cohort with Enroll button
         assert cohort_name in body
+        assert page.locator('button[data-action="enroll"]').count() == 0
+        enroll_btn = page.get_by_test_id("enroll-button")
+        assert enroll_btn.count() == 1
 
-        enroll_btn = page.locator(
-            'button[data-action="enroll"]'
+        enroll_btn.click()
+        page.wait_for_load_state("domcontentloaded")
+        page.goto(
+            f"{django_server}/courses/intro-to-ai?view=overview",
+            wait_until="domcontentloaded",
         )
-        assert enroll_btn.count() >= 1
 
-        # Step 2: Click the "Enroll" button
-        enroll_btn.first.click()
-
-        # The JS calls fetch() then window.location.reload().
-        # Wait for the enrolled button to appear after reload.
-        enrolled_btn = page.locator(
-            'button[data-action="unenroll"]'
+        page.get_by_test_id("unenroll-button").wait_for(
+            state="visible", timeout=10000,
         )
-        enrolled_btn.wait_for(state="visible", timeout=10000)
+        assert page.get_by_test_id("enroll-button").count() == 0
 
-        body = page.content()
-
-        # Then: Shows "Enrolled"
-        assert enrolled_btn.count() >= 1
-        assert "Enrolled" in enrolled_btn.first.inner_text()
 # ---------------------------------------------------------------
 # Scenario 10: Course with no active cohorts shows the syllabus
 #               without cohort section

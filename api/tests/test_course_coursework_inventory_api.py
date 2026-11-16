@@ -167,6 +167,7 @@ class CourseworkInventoryApiTest(TestCase):
             'complete': 5,
             'incomplete': 2,
             'scored': 4,
+            'criteria_scored': 0,
             'unscored': 3,
             'reviewers_without_submission': {'pairs': 2, 'reviews': 3},
         })

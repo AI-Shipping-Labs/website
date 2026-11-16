@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 from html.parser import HTMLParser
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -53,6 +54,7 @@ class _SyllabusProjectNestingParser(HTMLParser):
             self.detail_stack.pop()
 
 
+@patch('content.services.project_form_adapter.resolve_commit', new=lambda link: 'a' * 40)
 class CourseProjectAttemptViewsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -137,8 +139,9 @@ class CourseProjectAttemptViewsTest(TestCase):
             },
         )
         response = self.client.get('/courses/ai-buildcamp')
-        self.assertContains(response, '/courses/ai-buildcamp/projects/first/reviews')
+        self.assertContains(response, 'data-homework-state="submitted">Submitted<', count=1)
         self.assertNotContains(response, '/courses/ai-buildcamp/projects/second/reviews')
+        self.assertNotContains(response, 'Peer reviews for')
         self.assertContains(response, 'Reviews by', count=1)
 
     def test_capstone_module_page_shows_its_nested_topics(self):
@@ -160,15 +163,27 @@ class CourseProjectAttemptViewsTest(TestCase):
                     'commit_id': 'a1b2c3d',
                 },
             )
-            self.assertContains(response, 'Your project has been submitted.')
+            self.assertContains(
+                response,
+                'Your project is saved. You can update it until the deadline.',
+            )
         self.assertEqual(ProjectSubmission.objects.filter(user=self.user).count(), 2)
         response = self.client.get('/courses/ai-buildcamp/projects/second/reviews')
         self.assertContains(response, 'https://github.com/you/second')
         self.assertNotContains(response, 'https://github.com/you/first')
 
-    def test_submission_deadline_blocks_late_post(self):
+    def test_past_deadline_alone_still_accepts_a_post_while_collecting(self):
         self.first.submission_due_at = timezone.now() - timedelta(minutes=1)
         self.first.save(update_fields=['submission_due_at'])
+        response = self.client.post(
+            '/courses/ai-buildcamp/projects/first/submit',
+            {'github_link': 'https://github.com/you/late', 'commit_id': 'a1b2c3d'},
+        )
+        self.assertNotEqual(response.status_code, 403)
+
+    def test_submission_blocked_once_staff_start_peer_reviewing(self):
+        self.first.state = 'PR'
+        self.first.save(update_fields=['state'])
         response = self.client.post(
             '/courses/ai-buildcamp/projects/first/submit',
             {'github_link': 'https://github.com/you/late', 'commit_id': 'a1b2c3d'},
@@ -176,7 +191,24 @@ class CourseProjectAttemptViewsTest(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(ProjectSubmission.objects.filter(course_project=self.first).exists())
         response = self.client.get('/courses/ai-buildcamp/projects/second/submit')
-        self.assertContains(response, 'Submit project')
+        self.assertContains(response, 'data-testid="project-title">Second attempt</h1>')
+
+    def test_submit_page_links_to_evaluation_criteria_page(self):
+        criteria = [{
+            'id': 'problem', 'title': 'Problem', 'description': '', 'type': 'scale',
+            'options': [{'points': 0, 'text': 'None'}, {'points': 2, 'text': 'Clear'}],
+        }]
+        CourseProject.objects.filter(pk=self.first.pk).update(evaluation_criteria=criteria)
+        response = self.client.get('/courses/ai-buildcamp/projects/first/submit')
+        self.assertContains(response, 'up to 2 points')
+        self.assertContains(
+            response,
+            '<a href="/courses/ai-buildcamp/project-criteria" class="text-accent underline '
+            'underline-offset-2 hover:text-foreground" data-testid="criteria-lesson-link">'
+            'Read the evaluation criteria</a>',
+        )
+        self.assertNotContains(response, 'name="criterion-')
+        self.assertNotContains(response, 'Clear: 2 points')
 
     def test_legacy_submit_link_points_to_attempt_picker(self):
         response = self.client.get('/courses/ai-buildcamp/submit')

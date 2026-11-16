@@ -860,8 +860,14 @@ def course_home(request, slug, section='home'):
                 'schedule_can_localize': should_use_browser_timezone(request.user),
             })
     if section == 'announcements':
+        # Learners see their own cohorts' announcements; staff see every
+        # cohort's unless they preview one with ``?cohort=``.
         page, paginator = paginate_member_announcements(
-            published_queryset(course), request.GET.get('page'),
+            published_queryset(
+                course, user=request.user,
+                cohort=cohort if requested else None,
+            ),
+            request.GET.get('page'),
         )
         announcements = attach_rendered_bodies(list(page.object_list))
         context['announcements'] = announcements

@@ -6,7 +6,7 @@
     {% for announcement in announcements %}
     <article class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="course-announcement-card">
       <h3 class="text-lg font-semibold text-foreground">{{ announcement.title }}</h3>
-      <p class="mt-1 text-sm text-muted-foreground">{{ announcement.author|display_name }} · {{ announcement.published_at|member_short_datetime }}</p>
+      <p class="mt-1 text-sm text-muted-foreground">{{ announcement.author|display_name }} · {{ announcement.published_at|member_short_datetime }}{% if request.user.is_staff %} · <span data-testid="course-announcement-cohort">{{ announcement.cohort.name|default:'No cohort' }}</span>{% endif %}</p>
       <div class="prose mt-3">{{ announcement.body_html }}</div>
     </article>
     {% endfor %}

@@ -35,6 +35,7 @@
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
         <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Cohort</th>
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Author</th>
         <th class="{% studio_list_class 'th' %}">Published</th>
@@ -46,6 +47,7 @@
       {% for announcement in page.object_list %}
       <tr class="{% studio_list_class 'row' %}" data-testid="announcement-row">
         <td class="px-6 py-4 text-sm font-medium text-foreground" data-testid="announcement-title">{{ announcement.title }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="announcement-cohort">{{ announcement.cohort.name|default:'No cohort' }}</td>
         <td class="px-6 py-4" data-testid="announcement-status">
           {% if announcement.status == 'published' %}
           {% studio_status_badge 'published' 'Published' %}
@@ -63,7 +65,7 @@
             {% if announcement.status == 'draft' %}
             <form method="post" action="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="{% studio_list_class 'action_form' %}">
               {% csrf_token %}
-              <button type="submit" formaction="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="{% studio_action_class 'primary' %}" data-confirm="{{ publish_confirm }}" data-testid="announcement-publish">Publish</button>
+              <button type="submit" formaction="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="{% studio_action_class 'primary' %}" data-confirm="{{ announcement.publish_confirm }}" data-testid="announcement-publish">Publish</button>
             </form>
             {% endif %}
           </div>
@@ -80,6 +82,7 @@
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
         <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Cohort</th>
         <th class="{% studio_list_class 'th' %}">Status</th>
         <th class="{% studio_list_class 'th' %}">Author</th>
         <th class="{% studio_list_class 'th' %}">Published</th>
@@ -89,7 +92,7 @@
     </thead>
     <tbody class="{% studio_list_class 'tbody' %}">
       {% url 'studio_course_announcement_list' course_id=course.pk as list_clear_url %}
-      {% studio_empty_state 'filter' entity_label='announcement' entity_label_plural='announcements' clear_url=list_clear_url colspan=6 %}
+      {% studio_empty_state 'filter' entity_label='announcement' entity_label_plural='announcements' clear_url=list_clear_url colspan=7 %}
     </tbody>
   </table>
 </div>

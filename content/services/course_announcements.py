@@ -1,4 +1,10 @@
-"""Course announcement visibility, publish, and email fan-out (issue #1942)."""
+"""Course announcement visibility, publish, and email fan-out (issue #1942).
+
+Every announcement targets one cohort of its course: only members of that
+cohort see it on the Announcements tab, and its first publish emails only
+the cohort's actively enrolled members. An announcement without a cohort
+has no audience: learners never see it and publishing it sends nothing.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 from accounts.utils.user_checks import is_authenticated_user
+from content.models.cohort import CohortEnrollment
 from content.models.course_announcement import CourseAnnouncement
 from content.models.enrollment import Enrollment
 from content.services.enrollment import is_enrolled
@@ -21,8 +28,12 @@ EMAIL_TYPE = 'course_announcement'
 EMAIL_BATCH_SIZE = 100
 MEMBER_PAGE_SIZE = 20
 PUBLISH_CONFIRM = (
-    'Publish this announcement and email {n} enrolled learners? '
-    'This emails the class once and cannot be undone.'
+    'Publish this announcement and email {n} enrolled learners of {cohort}? '
+    'This emails the cohort once and cannot be undone.'
+)
+PUBLISH_CONFIRM_UNKNOWN = (
+    'Publish this announcement and email the enrolled learners of the '
+    'selected cohort? This emails the cohort once and cannot be undone.'
 )
 
 
@@ -38,17 +49,47 @@ def can_view_announcements(user, course) -> bool:
     return show_announcements_tab(user, course)
 
 
-def publish_confirm_message(course) -> str:
-    from content.services.enrollment import active_enrollment_count
+def recipient_enrollments(cohort):
+    """Active course enrollments of active users who belong to ``cohort``."""
+    if cohort is None:
+        return Enrollment.objects.none()
+    return Enrollment.objects.filter(
+        course_id=cohort.course_id,
+        unenrolled_at__isnull=True,
+        user__is_active=True,
+        user__cohort_enrollments__cohort=cohort,
+    ).distinct()
 
-    return PUBLISH_CONFIRM.format(n=active_enrollment_count(course))
+
+def publish_confirm_message(cohort=None) -> str:
+    if cohort is None:
+        return PUBLISH_CONFIRM_UNKNOWN
+    return PUBLISH_CONFIRM.format(
+        n=recipient_enrollments(cohort).count(), cohort=cohort.name,
+    )
 
 
-def published_queryset(course):
+def published_queryset(course, *, user=None, cohort=None):
+    """Published announcements of ``course`` visible to ``user``.
+
+    Learners see only announcements of the cohorts they belong to. Staff
+    see every cohort's announcements, or only ``cohort``'s when they
+    preview one. ``user=None`` skips the audience filter.
+    """
+    rows = CourseAnnouncement.objects.filter(
+        course=course, status=CourseAnnouncement.STATUS_PUBLISHED,
+    )
+    if user is not None:
+        if getattr(user, 'is_staff', False):
+            if cohort is not None:
+                rows = rows.filter(cohort=cohort)
+        else:
+            rows = rows.filter(cohort_id__in=CohortEnrollment.objects.filter(
+                user=user, cohort__course=course,
+            ).values('cohort_id'))
     return (
-        CourseAnnouncement.objects
-        .filter(course=course, status=CourseAnnouncement.STATUS_PUBLISHED)
-        .select_related('author')
+        rows
+        .select_related('author', 'cohort')
         .order_by('-published_at', '-created_at')
     )
 
@@ -72,8 +113,13 @@ def attach_rendered_bodies(announcements):
     return announcements
 
 
-def save_announcement(announcement, *, title, body, status, author=None):
-    """Persist title/body/status and queue email on the first publish."""
+def save_announcement(
+    announcement, *, title, body, status, author=None, cohort=None,
+):
+    """Persist title/body/status/cohort and queue email on the first publish.
+
+    ``cohort=None`` keeps the announcement's current cohort.
+    """
     previous_status = (
         announcement.status
         if announcement.pk
@@ -82,6 +128,8 @@ def save_announcement(announcement, *, title, body, status, author=None):
     announcement.title = title
     announcement.body = body
     announcement.status = status
+    if cohort is not None:
+        announcement.cohort = cohort
     if author is not None and announcement.author_id is None:
         announcement.author = author
     if (
@@ -116,6 +164,8 @@ def maybe_enqueue_announcement_email(announcement, *, previous_status):
         return False
     if announcement.email_queued_at is not None:
         return False
+    if announcement.cohort_id is None:
+        return False
     announcement_id = announcement.pk
     transaction.on_commit(
         lambda: enqueue_course_announcement_email(announcement_id),
@@ -143,7 +193,7 @@ def send_course_announcement_email(announcement_id):
         announcement = (
             CourseAnnouncement.objects
             .select_for_update()
-            .select_related('course')
+            .select_related('course', 'cohort')
             .filter(pk=announcement_id)
             .first()
         )
@@ -165,18 +215,19 @@ def send_course_announcement_email(announcement_id):
                 'reason': 'already_queued',
                 'announcement_id': announcement_id,
             }
+        if announcement.cohort_id is None:
+            return {
+                'status': 'skipped',
+                'reason': 'no_cohort',
+                'announcement_id': announcement_id,
+            }
         announcement.email_queued_at = timezone.now()
         announcement.save(update_fields=['email_queued_at', 'updated_at'])
 
     sent = 0
     failed = 0
     enrollments = (
-        Enrollment.objects
-        .filter(
-            course_id=announcement.course_id,
-            unenrolled_at__isnull=True,
-            user__is_active=True,
-        )
+        recipient_enrollments(announcement.cohort)
         .select_related('user')
         .order_by('pk')
     )
@@ -190,6 +241,7 @@ def send_course_announcement_email(announcement_id):
     return {
         'status': 'queued',
         'announcement_id': announcement_id,
+        'cohort_id': announcement.cohort_id,
         'sent': sent,
         'failed': failed,
     }

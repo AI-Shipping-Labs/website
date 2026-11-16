@@ -135,6 +135,16 @@ def _stored_timezone(email):
     return value
 
 
+def _set_project_state(django_db_blocker, state):
+    from django.db import connection
+
+    from content.models.peer_review import CourseProject
+
+    with django_db_blocker.unblock():
+        CourseProject.objects.filter(slug='attempt-4').update(state=state)
+    connection.close()
+
+
 def _authed_context(browser, email, django_db_blocker, timezone_id):
     from django.db import connection
 
@@ -287,6 +297,7 @@ def test_failed_backfill_still_localizes_attempt_header_consistently(
         expect(times.nth(0)).to_have_attribute('datetime', instant)
         expect(times.nth(1)).to_have_attribute('datetime', instant)
         expect(times).to_have_text([label, label])
+        _set_project_state(django_db_blocker, 'PR')
         _expect_attempt_pages_in(page, django_server, due, 'America/New_York', review_url)
     finally:
         context.close()

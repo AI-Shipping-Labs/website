@@ -388,18 +388,15 @@ onto `community_base.coursework`.
 uv run asl sprints course-coursework-inventory ai-buildcamp
 ```
 
-### Course lookup and peer review assignments
+### Course peer review state and assignments
 
-Look up courses (including numeric `id` and `slug`), read back peer-review
-state (project state, submission counts, assignment counts, completed reviews,
-and deadline), and create round-robin peer review assignments (same behavior as
-Studio's "Create review assignments" button: moves eligible dated attempts to
-`Peer reviewing`, sends on-site notifications only with no email, and is
-idempotent).
+Read back peer-review state (course numeric `course_id`, project state,
+submission counts, assignment counts, completed reviews, and deadline) and
+create round-robin peer review assignments (same behavior as Studio's "Create
+review assignments" button: moves eligible dated attempts to `Peer reviewing`,
+sends on-site notifications only with no email, and is idempotent).
 
 ```bash
-uv run asl sprints courses
-uv run asl sprints course ai-buildcamp
 uv run asl sprints course-peer-reviews ai-buildcamp --cohort 4 --project attempt-1
 uv run asl sprints course-peer-review-assign ai-buildcamp --cohort 4 --project attempt-1
 ```

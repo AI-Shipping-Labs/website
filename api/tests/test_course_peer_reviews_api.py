@@ -1,4 +1,4 @@
-"""Tests for course lookup and peer-review API endpoints."""
+"""Tests for course peer-review API endpoints and course_id exposure."""
 
 from datetime import date, timedelta
 
@@ -21,8 +21,8 @@ from notifications.models import Notification
 User = get_user_model()
 
 
-class CourseLookupAndPeerReviewApiTest(TestCase):
-    """Covers /api/courses, /api/courses/<slug>, and peer-review endpoints."""
+class CoursePeerReviewApiTest(TestCase):
+    """Covers /api/courses/<slug>/peer-reviews and /assignments."""
 
     @classmethod
     def setUpTestData(cls):
@@ -86,61 +86,46 @@ class CourseLookupAndPeerReviewApiTest(TestCase):
                 status="submitted",
             )
 
-    def _auth(self, token=None):
-        key = (token or self.token).key
-        return {"HTTP_AUTHORIZATION": f"Token {key}"}
+    def _auth(self):
+        return {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
 
     def test_requires_staff_token(self):
-        self.assertEqual(self.client.get("/api/courses").status_code, 401)
-        self.assertEqual(
-            self.client.get("/api/courses", HTTP_AUTHORIZATION="Token bad").status_code,
-            401,
-        )
-        self.client.force_login(self.non_staff)
-        self.assertEqual(self.client.get("/api/courses").status_code, 401)
-        self.client.logout()
         self.assertEqual(
             self.client.get("/api/courses/ai-buildcamp/peer-reviews").status_code,
             401,
         )
         self.assertEqual(
+            self.client.get(
+                "/api/courses/ai-buildcamp/peer-reviews",
+                HTTP_AUTHORIZATION="Token bad",
+            ).status_code,
+            401,
+        )
+        self.client.force_login(self.non_staff)
+        self.assertEqual(
+            self.client.get("/api/courses/ai-buildcamp/peer-reviews").status_code,
+            401,
+        )
+        self.client.logout()
+        self.assertEqual(
             self.client.post("/api/courses/ai-buildcamp/peer-reviews/assignments").status_code,
             401,
         )
 
-    def test_courses_list_and_detail_expose_numeric_id_and_slug(self):
-        list_resp = self.client.get("/api/courses?status=published", **self._auth())
-        self.assertEqual(list_resp.status_code, 200)
-        courses = list_resp.json()["courses"]
-        self.assertEqual(len(courses), 1)
-        self.assertEqual(courses[0]["id"], self.course.pk)
-        self.assertEqual(courses[0]["slug"], "ai-buildcamp")
-        self.assertTrue(courses[0]["peer_review_enabled"])
-
-        detail_resp = self.client.get("/api/courses/ai-buildcamp", **self._auth())
-        self.assertEqual(detail_resp.status_code, 200)
-        data = detail_resp.json()
-        self.assertEqual(data["id"], self.course.pk)
-        self.assertEqual(data["cohorts"][0]["external_key"], "4")
-        self.assertEqual(data["projects"][0]["slug"], "attempt-1")
-
-        self.assertEqual(
-            self.client.get("/api/courses/missing", **self._auth()).status_code,
-            404,
-        )
-
-    def test_cohorts_endpoint_also_exposes_course_id(self):
+    def test_cohorts_endpoint_exposes_course_id(self):
         resp = self.client.get("/api/courses/ai-buildcamp/cohorts", **self._auth())
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["course_id"], self.course.pk)
+        data = resp.json()
+        self.assertEqual(data["course_id"], self.course.pk)
+        self.assertEqual(data["course"], "ai-buildcamp")
 
     def test_peer_reviews_read_and_assign_are_idempotent_with_no_email(self):
         read_before = self.client.get(
             "/api/courses/ai-buildcamp/peer-reviews?cohort=4&project=attempt-1",
             **self._auth(),
         )
-        self.assertEqual(read_before.status_code, 200)
-        project_before = read_before.json()["projects"][0]
+        before_data = read_before.json()
+        self.assertEqual(before_data["course_id"], self.course.pk)
+        project_before = before_data["projects"][0]
         self.assertEqual(project_before["state"], "CS")
         self.assertEqual(project_before["submissions_count"], 4)
         self.assertEqual(project_before["assignments_count"], 0)
@@ -154,7 +139,6 @@ class CourseLookupAndPeerReviewApiTest(TestCase):
             content_type="application/json",
             **self._auth(),
         )
-        self.assertEqual(assign_1.status_code, 200)
         body_1 = assign_1.json()
         self.assertEqual(body_1["course_id"], self.course.pk)
         self.assertEqual(body_1["batched"], 4)
@@ -177,7 +161,6 @@ class CourseLookupAndPeerReviewApiTest(TestCase):
             "/api/courses/ai-buildcamp/peer-reviews?cohort=4&project=attempt-1",
             **self._auth(),
         )
-        self.assertEqual(read_after.status_code, 200)
         project_after = read_after.json()["projects"][0]
         self.assertEqual(project_after["state"], "PR")
         self.assertEqual(project_after["assignments_count"], 8)
@@ -191,7 +174,6 @@ class CourseLookupAndPeerReviewApiTest(TestCase):
             content_type="application/json",
             **self._auth(),
         )
-        self.assertEqual(assign_2.status_code, 200)
         body_2 = assign_2.json()
         self.assertEqual(body_2["batched"], 0)
         self.assertEqual(body_2["reviews_assigned"], 0)

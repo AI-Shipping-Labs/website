@@ -1,5 +1,4 @@
-"""``asl sprints courses`` / ``course`` / ``course-peer-reviews`` /
-``course-peer-review-assign`` wiring tests."""
+"""``asl sprints course-peer-reviews`` and ``course-peer-review-assign`` wiring tests."""
 
 from __future__ import annotations
 
@@ -31,20 +30,6 @@ def client(monkeypatch):
     recorder = RecordingClient()
     monkeypatch.setattr(sprints_module, "get_client", lambda: recorder)
     return recorder
-
-
-def test_courses_lists_courses(client):
-    result = CliRunner().invoke(cli, ["sprints", "courses", "--status", "published"])
-    assert result.exit_code == 0, result.output
-    assert client.calls == [("GET", "/api/courses", {"params": {"status": "published"}})]
-    assert json.loads(result.output) == RESPONSE
-
-
-def test_course_detail_gets_course(client):
-    result = CliRunner().invoke(cli, ["sprints", "course", "ai-buildcamp"])
-    assert result.exit_code == 0, result.output
-    assert client.calls == [("GET", "/api/courses/ai-buildcamp", {})]
-    assert json.loads(result.output) == RESPONSE
 
 
 def test_course_peer_reviews_passes_filters(client):

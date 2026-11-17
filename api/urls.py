@@ -115,7 +115,6 @@ from api.views.course_peer_reviews import (
     course_peer_review_assignments,
     course_peer_reviews,
 )
-from api.views.courses import course_detail, courses_collection
 from api.views.crm_call_drafts import crm_call_drafts
 from api.views.crm_calls import crm_calls
 from api.views.crm_export import crm_export, crm_record_markdown_export
@@ -1010,17 +1009,7 @@ urlpatterns = [
         sprint_roster,
         name="api_sprint_roster",
     ),
-    # ---- Courses (id/slug lookup + peer reviews) ------------------------
-    path(
-        "courses",
-        courses_collection,
-        name="api_courses_collection",
-    ),
-    path(
-        "courses/<slug:slug>",
-        course_detail,
-        name="api_course_detail",
-    ),
+    # ---- Course peer reviews ------------------------------------------
     path(
         "courses/<slug:slug>/peer-reviews",
         course_peer_reviews,

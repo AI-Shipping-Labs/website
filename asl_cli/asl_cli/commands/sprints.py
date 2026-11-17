@@ -218,23 +218,6 @@ def sprints_course_certificates(slug, fmt):
     emit(get_client().get(f"{API}/courses/{slug}/certificates"), fmt)
 
 
-@sprints.command("courses")
-@click.option("--status", default=None, help="Filter by course status (e.g. published).")
-@format_option
-def sprints_courses(status, fmt):
-    """List courses with numeric id, slug, and peer-review config (staff-only)."""
-    kwargs = {"params": {"status": status}} if status else {}
-    emit(get_client().get(f"{API}/courses", **kwargs), fmt)
-
-
-@sprints.command("course")
-@click.argument("slug")
-@format_option
-def sprints_course(slug, fmt):
-    """Show one course by slug with numeric id, cohorts, and projects (staff-only)."""
-    emit(get_client().get(f"{API}/courses/{slug}"), fmt)
-
-
 @sprints.command("course-peer-reviews")
 @click.argument("slug")
 @click.option("--cohort", default=None, help="Cohort external key (e.g. 4).")

@@ -111,6 +111,10 @@ from api.views.course_enrollments import (
     course_enrollments_collection,
 )
 from api.views.course_instructors import course_instructors
+from api.views.course_peer_reviews import (
+    course_peer_review_assignments,
+    course_peer_reviews,
+)
 from api.views.crm_call_drafts import crm_call_drafts
 from api.views.crm_calls import crm_calls
 from api.views.crm_export import crm_export, crm_record_markdown_export
@@ -1004,6 +1008,17 @@ urlpatterns = [
         "sprints/<slug:slug>/members",
         sprint_roster,
         name="api_sprint_roster",
+    ),
+    # ---- Course peer reviews ------------------------------------------
+    path(
+        "courses/<slug:slug>/peer-reviews",
+        course_peer_reviews,
+        name="api_course_peer_reviews",
+    ),
+    path(
+        "courses/<slug:slug>/peer-reviews/assignments",
+        course_peer_review_assignments,
+        name="api_course_peer_review_assignments",
     ),
     # ---- Course enrollments (issue #445) ------------------------------
     # Register the collection BEFORE the per-email detail so the

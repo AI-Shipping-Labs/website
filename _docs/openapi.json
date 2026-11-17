@@ -5805,7 +5805,8 @@
                       ]
                     }
                   ],
-                  "course": "ai-buildcamp"
+                  "course": "ai-buildcamp",
+                  "course_id": 7
                 }
               }
             },
@@ -6608,6 +6609,188 @@
         "summary": "Replace ordered course instructors",
         "tags": [
           "Courses"
+        ]
+      }
+    },
+    "/api/courses/{slug}/peer-reviews": {
+      "get": {
+        "description": "Return peer-review state, submission counts, assignment counts, completed review counts, and deadline for the course's project attempts. Filter with optional ``cohort`` (cohort external key) and ``project`` (project attempt slug) query parameters.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "course": "ai-buildcamp",
+                  "course_id": 7,
+                  "course_title": "AI Buildcamp",
+                  "legacy_submissions_count": 0,
+                  "peer_review_count": 3,
+                  "peer_review_deadline_days": 7,
+                  "peer_review_enabled": true,
+                  "projects": [
+                    {
+                      "assignments_count": 27,
+                      "cohort": {
+                        "external_key": "4",
+                        "id": 12,
+                        "mode": "cohort",
+                        "name": "Cohort 4"
+                      },
+                      "completed_reviews_count": 0,
+                      "deadline": "2026-11-23T22:59:00+00:00",
+                      "id": 45,
+                      "peer_review_count": 3,
+                      "pending_reviews_count": 27,
+                      "review_due_at": "2026-11-23T22:59:00+00:00",
+                      "slug": "attempt-1",
+                      "state": "PR",
+                      "state_label": "Peer reviewing",
+                      "submission_due_at": "2026-11-16T22:59:00+00:00",
+                      "submissions_by_status": {
+                        "certified": 0,
+                        "in_review": 9,
+                        "review_complete": 0,
+                        "submitted": 0
+                      },
+                      "submissions_count": 9,
+                      "title": "Project Attempt 1"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Peer-review state for matching project attempts."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course, cohort, or project not found."
+          }
+        },
+        "summary": "Get peer-review state (staff-only)",
+        "tags": [
+          "Course Peer Reviews"
+        ]
+      }
+    },
+    "/api/courses/{slug}/peer-reviews/assignments": {
+      "post": {
+        "description": "Same behavior as Studio's 'Create review assignments' button: forms round-robin review assignments for waiting submissions, moves eligible dated project attempts to 'Peer reviewing', and sends on-site notifications only (no email). Idempotent: running twice creates no duplicate assignments. Optionally scope to one ``cohort`` (external key) and/or ``project`` (slug).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "cohort": {
+                    "description": "Optional cohort external key (e.g. 4).",
+                    "type": "string"
+                  },
+                  "project": {
+                    "description": "Optional project attempt slug (e.g. attempt-1).",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "batched": 9,
+                  "course": "ai-buildcamp",
+                  "course_id": 7,
+                  "projects": [
+                    {
+                      "assignments_count": 27,
+                      "cohort": {
+                        "external_key": "4",
+                        "id": 12,
+                        "mode": "cohort",
+                        "name": "Cohort 4"
+                      },
+                      "completed_reviews_count": 0,
+                      "deadline": "2026-11-23T22:59:00+00:00",
+                      "id": 45,
+                      "peer_review_count": 3,
+                      "pending_reviews_count": 27,
+                      "review_due_at": "2026-11-23T22:59:00+00:00",
+                      "slug": "attempt-1",
+                      "state": "PR",
+                      "state_label": "Peer reviewing",
+                      "submission_due_at": "2026-11-16T22:59:00+00:00",
+                      "submissions_by_status": {
+                        "certified": 0,
+                        "in_review": 9,
+                        "review_complete": 0,
+                        "submitted": 0
+                      },
+                      "submissions_count": 9,
+                      "title": "Project Attempt 1"
+                    }
+                  ],
+                  "reviews_assigned": 27
+                }
+              }
+            },
+            "description": "Assignment summary and updated project state."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course, cohort, or project not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "peer_review_disabled",
+                  "error": "Peer review is not enabled for this course."
+                }
+              }
+            },
+            "description": "Peer review is disabled for this course."
+          }
+        },
+        "summary": "Create peer review assignments (staff-only)",
+        "tags": [
+          "Course Peer Reviews"
         ]
       }
     },

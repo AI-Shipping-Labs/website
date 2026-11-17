@@ -388,6 +388,19 @@ onto `community_base.coursework`.
 uv run asl sprints course-coursework-inventory ai-buildcamp
 ```
 
+### Course peer review state and assignments
+
+Read back peer-review state (course numeric `course_id`, project state,
+submission counts, assignment counts, completed reviews, and deadline) and
+create round-robin peer review assignments (same behavior as Studio's "Create
+review assignments" button: moves eligible dated attempts to `Peer reviewing`,
+sends on-site notifications only with no email, and is idempotent).
+
+```bash
+uv run asl sprints course-peer-reviews ai-buildcamp --cohort 4 --project attempt-1
+uv run asl sprints course-peer-review-assign ai-buildcamp --cohort 4 --project attempt-1
+```
+
 ### Recording a submission on a member's behalf
 
 When a member sends their homework or project some other way (an email, a

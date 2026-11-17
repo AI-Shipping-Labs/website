@@ -218,4 +218,35 @@ def sprints_course_certificates(slug, fmt):
     emit(get_client().get(f"{API}/courses/{slug}/certificates"), fmt)
 
 
+@sprints.command("course-peer-reviews")
+@click.argument("slug")
+@click.option("--cohort", default=None, help="Cohort external key (e.g. 4).")
+@click.option("--project", default=None, help="Project attempt slug (e.g. attempt-1).")
+@format_option
+def sprints_course_peer_reviews(slug, cohort, project, fmt):
+    """Read peer-review state, counts, and deadlines for a course (staff-only)."""
+    params = {}
+    if cohort:
+        params["cohort"] = cohort
+    if project:
+        params["project"] = project
+    kwargs = {"params": params} if params else {}
+    emit(get_client().get(f"{API}/courses/{slug}/peer-reviews", **kwargs), fmt)
+
+
+@sprints.command("course-peer-review-assign")
+@click.argument("slug")
+@click.option("--cohort", default=None, help="Optional cohort external key (e.g. 4).")
+@click.option("--project", default=None, help="Optional project attempt slug (e.g. attempt-1).")
+@format_option
+def sprints_course_peer_review_assign(slug, cohort, project, fmt):
+    """Create round-robin peer review assignments (staff-only, idempotent, no email)."""
+    body = {}
+    if cohort:
+        body["cohort"] = cohort
+    if project:
+        body["project"] = project
+    emit(get_client().post(f"{API}/courses/{slug}/peer-reviews/assignments", json_body=body), fmt)
+
+
 groups = [sprints]

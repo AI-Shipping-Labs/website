@@ -176,6 +176,7 @@ def _parse_date_field(data, field):
                 200: {
                     "description": "Cohorts for the course.",
                     "example": {
+                        "course_id": 7,
                         "course": "ai-buildcamp",
                         "cohorts": [
                             _COHORT_EXAMPLE,
@@ -210,6 +211,7 @@ def course_cohorts_collection(request, slug):
     cohorts = list(_course_cohorts(course).annotate(num_enrollments=Count('enrollments')))
     warnings = cohort_series_warnings(cohorts)
     return JsonResponse({
+        'course_id': course.pk,
         'course': course.slug,
         'cohorts': [_serialize_cohort(c, warnings[c.pk]) for c in cohorts],
     }, status=200)

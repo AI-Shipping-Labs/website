@@ -15,6 +15,7 @@ from content.models import (
 from content.models.course import UNIT_KIND_EVENT, non_bonus_units
 from content.services.peer_review_batches import (
     form_course_batches,
+    form_dated_project_batch,
     form_self_paced_project_batches,
 )
 from content.services.peer_review_notifications import notify_reviews_complete
@@ -43,6 +44,15 @@ class PeerReviewService:
     def form_batches_for_course(course):
         """Form dated, legacy, and self-paced batches for a course."""
         return form_course_batches(course, PeerReviewService._assign_reviews)
+
+    @staticmethod
+    def form_batches_for_project(project):
+        """Form review assignments for one CourseProject."""
+        if project.is_self_paced:
+            return PeerReviewService.form_self_paced_batches_for_project(project)
+        return form_dated_project_batch(
+            project.course, project, PeerReviewService._assign_reviews,
+        )
 
     @staticmethod
     def form_self_paced_batches_for_project(project):

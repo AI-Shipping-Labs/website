@@ -160,7 +160,7 @@ wheels = [
 
 [[package]]
 name = "asl-cli"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "asl_cli" }
 dependencies = [
     { name = "click" },

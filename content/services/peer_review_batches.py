@@ -13,6 +13,36 @@ def _add(summary, submissions, reviews):
     summary['reviews_assigned'] += reviews
 
 
+def form_dated_project_batch(course, project, assign_reviews):
+    """Form round-robin review assignments for one dated project attempt."""
+    summary = {'batched': 0, 'reviews_assigned': 0}
+    if project.is_self_paced:
+        return summary
+    if project.state != ProjectState.COLLECTING_SUBMISSIONS:
+        return summary
+    if project.submission_due_at is None or project.submission_due_at > timezone.now():
+        return summary
+    waiting = ProjectSubmission.objects.filter(
+        course=course,
+        course_project=project,
+        status='submitted',
+    ).order_by('pk')
+    if project.cohort_id:
+        waiting = waiting.filter(cohort_id=project.cohort_id)
+    formed = False
+    for cohort_id in waiting.values_list('cohort_id', flat=True).distinct():
+        submissions = list(waiting.filter(cohort_id=cohort_id))
+        if len(submissions) >= 2:
+            _add(summary, submissions, assign_reviews(
+                course, submissions, project=project,
+            ))
+            formed = True
+    if formed:
+        project.state = ProjectState.PEER_REVIEWING
+        project.save(update_fields=['state'])
+    return summary
+
+
 def _form_dated_attempt_batches(course, assign_reviews, summary):
     projects = CourseProject.objects.filter(
         course=course,
@@ -20,24 +50,9 @@ def _form_dated_attempt_batches(course, assign_reviews, summary):
         submission_due_at__lte=timezone.now(),
     ).exclude(cohort__mode='self_paced')
     for project in projects:
-        waiting = ProjectSubmission.objects.filter(
-            course=course,
-            course_project=project,
-            status='submitted',
-        ).order_by('pk')
-        if project.cohort_id:
-            waiting = waiting.filter(cohort_id=project.cohort_id)
-        formed = False
-        for cohort_id in waiting.values_list('cohort_id', flat=True).distinct():
-            submissions = list(waiting.filter(cohort_id=cohort_id))
-            if len(submissions) >= 2:
-                _add(summary, submissions, assign_reviews(
-                    course, submissions, project=project,
-                ))
-                formed = True
-        if formed:
-            project.state = ProjectState.PEER_REVIEWING
-            project.save(update_fields=['state'])
+        result = form_dated_project_batch(course, project, assign_reviews)
+        summary['batched'] += result['batched']
+        summary['reviews_assigned'] += result['reviews_assigned']
 
 
 def _form_legacy_cohort_batches(course, assign_reviews, summary):

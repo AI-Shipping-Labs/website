@@ -274,8 +274,14 @@ class MemberOpenApiViewTest(TestCase):
             HTTP_AUTHORIZATION=f"Token {self.staff_token.key}",
         )
 
-        self.assertEqual(member_response.status_code, 200)
-        self.assertEqual(operator_response.status_code, 200)
+        self.assertEqual(
+            member_response.json()["info"]["title"],
+            "AI Shipping Labs Member API",
+        )
+        self.assertEqual(
+            operator_response.json()["info"]["title"],
+            "AI Shipping Labs Member API",
+        )
 
 
 @tag("core")

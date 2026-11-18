@@ -1483,7 +1483,6 @@ DIRECT_STATUS_200_ASSERTION_LIVE_IDS: tuple[str, ...] = (
     "member_api/tests/test_books_profile_api.py::MemberReaderProfileApiTest.test_get_missing_row_reports_public::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "member_api/tests/test_books_profile_api.py::MemberReaderProfileApiTest.test_put_never_accepts_a_user_parameter::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "member_api/tests/test_books_profile_api.py::MemberReaderProfileApiTest.test_put_sets_visibility::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
-    "member_api/tests/test_openapi.py::MemberOpenApiViewTest.test_member_key_gets_spec_but_operator_token_does_not::literal-status-200-assertion::ac49f8b5ae2613dca4e75cfaecad6502705f08ad1a7416a62426d485b9a9b19e::1",
     "member_api/tests/test_openapi.py::MemberOpenApiViewTest.test_member_session_gets_docs_and_spec::literal-status-200-assertion::49b714aab5593695defd60c6ff0d489629a1eff016cc2600c1d09e37d11bc01c::1",
     "member_api/tests/test_openapi.py::MemberOpenApiViewTest.test_member_session_gets_docs_and_spec::literal-status-200-assertion::9298594577112818bf0052f24fc9bf1e4e9887c7a83fb69cab965e7d4ba16b5f::1",
     "member_api/tests/test_plans_api.py::MemberPlansApiProgressTest.test_progress_updates_owned_items_atomically::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",

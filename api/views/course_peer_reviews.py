@@ -7,7 +7,7 @@
 - ``POST /api/courses/<slug>/peer-reviews/assignments`` -- create round-robin
   peer review assignments (same behavior as Studio's "Create review
   assignments" button: sets state to ``Peer reviewing``, sends on-site
-  notifications only, no email, idempotent).
+  notifications and ``coursework.review_assigned`` emails, idempotent).
 """
 
 from django.db.models import Count, Q
@@ -247,9 +247,9 @@ def course_peer_reviews(request, slug):
                 "Same behavior as Studio's 'Create review assignments' button: "
                 "forms round-robin review assignments for waiting submissions, "
                 "moves eligible dated project attempts to 'Peer reviewing', and "
-                "sends on-site notifications only (no email). Idempotent: running "
-                "twice creates no duplicate assignments. Optionally scope to one "
-                "``cohort`` (external key) and/or ``project`` (slug)."
+                "sends on-site notifications and coursework.review_assigned emails. "
+                "Idempotent: running twice creates no duplicate assignments or emails. "
+                "Optionally scope to one ``cohort`` (external key) and/or ``project`` (slug)."
             ),
             "request_body": {
                 "properties": {

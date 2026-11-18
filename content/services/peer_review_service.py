@@ -18,7 +18,10 @@ from content.services.peer_review_batches import (
     form_dated_project_batch,
     form_self_paced_project_batches,
 )
-from content.services.peer_review_notifications import notify_reviews_complete
+from content.services.peer_review_notifications import (
+    notify_batch_ready,
+    notify_reviews_complete,
+)
 from content.services.project_criteria import settle_completion
 
 logger = logging.getLogger(__name__)
@@ -121,32 +124,14 @@ class PeerReviewService:
 
     @staticmethod
     def _notify_batch_ready(course, submissions, deadline, project=None):
-        """Send on-platform notifications when a batch is formed."""
-        try:
-            from notifications.models import Notification
-
-            for submission in submissions:
-                review_count = PeerReview.objects.filter(
-                    reviewer=submission.user,
-                    submission__course=course,
-                    submission__course_project=project,
-                    is_complete=False,
-                ).count()
-
-                Notification.objects.create(
-                    user=submission.user,
-                    title=f'Peer reviews ready: {course.title}',
-                    body=PeerReviewService._batch_ready_body(
-                        review_count, deadline,
-                    ),
-                    url=(
-                        f'/courses/{course.slug}/projects/{project.slug}/reviews'
-                        if project else f'/courses/{course.slug}/reviews'
-                    ),
-                    notification_type='new_content',
-                )
-        except Exception:
-            logger.exception('Failed to send batch ready notifications')
+        """Send on-platform notifications and emails when a batch is formed."""
+        notify_batch_ready(
+            course,
+            submissions,
+            deadline,
+            PeerReviewService._batch_ready_body,
+            project=project,
+        )
 
     @staticmethod
     def _batch_ready_body(review_count, deadline):

@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.test import TestCase
@@ -148,6 +149,13 @@ class CoursePeerReviewApiTest(TestCase):
         self.assertEqual(body_1["projects"][0]["assignments_count"], 8)
         self.assertEqual(len(mail.outbox), 0)
         self.assertEqual(
+            EmailDelivery.objects.filter(
+                purpose="coursework.review_assigned",
+                recipient_user__in=self.students,
+            ).count(),
+            4,
+        )
+        self.assertEqual(
             Notification.objects.filter(user__in=self.students).count(),
             4,
         )
@@ -180,6 +188,13 @@ class CoursePeerReviewApiTest(TestCase):
         self.assertEqual(PeerReview.objects.filter(submission__course_project=self.project).count(), 8)
         self.assertEqual(
             Notification.objects.filter(user__in=self.students).count(),
+            4,
+        )
+        self.assertEqual(
+            EmailDelivery.objects.filter(
+                purpose="coursework.review_assigned",
+                recipient_user__in=self.students,
+            ).count(),
             4,
         )
         self.assertEqual(len(mail.outbox), 0)

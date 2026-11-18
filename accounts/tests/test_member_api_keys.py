@@ -16,9 +16,12 @@ from accounts.models import (
 
 
 def _ok_view(request):
+    key_obj = getattr(request, "member_api_key", None) or getattr(
+        request, "auth_token", None,
+    )
     return JsonResponse({
         "user": request.user.email,
-        "key": request.member_api_key.name,
+        "key": key_obj.name,
     })
 
 
@@ -46,6 +49,8 @@ class MemberAPIKeyModelTest(TestCase):
                 "books:write_progress",
                 "events:read",
                 "events:register",
+                "peer_reviews:read",
+                "peer_reviews:write",
                 "plans:read",
                 "plans:write",
                 "plans:write_progress",
@@ -387,7 +392,7 @@ class MemberAPIKeyAuthHelperTest(TestCase):
         )
         self.assertFalse(hasattr(request, "member_api_key"))
 
-    def test_operator_token_is_never_accepted_by_member_helper(self):
+    def test_staff_operator_token_is_accepted_by_member_helper(self):
         staff = User.objects.create_user(
             email="staff-member-helper@test.com",
             is_staff=True,
@@ -400,8 +405,37 @@ class MemberAPIKeyAuthHelperTest(TestCase):
 
         response = self.view(request)
 
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.user, staff)
+        self.assertEqual(request.auth_token, token)
+        self.assertEqual(
+            request.member_api_scopes,
+            set(MemberAPIKey.SUPPORTED_SCOPES),
+        )
         self.assertFalse(hasattr(request, "member_api_key"))
+
+    def test_non_staff_operator_token_is_rejected_by_member_helper(self):
+        non_staff = User.objects.create_user(
+            email="nonstaff-member-helper@test.com",
+            is_staff=True,
+        )
+        token = Token.objects.create(user=non_staff, name="non-staff")
+        User.objects.filter(pk=non_staff.pk).update(is_staff=False)
+        request = self.factory.get(
+            "/member-api/plans",
+            HTTP_AUTHORIZATION=f"Token {token.key}",
+        )
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertJSONEqual(
+            response.content,
+            {
+                "error": "Invalid member API key",
+                "code": "invalid_member_api_key",
+            },
+        )
 
     def test_key_without_the_route_scope_is_refused_and_not_marked_used(self):
         user = User.objects.create_user(email="narrow-member-key@test.com")

@@ -190,21 +190,43 @@ def staff_session_or_token_required(view_func):
     return wrapper
 
 
+def _authenticate_member_or_staff(request, raw_key, required_scopes):
+    """Authenticate a MemberAPIKey or a staff operator Token for member APIs."""
+    member_key = MemberAPIKey.authenticate(raw_key)
+    if member_key is not None and is_authenticated_user(member_key.user):
+        missing = member_key.missing_scopes(required_scopes)
+        if missing:
+            return _json_auth_error(
+                "Member API key is missing the required scope",
+                "insufficient_scope",
+                details={"required_scope": missing[0]},
+            )
+        member_key.mark_used(request)
+        request.user = member_key.user
+        request.member_api_key = member_key
+        request.member_api_scopes = set(member_key.scopes or [])
+        return None
+
+    token = Token.authenticate(raw_key)
+    if token is not None and is_staff_user(token.user):
+        _authenticate_request(request, token)
+        request.member_api_scopes = set(MemberAPIKey.SUPPORTED_SCOPES)
+        return None
+
+    return _json_auth_error(
+        "Invalid member API key",
+        "invalid_member_api_key",
+    )
+
+
 def member_api_key_required(*required_scopes):
-    """Require a member API key that carries every scope in ``required_scopes``.
+    """Require a valid MemberAPIKey (with scopes) or a staff operator Token.
 
-    This helper intentionally does not consult ``accounts.Token``. Staff
-    operator tokens therefore cannot authenticate against member API routes,
-    and member keys cannot authenticate against the existing staff ``/api/``
-    routes because those keep using ``token_required``.
-
-    A key's stored scope list is its permission grant, so a key that does not
-    carry the route's scopes is rejected with ``insufficient_scope`` rather
-    than the ``invalid_member_api_key`` shape: the credential is genuine and
-    the caller needs to know the difference between a bad key and a key that
-    was issued for less. ``request.member_api_scopes`` carries the key's own
-    scopes so the per-method guards in ``member_api.views`` decide the same
-    way for routes whose read and write scopes diverge.
+    Member keys are scoped: a key that does not carry ``required_scopes`` is
+    rejected with ``insufficient_scope``. Staff operator tokens
+    (``accounts.Token`` owned by a staff user) are also accepted and granted
+    all member API scopes so admins can use their admin API key against user
+    API endpoints. Member keys still cannot access staff ``/api/`` routes.
     """
 
     def decorator(view_func):
@@ -218,28 +240,11 @@ def member_api_key_required(*required_scopes):
                     "member_api_key_required",
                 )
 
-            member_key = MemberAPIKey.authenticate(parts[1].strip())
-            if (
-                member_key is None
-                or not is_authenticated_user(member_key.user)
-            ):
-                return _json_auth_error(
-                    "Invalid member API key",
-                    "invalid_member_api_key",
-                )
-
-            missing = member_key.missing_scopes(required_scopes)
-            if missing:
-                return _json_auth_error(
-                    "Member API key is missing the required scope",
-                    "insufficient_scope",
-                    details={"required_scope": missing[0]},
-                )
-
-            member_key.mark_used(request)
-            request.user = member_key.user
-            request.member_api_key = member_key
-            request.member_api_scopes = set(member_key.scopes or [])
+            error = _authenticate_member_or_staff(
+                request, parts[1].strip(), required_scopes,
+            )
+            if error is not None:
+                return error
             return view_func(request, *args, **kwargs)
 
         return wrapper

@@ -139,7 +139,7 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
             {},
             {"HTTP_AUTHORIZATION": "Bearer malformed"},
             self._auth(revoked),
-            self._auth(self.operator_token.key),
+            self._auth("invalid-token-value"),
         ]
         self.client.force_login(self.member)
         for headers in credentials:

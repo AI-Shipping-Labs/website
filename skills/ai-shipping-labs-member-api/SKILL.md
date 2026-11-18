@@ -17,6 +17,7 @@ Pick the family that matches the task and read its reference doc:
 | Plans | List, fetch, download, and edit the member's own sprint plans — weeks, checkpoints, deliverables, next steps, resources, week notes, and progress. | [`plans.md`](plans.md) |
 | Book Club | Read and update the member's own Book Club activity — per-chapter read state, per-chapter notes (markdown), reading progress for a book, and the reader profile. | [`books.md`](books.md) |
 | Events | Discover accessible events, fetch event detail, and register the key owner for one session or a whole series. | [`events.md`](events.md) |
+| Peer Reviews | List assigned project peer reviews, inspect submission details and evaluation criteria, save drafts, and submit or update reviews. | [`peer-reviews.md`](peer-reviews.md) |
 
 Everything below is shared by every family.
 

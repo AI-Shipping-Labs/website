@@ -1569,6 +1569,126 @@
         ]
       }
     },
+    "/member-api/v1/peer-reviews": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Paginated list of assigned peer reviews."
+          },
+          "401": {
+            "description": "Error response."
+          },
+          "422": {
+            "description": "Error response."
+          }
+        },
+        "summary": "List peer reviews assigned to the authenticated member",
+        "tags": [
+          "Peer Reviews"
+        ]
+      }
+    },
+    "/member-api/v1/peer-reviews/{review_id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Peer review detail with evaluation criteria."
+          },
+          "401": {
+            "description": "Error response."
+          },
+          "404": {
+            "description": "Error response."
+          }
+        },
+        "summary": "Get an assigned peer review, submission details, and criteria",
+        "tags": [
+          "Peer Reviews"
+        ]
+      },
+      "patch": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated peer review detail."
+          },
+          "400": {
+            "description": "Error response."
+          },
+          "401": {
+            "description": "Error response."
+          },
+          "404": {
+            "description": "Error response."
+          },
+          "409": {
+            "description": "Error response."
+          },
+          "422": {
+            "description": "Error response."
+          }
+        },
+        "summary": "Submit or partially update an assigned peer review",
+        "tags": [
+          "Peer Reviews"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated peer review detail."
+          },
+          "400": {
+            "description": "Error response."
+          },
+          "401": {
+            "description": "Error response."
+          },
+          "404": {
+            "description": "Error response."
+          },
+          "409": {
+            "description": "Error response."
+          },
+          "422": {
+            "description": "Error response."
+          }
+        },
+        "summary": "Submit or replace an assigned peer review",
+        "tags": [
+          "Peer Reviews"
+        ]
+      }
+    },
     "/member-api/v1/plans": {
       "get": {
         "description": "Lists plans owned by the authenticated member API key owner, newest first. Never returns other members' plans. Paginated with ``page`` (default 1) and a fixed page size of 20.",

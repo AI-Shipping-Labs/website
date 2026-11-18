@@ -38,6 +38,11 @@ class MemberOpenApiSpecTest(TestCase):
         self.assertIn("member-owned", document["info"]["description"].lower())
         self.assertIn("/member-api/v1/plans", document["paths"])
         self.assertIn("/member-api/v1/events", document["paths"])
+        self.assertIn("/member-api/v1/peer-reviews", document["paths"])
+        self.assertIn(
+            "/member-api/v1/peer-reviews/{review_id}",
+            document["paths"],
+        )
         self.assertIn("/member-api/v1/events/{event_id}", document["paths"])
         self.assertIn(
             "/member-api/v1/events/{event_id}/register",
@@ -259,7 +264,7 @@ class MemberOpenApiViewTest(TestCase):
             "docs/member-api/plans.md",
         )
 
-    def test_member_key_gets_spec_but_operator_token_does_not(self):
+    def test_member_key_and_staff_operator_token_both_get_spec(self):
         member_response = self.client.get(
             "/member-api/openapi.json",
             HTTP_AUTHORIZATION=f"Token {self.plaintext}",
@@ -270,8 +275,7 @@ class MemberOpenApiViewTest(TestCase):
         )
 
         self.assertEqual(member_response.status_code, 200)
-        self.assertEqual(operator_response.status_code, 401)
-        self.assertEqual(operator_response.json()["code"], "invalid_member_api_key")
+        self.assertEqual(operator_response.status_code, 200)
 
 
 @tag("core")

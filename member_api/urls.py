@@ -10,6 +10,10 @@ from member_api.views.books import (
 )
 from member_api.views.docs import docs_page, openapi_json
 from member_api.views.events import event_detail, event_register, events_collection
+from member_api.views.peer_reviews import (
+    peer_review_detail,
+    peer_reviews_collection,
+)
 from member_api.views.plans import (
     checkpoint_collection,
     checkpoint_detail,
@@ -128,5 +132,15 @@ urlpatterns = [
         "v1/books/<slug:slug>/chapters/<int:number>/note",
         book_chapter_note,
         name="member_api_book_chapter_note",
+    ),
+    path(
+        "v1/peer-reviews",
+        peer_reviews_collection,
+        name="member_api_peer_reviews_collection",
+    ),
+    path(
+        "v1/peer-reviews/<int:review_id>",
+        peer_review_detail,
+        name="member_api_peer_review_detail",
     ),
 ]

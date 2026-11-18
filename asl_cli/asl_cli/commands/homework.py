@@ -263,4 +263,70 @@ def homework_submit_project(
     emit(get_client().post(f"{API}/submissions/on-behalf", json_body=body), fmt)
 
 
+HOMEWORK_STATES = ("open", "closed", "scored", "OP", "CL", "SC")
+PROJECT_STATES = (
+    "closed", "collecting_submissions", "peer_reviewing", "completed",
+    "CL", "CS", "PR", "CO",
+)
+
+
+def _patch_state(path, state, fmt):
+    emit(get_client().patch(path, json_body={"state": state}), fmt)
+
+
+@homework.command("set-state")
+@click.argument("course")
+@click.argument("homework_id", type=int)
+@click.argument("state", metavar="STATE", type=click.Choice(HOMEWORK_STATES, case_sensitive=False))
+@format_option
+def homework_set_state(course, homework_id, state, fmt):
+    """Set a homework's STATE: open, closed or scored (staff-only).
+
+    HOMEWORK_ID comes from `asl homework list COURSE`. Applied as is, like
+    CMP: no scoring and no emails. Reopen (open) a closed homework before
+    scoring it.
+    """
+    _patch_state(f"{API}/courses/{course}/homework/{homework_id}", state, fmt)
+
+
+@homework.command("close")
+@click.argument("course")
+@click.argument("homework_id", type=int)
+@format_option
+def homework_close(course, homework_id, fmt):
+    """Close a homework to new submissions (staff-only).
+
+    Same as `asl homework set-state COURSE HOMEWORK_ID closed`.
+    """
+    _patch_state(f"{API}/courses/{course}/homework/{homework_id}", "closed", fmt)
+
+
+@homework.command("set-project-state")
+@click.argument("course")
+@click.argument("project_id", type=int)
+@click.argument("state", metavar="STATE", type=click.Choice(PROJECT_STATES, case_sensitive=False))
+@format_option
+def homework_set_project_state(course, project_id, state, fmt):
+    """Set a project (capstone) attempt's STATE (staff-only).
+
+    PROJECT_ID comes from `asl sprints course-peer-reviews COURSE`. Only a
+    peer-reviewing project can be completed; self-paced attempts have no
+    state. Sends nothing: use `asl sprints course-peer-review-assign` to start
+    peer review with assignments and emails.
+    """
+    _patch_state(f"{API}/courses/{course}/projects/{project_id}", state, fmt)
+
+
+@homework.command("close-project")
+@click.argument("course")
+@click.argument("project_id", type=int)
+@format_option
+def homework_close_project(course, project_id, fmt):
+    """Close a project (capstone) attempt (staff-only).
+
+    Same as `asl homework set-project-state COURSE PROJECT_ID closed`.
+    """
+    _patch_state(f"{API}/courses/{course}/projects/{project_id}", "closed", fmt)
+
+
 groups = [homework]

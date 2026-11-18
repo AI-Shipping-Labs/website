@@ -6496,6 +6496,141 @@
         ]
       }
     },
+    "/api/courses/{slug}/homework/{homework_id}": {
+      "get": {
+        "description": "Read one homework of the course with its state.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "homework_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accepting_submissions": false,
+                  "cohort": "4",
+                  "course": "ai-buildcamp",
+                  "due_date": "2026-11-16T22:59:00+00:00",
+                  "id": 7,
+                  "slug": "week-2-homework",
+                  "state": "CL",
+                  "state_label": "Closed",
+                  "title": "Week 2 homework"
+                }
+              }
+            },
+            "description": "Homework."
+          },
+          "404": {
+            "description": "``unknown_course`` or ``unknown_homework``."
+          }
+        },
+        "summary": "Get a homework's state (staff-only)",
+        "tags": [
+          "Course Homework"
+        ]
+      },
+      "patch": {
+        "description": "Set ``state`` to ``CL`` (closed: stops new submissions), ``OP`` (open) or ``SC`` (scored). Names (``closed``, ``open``, ``scored``) work too. CMP parity: the value is applied as is, with no transition table and no side effects (no scoring, no emails). Setting the current state is a no-op with ``changed: false``. Homework ids come from ``GET /api/courses/<slug>/homework``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "homework_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "state": {
+                    "description": "New state: a code or a name, case-insensitive.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "accepting_submissions": false,
+                  "changed": true,
+                  "cohort": "4",
+                  "course": "ai-buildcamp",
+                  "due_date": "2026-11-16T22:59:00+00:00",
+                  "id": 7,
+                  "previous_state": "OP",
+                  "slug": "week-2-homework",
+                  "state": "CL",
+                  "state_label": "Closed",
+                  "title": "Week 2 homework"
+                }
+              }
+            },
+            "description": "Updated homework."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_homework_state",
+                  "error": "Invalid state 'done'. Must be one of: ['CL', 'OP', 'SC']",
+                  "valid_states": [
+                    "CL",
+                    "OP",
+                    "SC"
+                  ]
+                }
+              }
+            },
+            "description": "``invalid_homework_state`` (with ``valid_states``) or ``missing_state``."
+          },
+          "404": {
+            "description": "``unknown_course`` or ``unknown_homework``."
+          }
+        },
+        "summary": "Set a homework's state (staff-only)",
+        "tags": [
+          "Course Homework"
+        ]
+      }
+    },
     "/api/courses/{slug}/instructors": {
       "get": {
         "parameters": [
@@ -6789,6 +6924,141 @@
           }
         },
         "summary": "Create peer review assignments (staff-only)",
+        "tags": [
+          "Course Peer Reviews"
+        ]
+      }
+    },
+    "/api/courses/{slug}/projects/{project_id}": {
+      "get": {
+        "description": "Read one project (capstone) attempt of the course with its state.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort": "4",
+                  "course": "ai-buildcamp",
+                  "id": 45,
+                  "review_due_at": "2026-11-23T22:59:00+00:00",
+                  "self_paced": false,
+                  "slug": "attempt-1",
+                  "state": "CL",
+                  "state_label": "Closed",
+                  "submission_due_at": "2026-11-16T22:59:00+00:00",
+                  "title": "Project Attempt 1"
+                }
+              }
+            },
+            "description": "Project attempt."
+          },
+          "404": {
+            "description": "``unknown_course`` or ``unknown_project``."
+          }
+        },
+        "summary": "Get a project attempt's state (staff-only)",
+        "tags": [
+          "Course Peer Reviews"
+        ]
+      },
+      "patch": {
+        "description": "Set ``state`` to ``CL`` (closed), ``CS`` (collecting submissions), ``PR`` (peer reviewing) or ``CO`` (completed). Names (``closed``, ``collecting_submissions``, ...) work too. Only a project in ``PR`` can be completed, and self-paced attempts have no state (both ``409 invalid_transition``). Changing the state sends nothing; use ``POST /api/courses/<slug>/peer-reviews/assignments`` to start peer review with assignments and emails. Project ids come from ``GET /api/courses/<slug>/peer-reviews``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "state": {
+                    "description": "New state: a code or a name, case-insensitive.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "changed": true,
+                  "cohort": "4",
+                  "course": "ai-buildcamp",
+                  "id": 45,
+                  "previous_state": "CS",
+                  "review_due_at": "2026-11-23T22:59:00+00:00",
+                  "self_paced": false,
+                  "slug": "attempt-1",
+                  "state": "CL",
+                  "state_label": "Closed",
+                  "submission_due_at": "2026-11-16T22:59:00+00:00",
+                  "title": "Project Attempt 1"
+                }
+              }
+            },
+            "description": "Updated project attempt."
+          },
+          "400": {
+            "description": "``invalid_project_state`` (with ``valid_states``) or ``missing_state``."
+          },
+          "404": {
+            "description": "``unknown_course`` or ``unknown_project``."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_transition",
+                  "error": "Only a project in Peer reviewing can be completed (it is Closed)."
+                }
+              }
+            },
+            "description": "``invalid_transition``."
+          }
+        },
+        "summary": "Set a project attempt's state (staff-only)",
         "tags": [
           "Course Peer Reviews"
         ]

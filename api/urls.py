@@ -106,6 +106,7 @@ from api.views.course_cohorts import (
     course_cohorts_collection,
 )
 from api.views.course_coursework_inventory import course_coursework_inventory
+from api.views.course_coursework_state import course_homework_detail, course_project_detail
 from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
@@ -1050,6 +1051,16 @@ urlpatterns = [
         "courses/<slug:slug>/homework",
         course_homework_list,
         name="api_course_homework_list",
+    ),
+    path(
+        "courses/<slug:slug>/homework/<int:homework_id>",
+        course_homework_detail,
+        name="api_course_homework_detail",
+    ),
+    path(
+        "courses/<slug:slug>/projects/<int:project_id>",
+        course_project_detail,
+        name="api_course_project_detail",
     ),
     path(
         "submissions/on-behalf",

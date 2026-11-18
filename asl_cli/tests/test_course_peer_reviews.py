@@ -67,3 +67,10 @@ def test_course_peer_review_assign_without_scope_posts_empty_body(client):
         "POST", "/api/courses/ai-buildcamp/peer-reviews/assignments",
         {"json_body": {}},
     )]
+
+def test_course_peer_review_assign_help_mentions_emails():
+    result = CliRunner().invoke(
+        cli, ["sprints", "course-peer-review-assign", "--help"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "review-assigned emails" in " ".join(result.output.split())

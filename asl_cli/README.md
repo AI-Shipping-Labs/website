@@ -394,7 +394,7 @@ Read back peer-review state (course numeric `course_id`, project state,
 submission counts, assignment counts, completed reviews, and deadline) and
 create round-robin peer review assignments (same behavior as Studio's "Create
 review assignments" button: moves eligible dated attempts to `Peer reviewing`,
-sends on-site notifications only with no email, and is idempotent).
+sends on-site notifications and one `coursework.review_assigned` email per reviewer-submission pair, and is idempotent).
 
 ```bash
 uv run asl sprints course-peer-reviews ai-buildcamp --cohort 4 --project attempt-1

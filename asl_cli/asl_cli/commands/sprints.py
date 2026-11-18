@@ -240,7 +240,7 @@ def sprints_course_peer_reviews(slug, cohort, project, fmt):
 @click.option("--project", default=None, help="Optional project attempt slug (e.g. attempt-1).")
 @format_option
 def sprints_course_peer_review_assign(slug, cohort, project, fmt):
-    """Create round-robin peer review assignments (staff-only, idempotent, no email)."""
+    """Create peer review assignments and send review-assigned emails (idempotent)."""
     body = {}
     if cohort:
         body["cohort"] = cohort

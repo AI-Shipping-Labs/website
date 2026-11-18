@@ -464,15 +464,14 @@ class MemberPlansApiProgressTest(MemberPlansApiTestBase):
 
 @tag("core")
 class MemberPlansApiAuthTest(MemberPlansApiTestBase):
-    def test_operator_token_and_browser_session_do_not_use_member_api(self):
+    def test_staff_operator_token_uses_member_api_and_browser_session_does_not(self):
         plan = self._create_plan(self.member)
 
         operator = self.client.get(
             "/member-api/v1/plans",
             HTTP_AUTHORIZATION=f"Token {self.staff_token.key}",
         )
-        self.assertEqual(operator.status_code, 401)
-        self.assertEqual(operator.json()["code"], "invalid_member_api_key")
+        self.assertEqual(operator.status_code, 200)
 
         self.client.force_login(self.member)
         session_response = self.client.get(f"/member-api/v1/plans/{plan.id}")

@@ -32,6 +32,7 @@ from accounts.auth import token_required
 from api.actors import actor_label
 from api.openapi import openapi_spec
 from api.safety import error_response
+from api.serializers.datetime import isoformat_or_none
 from api.utils import body_must_be_object_response, parse_json_body, require_methods
 from content.models import Course, CourseProject, Homework
 from content.models.peer_review import ProjectState
@@ -67,10 +68,6 @@ _PROJECT_EXAMPLE = {
 }
 
 
-def _iso(value):
-    return value.isoformat() if value else None
-
-
 def _serialize_homework(course, homework):
     return {
         "id": homework.pk,
@@ -80,7 +77,7 @@ def _serialize_homework(course, homework):
         "cohort": homework.cohort.external_key or None,
         "state": homework.state,
         "state_label": homework.get_state_display(),
-        "due_date": _iso(homework.due_date),
+        "due_date": isoformat_or_none(homework.due_date),
         "accepting_submissions": homework.is_accepting_submissions,
     }
 
@@ -95,8 +92,8 @@ def _serialize_project(course, project):
         "self_paced": project.is_self_paced,
         "state": project.state,
         "state_label": project.get_state_display(),
-        "submission_due_at": _iso(project.submission_due_at),
-        "review_due_at": _iso(project.review_due_at),
+        "submission_due_at": isoformat_or_none(project.submission_due_at),
+        "review_due_at": isoformat_or_none(project.review_due_at),
     }
 
 

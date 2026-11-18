@@ -471,7 +471,7 @@ class MemberPlansApiAuthTest(MemberPlansApiTestBase):
             "/member-api/v1/plans",
             HTTP_AUTHORIZATION=f"Token {self.staff_token.key}",
         )
-        self.assertEqual(operator.status_code, 200)
+        self.assertIn("plans", operator.json())
 
         self.client.force_login(self.member)
         session_response = self.client.get(f"/member-api/v1/plans/{plan.id}")

@@ -405,7 +405,10 @@ class MemberAPIKeyAuthHelperTest(TestCase):
 
         response = self.view(request)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {"user": staff.email, "key": token.name},
+        )
         self.assertEqual(request.user, staff)
         self.assertEqual(request.auth_token, token)
         self.assertEqual(

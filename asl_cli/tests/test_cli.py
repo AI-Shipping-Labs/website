@@ -564,7 +564,12 @@ def test_events_notify_recap_send_fails_on_target_mismatch_and_failures(monkeypa
     client = RecordingEventsClient()
     client.post_results = [
         {"event": {"id": 59}, "failed": 0},
-        {"event": {"id": 58}, "emailed": 1, "failed": 1},
+        {
+            "event": {"id": 58},
+            "emailed": 0,
+            "failed": 2,
+            "email_error": "RelayCampaignApiError: HTTP 404",
+        },
     ]
     monkeypatch.setattr(events_module, "get_client", lambda: client)
 
@@ -574,6 +579,7 @@ def test_events_notify_recap_send_fails_on_target_mismatch_and_failures(monkeypa
     assert mismatch.exit_code != 0
     assert "target verification failed" in mismatch.output
     assert partial.exit_code == 1
+    assert "RelayCampaignApiError: HTTP 404" in partial.output
     assert client.calls[-1] == ("POST", "/api/events/58/notify-recap", None)
 
 

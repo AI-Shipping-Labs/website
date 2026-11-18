@@ -335,6 +335,9 @@ def events_notify_recap_ready(slug, fmt):
         )
     emit(result, fmt)
     if result.get("failed", 0):
+        error_detail = result.get("email_error") or result.get("in_app_error")
+        if error_detail:
+            click.echo(f"Error: {error_detail}", err=True)
         raise click.exceptions.Exit(1)
 
 
@@ -362,6 +365,9 @@ def events_notify_recap(event_id, dry_run, fmt):
         raise click.ClickException("Recap notification target verification failed.")
     emit(result, fmt)
     if result.get("failed", 0):
+        error_detail = result.get("email_error") or result.get("in_app_error")
+        if error_detail:
+            click.echo(f"Error: {error_detail}", err=True)
         raise click.exceptions.Exit(1)
 
 

@@ -30,6 +30,7 @@ from django.db import IntegrityError, transaction
 
 from email_app.models import EmailLog
 from email_app.relay_transactional import recipient_template_context
+from email_app.services.relay_campaign_alerts import alert_event_notice_failure
 from email_app.services.relay_templates import relay_template_subject
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
@@ -71,6 +72,14 @@ class EventRecapNotReady(ValueError):
 class DeliveryState:
     status: str
     identifier: int | None = None
+    error: str = ""
+
+
+def _format_exc(exc):
+    detail = str(exc).strip()
+    if detail:
+        return f"{type(exc).__name__}: {detail}"
+    return type(exc).__name__
 
 
 def _not_ready(reason, message):
@@ -386,14 +395,23 @@ def _submit_email_campaign(event, users, recap_url):
             metadata={"event_id": event.pk, "email_type": EMAIL_TYPE},
         )
     except Exception as exc:
+        error_text = _format_exc(exc)
         logger.warning(
-            "event_recap_ready_campaign_failed event_id=%s recipients=%s error=%s",
+            "event_recap_ready_campaign_failed event_id=%s recipients=%s external_key=%s error=%s",
             event.pk,
             len(users),
-            exc.__class__.__name__,
+            external_key,
+            error_text,
             exc_info=True,
         )
-        return {user.pk: DeliveryState("failed") for user in users}
+        alert_event_notice_failure(
+            event,
+            "recap email campaign",
+            exc,
+            external_key=external_key,
+            recipient_count=len(users),
+        )
+        return {user.pk: DeliveryState("failed", error=error_text) for user in users}
 
     states = {}
     for user in users:
@@ -472,14 +490,15 @@ def _deliver_in_app(event, user_id, recap_url):
             )
         raise
     except Exception as exc:
+        error_text = _format_exc(exc)
         logger.warning(
             "event_recap_ready_in_app_failed event_id=%s user_id=%s error=%s",
             event.pk,
             user_id,
-            exc.__class__.__name__,
+            error_text,
             exc_info=True,
         )
-        return DeliveryState("failed")
+        return DeliveryState("failed", error=error_text)
     return DeliveryState("sent", notification.pk)
 
 
@@ -493,22 +512,36 @@ def _recipient_result(event, member, recap_url, email_state):
     result["email_status"] = email_state.status
     if email_state.identifier is not None:
         result["email_log_id"] = email_state.identifier
+    if email_state.error:
+        result["email_error"] = email_state.error
 
     try:
         in_app_state = _deliver_in_app(event, user_id, recap_url)
     except Exception as exc:  # noqa: BLE001 - continue with other recipients
+        error_text = _format_exc(exc)
         logger.warning(
             "event_recap_ready_in_app_unhandled event_id=%s user_id=%s error=%s",
             event.pk,
             user_id,
-            exc.__class__.__name__,
+            error_text,
             exc_info=True,
         )
-        in_app_state = DeliveryState("failed")
+        in_app_state = DeliveryState("failed", error=error_text)
     result["in_app_status"] = in_app_state.status
     if in_app_state.identifier is not None:
         result["notification_id"] = in_app_state.identifier
+    if in_app_state.error:
+        result["in_app_error"] = in_app_state.error
     return result
+
+
+def _distinct_errors(results, key):
+    seen = []
+    for item in results:
+        err = item.get(key)
+        if err and err not in seen:
+            seen.append(err)
+    return "; ".join(seen)
 
 
 def _build_summary(event, recap_url, results, *, actor=None):
@@ -560,6 +593,12 @@ def _build_summary(event, recap_url, results, *, actor=None):
         "by_reason": _reason_counts(item["reasons"] for item in results),
         "results": results,
     }
+    email_error = _distinct_errors(results, "email_error")
+    if email_error:
+        summary["email_error"] = email_error
+    in_app_error = _distinct_errors(results, "in_app_error")
+    if in_app_error:
+        summary["in_app_error"] = in_app_error
     logger.info(
         "event_recap_ready_invocation actor_user_id=%s event_id=%s "
         "eligible=%s emailed=%s notified=%s already_sent=%s "
@@ -597,14 +636,15 @@ def notify_recap_ready(event, *, actor=None):
                     locked_event, member.user.pk, member.signed_up,
                 )
             except Exception as exc:  # noqa: BLE001 - one recipient cannot abort the batch
+                error_text = _format_exc(exc)
                 logger.warning(
                     "event_recap_ready_email_unhandled event_id=%s user_id=%s error=%s",
                     locked_event.pk,
                     member.user.pk,
-                    exc.__class__.__name__,
+                    error_text,
                     exc_info=True,
                 )
-                state, user = DeliveryState("failed"), None
+                state, user = DeliveryState("failed", error=error_text), None
             if state is None:
                 pending.append(user)
             else:

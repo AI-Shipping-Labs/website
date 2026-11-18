@@ -13,8 +13,10 @@ from django.test import TestCase
 from email_app.models import EmailCampaign
 from email_app.services.relay_campaign_alerts import (
     RELAY_ALERT_CACHE_ALIAS,
+    alert_event_notice_failure,
     alert_relay_campaign_failure,
 )
+from events.models import Event
 from notifications.services.staff_slack import SlackPostResult
 
 
@@ -228,3 +230,46 @@ class RelayCampaignAlertTest(TestCase):
             mock_caches.__getitem__.side_effect = RuntimeError("cache down")
             self.assertTrue(self._alert())
         self.assertEqual(mock_post.call_count, 1)
+
+    def test_alert_event_notice_failure_posts_to_staff_slack_with_details(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        now = timezone.now()
+        event = Event.objects.create(
+            title="Event 77",
+            slug="event-77-alert-test",
+            start_datetime=now - timedelta(hours=2),
+            end_datetime=now - timedelta(hours=1),
+            status="completed",
+            published=True,
+        )
+        with (
+            patch(
+                "email_app.services.relay_campaign_alerts.slack_api_enabled",
+                return_value=True,
+            ),
+            patch(
+                "email_app.services.relay_campaign_alerts.staff_alert_channel_id",
+                return_value="C123",
+            ),
+            patch(
+                "email_app.services.relay_campaign_alerts.post_staff_slack_message",
+                return_value=SlackPostResult(ok=True),
+            ) as mock_post,
+        ):
+            ok = alert_event_notice_failure(
+                event,
+                "recap email campaign",
+                RuntimeError("POST /api/campaigns/k/submit returned HTTP 404"),
+                external_key="event-recap-ready-77-abc",
+                recipient_count=59,
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(mock_post.call_count, 1)
+        payload = mock_post.call_args.args[1]
+        self.assertIn("event-recap-ready-77-abc", payload["text"])
+        self.assertIn("59", payload["text"])
+        self.assertIn("HTTP 404", payload["text"])

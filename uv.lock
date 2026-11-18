@@ -57,7 +57,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.105.2" },
     { name = "apispec", specifier = ">=6.6.0" },
     { name = "boto3", specifier = ">=1.42.52" },
-    { name = "community-base", extras = ["django-q"], git = "https://github.com/DataTalksClub/community-base?rev=v0.5.36" },
+    { name = "community-base", extras = ["django-q"], git = "https://github.com/DataTalksClub/community-base?rev=195ebfa13f0ecfa6cb7775946bc23583390bb6ca" },
     { name = "croniter", specifier = ">=6.0.0" },
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "dj-database-url", specifier = ">=3.1.2" },
@@ -160,7 +160,7 @@ wheels = [
 
 [[package]]
 name = "asl-cli"
-version = "0.3.1"
+version = "0.3.2"
 source = { editable = "asl_cli" }
 dependencies = [
     { name = "click" },
@@ -171,7 +171,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
-    { name = "community-base", git = "https://github.com/DataTalksClub/community-base?rev=v0.5.36" },
+    { name = "community-base", git = "https://github.com/DataTalksClub/community-base?rev=195ebfa13f0ecfa6cb7775946bc23583390bb6ca" },
     { name = "httpx", specifier = ">=0.27.0" },
 ]
 
@@ -368,8 +368,8 @@ wheels = [
 
 [[package]]
 name = "community-base"
-version = "0.5.36"
-source = { git = "https://github.com/DataTalksClub/community-base?rev=v0.5.36#582ffcafdc37afeb18644ded40d96efb63d29314" }
+version = "0.5.37"
+source = { git = "https://github.com/DataTalksClub/community-base?rev=195ebfa13f0ecfa6cb7775946bc23583390bb6ca#195ebfa13f0ecfa6cb7775946bc23583390bb6ca" }
 dependencies = [
     { name = "apispec" },
     { name = "cryptography" },

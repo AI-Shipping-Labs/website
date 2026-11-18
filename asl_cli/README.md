@@ -445,6 +445,31 @@ Choice questions take the 1-based option index (`2`, or `1,3` for checkboxes)
 or the exact option text. When the slug exists in several cohorts, the
 member's own cohort is used, otherwise pass `--cohort`.
 
+### Homework and project state: close, set-state
+
+Close a homework to new submissions or set its state, like CMP: `open`,
+`closed` or `scored` (codes `OP`/`CL`/`SC` work too). The value is applied
+as is: no transition rules, no scoring, no emails. Project (capstone) attempts
+take `closed`, `collecting_submissions`, `peer_reviewing` or `completed`. Only
+a peer-reviewing project can be completed, and self-paced attempts have no
+state. To start peer review with assignments and emails, use
+`asl sprints course-peer-review-assign` instead.
+
+```bash
+# Homework ids come from `asl homework list`
+uv run asl homework list ai-buildcamp
+uv run asl homework close ai-buildcamp 7
+uv run asl homework set-state ai-buildcamp 7 open
+
+# Project attempt ids come from `asl sprints course-peer-reviews`
+uv run asl sprints course-peer-reviews ai-buildcamp --cohort 4
+uv run asl homework close-project ai-buildcamp 45
+uv run asl homework set-project-state ai-buildcamp 45 completed
+```
+
+The response shows `previous_state`, `state` and `changed` (false when the
+state was already set).
+
 ### Tier campaigns: count, inspect, schedule, send, test-send
 
 Drafts are managed with `asl campaigns list|get|create|update`. Sending and

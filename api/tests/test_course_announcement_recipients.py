@@ -110,10 +110,8 @@ class AnnouncementRecipientPreviewTest(TestCase):
     def test_cohort_4_preview_counts_cohort_4_active_enrollments_only(self):
         draft = self._draft(self.cohort4)
 
-        response = self._preview(draft)
+        data = self._preview(draft).json()
 
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
         self.assertEqual(data['recipient_count'], 3)
         self.assertEqual(data['cohort'], {
             'id': self.cohort4.pk, 'external_key': '4', 'name': 'Cohort 4',
@@ -132,7 +130,7 @@ class AnnouncementRecipientPreviewTest(TestCase):
             response = self._patch(draft, {
                 'status': 'published', 'expected_recipient_count': previewed,
             })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'published')
         result = send_course_announcement_email(draft.pk)
 
         self.assertEqual(result['sent'], previewed)
@@ -239,7 +237,7 @@ class AnnouncementRecipientPreviewTest(TestCase):
                     'expected_recipient_count': 3,
                 })
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'published')
         enqueue.assert_called_once_with(draft.pk)
         draft.refresh_from_db()
         self.assertEqual(draft.cohort_id, self.cohort4.pk)

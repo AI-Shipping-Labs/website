@@ -18,6 +18,7 @@ from click.testing import CliRunner
 # or renamed group makes ``test_expected_groups_are_registered`` fail before
 # the parametrized help guard even runs.
 EXPECTED_GROUPS = {
+    "analytics",
     "announcement",
     "announcements",
     "articles",

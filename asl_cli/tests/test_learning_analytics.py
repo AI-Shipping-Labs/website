@@ -65,6 +65,7 @@ def test_csv_quotes_names_and_includes_all_pages(monkeypatch):
     result = CliRunner().invoke(cli, ['analytics', 'course-activity', 'buildcamp', '--all', '-f', 'csv'])
     assert result.exit_code == 0, result.output
     rows = list(csv.DictReader(io.StringIO(result.output)))
+    assert b'\r\r\n' not in result.stdout_bytes
     assert len(rows) == 2
     assert rows[0]['name'] == 'Name, With Comma'
     assert rows[0]['optional_module'] == 'True'

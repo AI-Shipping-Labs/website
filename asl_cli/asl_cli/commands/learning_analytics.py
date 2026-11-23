@@ -51,7 +51,7 @@ def _output(data, fmt):
         writer = csv.DictWriter(sys.stdout, fieldnames=list(_flat_row({
             'id': None, 'occurred_at': None, 'user': {'email': '', 'name': ''},
             'target_url': '',
-        })))
+        })), lineterminator='\n')
         writer.writeheader()
         for row in rows:
             writer.writerow(_csv_row(row))

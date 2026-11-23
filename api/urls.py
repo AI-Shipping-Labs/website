@@ -95,6 +95,7 @@ from api.views.course_access import (
 )
 from api.views.course_announcements import (
     course_announcement_detail,
+    course_announcement_recipients,
     course_announcements_collection,
 )
 from api.views.course_certificates import (
@@ -1077,6 +1078,11 @@ urlpatterns = [
         "courses/<slug:slug>/announcements/<int:announcement_id>",
         course_announcement_detail,
         name="api_course_announcement_detail",
+    ),
+    path(
+        "courses/<slug:slug>/announcements/<int:announcement_id>/recipients",
+        course_announcement_recipients,
+        name="api_course_announcement_recipients",
     ),
     path(
         "courses/<slug:slug>/cohorts",

@@ -378,6 +378,37 @@ uv run asl sprints course-cohort-update ai-buildcamp 4 --event-series buildcamp-
 uv run asl sprints course-cohort-update ai-buildcamp 4 --start-date 2026-09-14 --end-date 2026-11-09
 ```
 
+### Course announcements for one cohort
+
+Every course announcement targets one cohort. Its first publish emails that
+cohort's active enrollments once, and nobody else. `create` always makes a
+draft and sends nothing. `preview` is read-only: it prints the exact recipient
+count and the cohort name, next to the whole-course count for comparison.
+`publish` previews first and prints the count. It then refuses to run in
+these cases:
+
+- no `--cohort`/`--cohort-id` on a course with more than one cohort;
+- a cohort that differs from the draft's stored one;
+- an announcement that was already published or emailed;
+- no `--yes`.
+
+The publish request carries the previewed count, so the server refuses it
+with `409 recipient_count_mismatch` if the audience changed in between.
+`--cohort` takes the external key (`4`); `--cohort-id` takes the numeric id.
+
+```bash
+uv run asl sprints course-cohorts ai-buildcamp            # cohort keys and ids
+uv run asl announcements list ai-buildcamp --format table
+uv run asl announcements create ai-buildcamp --cohort 4 \
+  --title "Feedback form" --body @feedback.md            # draft only
+uv run asl announcements update ai-buildcamp 5 --body @feedback.md
+uv run asl announcements preview ai-buildcamp 5           # count + cohort, sends nothing
+uv run asl announcements publish ai-buildcamp 5 --cohort 4 --dry-run
+uv run asl announcements publish ai-buildcamp 5 --cohort 4 --yes
+```
+
+`asl announcement ...` (singular) is an alias.
+
 ### Course coursework inventory
 
 Count a course's legacy project attempts, submissions, peer reviews, pooled

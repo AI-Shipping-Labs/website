@@ -5333,6 +5333,10 @@
                     "description": "Cohort id, instead of cohort.",
                     "type": "integer"
                   },
+                  "expected_recipient_count": {
+                    "description": "Optional publish guard, never stored: the recipient_count from the recipients preview. A first publish whose real count differs is refused with 409 recipient_count_mismatch.",
+                    "type": "integer"
+                  },
                   "status": {
                     "enum": [
                       "draft",
@@ -5377,6 +5381,9 @@
           },
           "404": {
             "description": "Course not found."
+          },
+          "409": {
+            "description": "expected_recipient_count differs from the real recipient count; nothing was saved or sent."
           },
           "422": {
             "description": "Validation error."
@@ -5520,6 +5527,10 @@
                     "description": "Cohort id, instead of cohort.",
                     "type": "integer"
                   },
+                  "expected_recipient_count": {
+                    "description": "Optional publish guard, never stored: the recipient_count from the recipients preview. A first publish whose real count differs is refused with 409 recipient_count_mismatch.",
+                    "type": "integer"
+                  },
                   "status": {
                     "enum": [
                       "draft",
@@ -5565,11 +5576,91 @@
           "404": {
             "description": "Course or announcement not found."
           },
+          "409": {
+            "description": "expected_recipient_count differs from the real recipient count; nothing was saved or sent."
+          },
           "422": {
             "description": "Validation error."
           }
         },
         "summary": "Update a course announcement (staff-only)",
+        "tags": [
+          "Course Announcements"
+        ]
+      }
+    },
+    "/api/courses/{slug}/announcements/{announcement_id}/recipients": {
+      "get": {
+        "description": "Read-only: returns the exact number of learners the first publish would email (active enrollments of active users in the announcement's cohort) and the cohort's name. Sends nothing and changes nothing. ``cohort=<external key>`` or ``cohort_id`` previews another cohort of the course (the one a publish request would set). ``will_email`` is false with ``blocked_reason`` ``no_cohort``, ``already_published`` or ``already_emailed`` when publishing would email nobody. ``course_active_enrollment_count`` is the whole-course number for comparison; it is never an email audience.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "description": "Preview this cohort external key instead.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort_id",
+            "required": false,
+            "schema": {
+              "description": "Preview this cohort id instead.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "announcement_id": 12,
+                  "blocked_reason": null,
+                  "cohort": {
+                    "external_key": "4",
+                    "id": 1,
+                    "name": "Cohort 4"
+                  },
+                  "course": "ai-buildcamp",
+                  "course_active_enrollment_count": 167,
+                  "course_cohort_count": 5,
+                  "email_queued_at": null,
+                  "recipient_count": 54,
+                  "status": "draft",
+                  "stored_cohort_id": 1,
+                  "will_email": true
+                }
+              }
+            },
+            "description": "Recipient preview."
+          },
+          "404": {
+            "description": "Course or announcement not found."
+          },
+          "422": {
+            "description": "Unknown cohort."
+          }
+        },
+        "summary": "Recipient preview for a course announcement (staff-only)",
         "tags": [
           "Course Announcements"
         ]

@@ -1,6 +1,7 @@
 """Command modules for the asl CLI."""
 
 from asl_cli.commands import (
+    announcements,
     auth,
     campaigns,
     comments,
@@ -26,6 +27,7 @@ from asl_cli.commands import (
 )
 
 _all_modules = [
+    announcements,
     auth,
     campaigns,
     comments,

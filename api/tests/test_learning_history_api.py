@@ -116,6 +116,22 @@ class LearningHistoryApiTest(TestCase):
         self.assertTrue(metadata['is_bonus'])
         self.assertFalse(metadata['optional_module'])
 
+    def test_recorded_course_takes_precedence_when_a_unit_moves(self):
+        event = self._event()
+        old_blank = self._event()
+        old_blank.target_url = ''
+        old_blank.save(update_fields=['target_url'])
+        other = Course.objects.create(title='New course', slug='new-course')
+        module = Module.objects.create(course=other, title='New module', slug='new-module')
+        self.unit.module = module
+        self.unit.save(update_fields=['module'])
+        old_rows = self._get().json()['activities']
+        self.assertEqual([row['id'] for row in old_rows], [event.id])
+        response = self.client.get('/api/courses/new-course/learning-activity',
+                                   HTTP_AUTHORIZATION=f'Token {self.token.key}')
+        self.assertEqual([row['id'] for row in response.json()['activities']], [old_blank.id])
+        self.assertEqual(self._get(unit=self.unit.pk).json()['activities'], [])
+
     def test_deleted_unit_keeps_persisted_course_opening(self):
         event = self._event()
         self.unit.delete()

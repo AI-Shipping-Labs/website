@@ -20,9 +20,10 @@ def history_queryset(course, filters):
     if filters.get('unit'):
         units = units.filter(pk=filters['unit'])
     unit_keys = units.annotate(activity_key=Cast('pk', CharField())).values('activity_key')
-    scope = Q(object_id__in=unit_keys)
-    if not filters.get('module') and not filters.get('unit'):
-        scope |= Q(target_url__startswith=f'/courses/{course.slug}/')
+    scope = Q(target_url__startswith=f'/courses/{course.slug}/')
+    scope |= Q(target_url='', object_id__in=unit_keys)
+    if filters.get('module') or filters.get('unit'):
+        scope &= Q(object_id__in=unit_keys)
     rows = UserActivity.objects.filter(
         scope, event_type=UserActivity.EVENT_LESSON_OPEN, object_type='unit',
     )

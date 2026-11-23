@@ -6,3 +6,5 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
 Procfile* text eol=lf
+# Schema consistency checks compare canonical bytes on every platform.
+_docs/openapi.json text eol=lf

@@ -11,6 +11,7 @@ from asl_cli.commands import (
     events,
     homework,
     integrations,
+    learning_analytics,
     misc,
     onboarding,
     plans,
@@ -29,6 +30,7 @@ from asl_cli.commands import (
 _all_modules = [
     announcements,
     auth,
+    learning_analytics,
     campaigns,
     comments,
     contacts,

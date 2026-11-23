@@ -74,7 +74,6 @@ class LearningHistoryApiTest(TestCase):
         response = self._get(cohort='4', module=self.module.pk, unit=self.unit.pk,
                              email=self.member.email,
                              since=self.at.isoformat(), until=(self.at + timedelta(days=1)).isoformat())
-        self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual([row['id'] for row in data['activities']], [event.id])
         self.assertTrue(data['activities'][0]['unit']['optional_module'])

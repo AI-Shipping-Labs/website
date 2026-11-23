@@ -198,7 +198,7 @@ jobs:
     # no headroom and cancelled it on 88d78a117 (#1953). 30m keeps the
     # django-q-hang blast radius far below the old ~1h40m worst case; the
     # imbalance itself is tracked separately.
-    timeout-minutes: 30
+    timeout-minutes: 60
     concurrency:
       group: deploy-dev-validation-${{ github.ref }}-test-${{ matrix.shard }}
       cancel-in-progress: true

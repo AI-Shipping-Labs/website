@@ -141,10 +141,12 @@ jobs:
       SECRET_KEY: ci-django-only-not-a-real-secret
       TEST_SHARD_COUNT: "4"
       TEST_SHARD_INDEX: ${{ matrix.shard }}
-    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite, so 20m
-    # leaves >40% headroom while keeping the django-q-hang blast radius far
-    # below the historical ~1h40m worst case.
-    timeout-minutes: 20
+    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite. On
+    # GitHub-hosted 4-vCPU runners a shard took 7-13 min; the shared 2-vCPU
+    # contabo-ci box runs the shards back to back on one runner and needs
+    # roughly 2-3x that, so the cap is 60m (still far below the historical
+    # ~1h40m django-q-hang worst case).
+    timeout-minutes: 60
 
     steps:
       - name: Start CI timing profile

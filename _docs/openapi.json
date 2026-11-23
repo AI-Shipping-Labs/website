@@ -6838,6 +6838,103 @@
         ]
       }
     },
+    "/api/courses/{slug}/learning-activity": {
+      "get": {
+        "description": "Complete cursor-paginated retained lesson_open history. Not playback or completion. Cohort uses current enrollment; module and bonus metadata use current syllabus. since inclusive, until exclusive. Timezone offsets required. Keep filters unchanged across cursor pages.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "module",
+            "required": false,
+            "schema": {
+              "description": "Module id, includes children",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unit",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded page and next_cursor"
+          },
+          "404": {
+            "description": "Unknown course or cohort"
+          },
+          "422": {
+            "description": "Invalid filter or cursor"
+          }
+        },
+        "summary": "Export stored course lesson openings",
+        "tags": [
+          "Learning analytics"
+        ]
+      }
+    },
     "/api/courses/{slug}/peer-reviews": {
       "get": {
         "description": "Return peer-review state, submission counts, assignment counts, completed review counts, and deadline for the course's project attempts. Filter with optional ``cohort`` (cohort external key) and ``project`` (project attempt slug) query parameters.",

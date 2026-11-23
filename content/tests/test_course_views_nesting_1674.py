@@ -328,9 +328,13 @@ class SelfPacedCohortEnrollBlockTest(TestCase):
             title='Course', slug='self-paced-block-course', status='published',
             required_level=0,
         )
+        # The active-cohorts block lists only running cohorts, so the window
+        # is relative to today (a fixed 2026-11-22 end date expired).
+        today = datetime.date.today()
         cls.dated = Cohort.objects.create(
             course=cls.course, name='Dated Cohort', mode='cohort',
-            start_date=datetime.date(2026, 9, 21), end_date=datetime.date(2026, 11, 22),
+            start_date=today - datetime.timedelta(days=30),
+            end_date=today + datetime.timedelta(days=30),
         )
         cls.self_paced = Cohort.objects.create(
             course=cls.course, name='Self-paced', mode='self_paced',

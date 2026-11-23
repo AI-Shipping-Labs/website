@@ -5,6 +5,11 @@
 - ``GET /api/courses/<slug>/announcements/<id>`` — detail.
 - ``PATCH /api/courses/<slug>/announcements/<id>`` — update title/body/status
   and, while the announcement is a draft, its cohort.
+- ``GET /api/courses/<slug>/announcements/<id>/recipients`` — read-only
+  recipient preview: the exact count and cohort the first publish would
+  email. Sends nothing.
+Publishing can carry ``expected_recipient_count`` (the previewed count); a
+mismatch refuses the publish with 409 so a stale preview never sends.
 Every announcement targets one cohort: only that cohort's members see it and
 only its active enrollments get the first-publish email. Unpublished courses
 are addressable by slug. DELETE is not available.
@@ -17,6 +22,7 @@ from accounts.auth import token_required
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.course_announcements import serialize_course_announcement
+from api.serializers.datetime import isoformat_or_none
 from api.utils import (
     body_must_be_object_response,
     delete_not_available_response,
@@ -27,10 +33,17 @@ from api.utils import (
 from content.models import Course
 from content.models.cohort import Cohort
 from content.models.course_announcement import CourseAnnouncement
-from content.services.course_announcements import save_announcement
+from content.services.course_announcements import (
+    recipient_enrollments,
+    recipient_preview,
+    save_announcement,
+)
 from content.services.course_cohorts import get_course_cohort_by_key
 
 _WRITABLE_FIELDS = ('title', 'body', 'status', 'cohort', 'cohort_id')
+# Request-only guard, never stored: see ``_recipient_count_mismatch``.
+_CONTROL_FIELDS = ('expected_recipient_count',)
+_ALLOWED_FIELDS = _WRITABLE_FIELDS + _CONTROL_FIELDS
 _STATUSES = frozenset({
     CourseAnnouncement.STATUS_DRAFT,
     CourseAnnouncement.STATUS_PUBLISHED,
@@ -58,6 +71,44 @@ DELETE_NOT_AVAILABLE_MESSAGE = (
 
 def _unknown_course_response():
     return error_response('Course not found', 'unknown_course', status=404)
+
+
+def _parse_expected_recipient_count(data):
+    if 'expected_recipient_count' not in data:
+        return None
+    raw = data['expected_recipient_count']
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+        return validation_response(
+            {'field': 'expected_recipient_count', 'expected': 'integer >= 0'},
+            message='expected_recipient_count must be a non-negative integer',
+        )
+    return None
+
+
+def _recipient_count_mismatch(data, *, previous_status, status, cohort):
+    """409 when a first publish would email a different count than previewed.
+
+    Only checked when the request publishes a draft and the caller sent
+    ``expected_recipient_count``; the count is the same query the email
+    worker fans out to.
+    """
+    if 'expected_recipient_count' not in data:
+        return None
+    if status != CourseAnnouncement.STATUS_PUBLISHED:
+        return None
+    if previous_status == CourseAnnouncement.STATUS_PUBLISHED:
+        return None
+    expected = data['expected_recipient_count']
+    actual = recipient_enrollments(cohort).count()
+    if actual == expected:
+        return None
+    return error_response(
+        f'Recipient count changed: expected {expected}, the cohort now has '
+        f'{actual} recipients. Preview again before publishing.',
+        'recipient_count_mismatch',
+        status=409,
+        details={'expected': expected, 'actual': actual},
+    )
 
 
 def _unknown_announcement_response():
@@ -249,6 +300,15 @@ def _parse_body(raw, *, required=True):
                         "type": "string",
                         "enum": ["draft", "published"],
                     },
+                    "expected_recipient_count": {
+                        "type": "integer",
+                        "description": (
+                            "Optional publish guard, never stored: the "
+                            "recipient_count from the recipients preview. "
+                            "A first publish whose real count differs is "
+                            "refused with 409 recipient_count_mismatch."
+                        ),
+                    },
                 },
                 "example": {
                     "title": "Week 2 office hours moved",
@@ -263,6 +323,12 @@ def _parse_body(raw, *, required=True):
                     "example": _ANNOUNCEMENT_EXAMPLE,
                 },
                 404: {"description": "Course not found."},
+                409: {
+                    "description": (
+                        "expected_recipient_count differs from the real "
+                        "recipient count; nothing was saved or sent."
+                    ),
+                },
                 422: {"description": "Validation error."},
             },
         },
@@ -323,12 +389,15 @@ def course_announcements_collection(request, slug):
         return parse_error
     if not isinstance(data, dict):
         return body_must_be_object_response()
-    unknown = sorted(set(data) - set(_WRITABLE_FIELDS))
+    unknown = sorted(set(data) - set(_ALLOWED_FIELDS))
     if unknown:
         return validation_response({
             'field': unknown[0],
-            'allowed': list(_WRITABLE_FIELDS),
+            'allowed': list(_ALLOWED_FIELDS),
         }, message=f'Unknown field(s): {", ".join(unknown)}')
+    expected_error = _parse_expected_recipient_count(data)
+    if expected_error is not None:
+        return expected_error
     title, title_error = _parse_title(data.get('title'))
     if title_error is not None:
         return title_error
@@ -341,6 +410,14 @@ def course_announcements_collection(request, slug):
     cohort, cohort_error = _parse_cohort(course, data, required=True)
     if cohort_error is not None:
         return cohort_error
+    mismatch = _recipient_count_mismatch(
+        data,
+        previous_status=CourseAnnouncement.STATUS_DRAFT,
+        status=status,
+        cohort=cohort,
+    )
+    if mismatch is not None:
+        return mismatch
     announcement = CourseAnnouncement(course=course)
     save_announcement(
         announcement,
@@ -399,6 +476,15 @@ def course_announcements_collection(request, slug):
                         "type": "string",
                         "enum": ["draft", "published"],
                     },
+                    "expected_recipient_count": {
+                        "type": "integer",
+                        "description": (
+                            "Optional publish guard, never stored: the "
+                            "recipient_count from the recipients preview. "
+                            "A first publish whose real count differs is "
+                            "refused with 409 recipient_count_mismatch."
+                        ),
+                    },
                 },
                 "example": {"title": "Updated title", "body": "Updated body"},
             },
@@ -408,6 +494,12 @@ def course_announcements_collection(request, slug):
                     "example": _ANNOUNCEMENT_EXAMPLE,
                 },
                 404: {"description": "Course or announcement not found."},
+                409: {
+                    "description": (
+                        "expected_recipient_count differs from the real "
+                        "recipient count; nothing was saved or sent."
+                    ),
+                },
                 422: {"description": "Validation error."},
             },
         },
@@ -452,13 +544,16 @@ def course_announcement_detail(request, slug, announcement_id):
         return parse_error
     if not isinstance(data, dict):
         return body_must_be_object_response()
-    unknown = sorted(set(data) - set(_WRITABLE_FIELDS))
+    unknown = sorted(set(data) - set(_ALLOWED_FIELDS))
     if unknown:
         return validation_response({
             'field': unknown[0],
-            'allowed': list(_WRITABLE_FIELDS),
+            'allowed': list(_ALLOWED_FIELDS),
         }, message=f'Unknown field(s): {", ".join(unknown)}')
-    if not data:
+    expected_error = _parse_expected_recipient_count(data)
+    if expected_error is not None:
+        return expected_error
+    if not set(data) & set(_WRITABLE_FIELDS):
         return validation_response({
             'field': 'body',
             'allowed': list(_WRITABLE_FIELDS),
@@ -499,6 +594,14 @@ def course_announcement_detail(request, slug, announcement_id):
             {'field': 'cohort', 'expected': 'cohort external key'},
             message='Set a cohort before publishing',
         )
+    mismatch = _recipient_count_mismatch(
+        data,
+        previous_status=announcement.status,
+        status=status,
+        cohort=cohort if cohort is not None else announcement.cohort,
+    )
+    if mismatch is not None:
+        return mismatch
     save_announcement(
         announcement,
         title=title,
@@ -508,3 +611,112 @@ def course_announcement_detail(request, slug, announcement_id):
         cohort=cohort,
     )
     return JsonResponse(serialize_course_announcement(announcement), status=200)
+
+
+def _parse_preview_cohort(request, course):
+    """Optional ``?cohort=<key>`` / ``?cohort_id=<id>`` preview override."""
+    key = request.GET.get('cohort')
+    raw_id = request.GET.get('cohort_id')
+    if key and raw_id:
+        return None, validation_response(
+            {'field': 'cohort', 'expected': 'cohort or cohort_id, not both'},
+            message='Send either cohort or cohort_id, not both',
+        )
+    if key:
+        cohort = get_course_cohort_by_key(course, key)
+        if cohort is None:
+            return None, _unknown_cohort_response('cohort', key, course)
+        return cohort, None
+    if raw_id:
+        try:
+            cohort_id = int(raw_id)
+        except ValueError:
+            return None, validation_response(
+                {'field': 'cohort_id', 'expected': 'integer'},
+                message='cohort_id must be an integer',
+            )
+        cohort = Cohort.objects.filter(pk=cohort_id, course=course).first()
+        if cohort is None:
+            return None, _unknown_cohort_response('cohort_id', raw_id, course)
+        return cohort, None
+    return None, None
+
+
+_PREVIEW_EXAMPLE = {
+    'announcement_id': 12,
+    'course': 'ai-buildcamp',
+    'status': 'draft',
+    'cohort': {'id': 1, 'external_key': '4', 'name': 'Cohort 4'},
+    'stored_cohort_id': 1,
+    'recipient_count': 54,
+    'course_active_enrollment_count': 167,
+    'course_cohort_count': 5,
+    'email_queued_at': None,
+    'will_email': True,
+    'blocked_reason': None,
+}
+
+
+@token_required
+@csrf_exempt
+@require_methods('GET')
+@openapi_spec(
+    tag="Course Announcements",
+    summary="Preview who a course announcement would email",
+    methods={
+        "GET": {
+            "summary": "Recipient preview for a course announcement (staff-only)",
+            "description": (
+                "Read-only: returns the exact number of learners the first "
+                "publish would email (active enrollments of active users in "
+                "the announcement's cohort) and the cohort's name. Sends "
+                "nothing and changes nothing. ``cohort=<external key>`` or "
+                "``cohort_id`` previews another cohort of the course (the one "
+                "a publish request would set). ``will_email`` is false with "
+                "``blocked_reason`` ``no_cohort``, ``already_published`` or "
+                "``already_emailed`` when publishing would email nobody. "
+                "``course_active_enrollment_count`` is the whole-course "
+                "number for comparison; it is never an email audience."
+            ),
+            "query": {
+                "cohort": {
+                    "type": "string",
+                    "required": False,
+                    "description": "Preview this cohort external key instead.",
+                },
+                "cohort_id": {
+                    "type": "integer",
+                    "required": False,
+                    "description": "Preview this cohort id instead.",
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Recipient preview.",
+                    "example": _PREVIEW_EXAMPLE,
+                },
+                404: {"description": "Course or announcement not found."},
+                422: {"description": "Unknown cohort."},
+            },
+        },
+    },
+)
+def course_announcement_recipients(request, slug, announcement_id):
+    """``GET /api/courses/<slug>/announcements/<id>/recipients``."""
+    course = _course(slug)
+    if course is None:
+        return _unknown_course_response()
+    announcement = (
+        CourseAnnouncement.objects
+        .select_related('course', 'cohort')
+        .filter(pk=announcement_id, course=course)
+        .first()
+    )
+    if announcement is None:
+        return _unknown_announcement_response()
+    cohort, cohort_error = _parse_preview_cohort(request, course)
+    if cohort_error is not None:
+        return cohort_error
+    preview = recipient_preview(announcement, cohort=cohort)
+    preview['email_queued_at'] = isoformat_or_none(preview['email_queued_at'])
+    return JsonResponse(preview, status=200)

@@ -16,7 +16,7 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 
 from accounts.utils.user_checks import is_authenticated_user
-from content.models.cohort import CohortEnrollment
+from content.models.cohort import Cohort, CohortEnrollment
 from content.models.course_announcement import CourseAnnouncement
 from content.models.enrollment import Enrollment
 from content.services.enrollment import is_enrolled
@@ -59,6 +59,63 @@ def recipient_enrollments(cohort):
         user__is_active=True,
         user__cohort_enrollments__cohort=cohort,
     ).distinct()
+
+
+def course_active_enrollment_count(course_id) -> int:
+    """Active enrollments of active users across every cohort of a course.
+
+    Shown next to the cohort count in the recipient preview so an operator
+    can see the whole-course number the cohort scope protects against.
+    """
+    return Enrollment.objects.filter(
+        course_id=course_id,
+        unenrolled_at__isnull=True,
+        user__is_active=True,
+    ).count()
+
+
+def announcement_blocked_reason(announcement, cohort):
+    """Why publishing ``announcement`` for ``cohort`` would email nobody."""
+    if announcement.email_queued_at is not None:
+        return 'already_emailed'
+    if announcement.status == CourseAnnouncement.STATUS_PUBLISHED:
+        return 'already_published'
+    if cohort is None:
+        return 'no_cohort'
+    return None
+
+
+def recipient_preview(announcement, *, cohort=None):
+    """Read-only recipient summary for publishing ``announcement``.
+
+    ``cohort`` previews a different cohort than the stored one (the cohort
+    a publish call would set); ``None`` uses the announcement's own cohort.
+    Never writes and never queues email.
+    """
+    target = cohort if cohort is not None else announcement.cohort
+    blocked = announcement_blocked_reason(announcement, target)
+    recipients = recipient_enrollments(target).count() if target else 0
+    return {
+        'announcement_id': announcement.pk,
+        'course': announcement.course.slug,
+        'status': announcement.status,
+        'cohort': None if target is None else {
+            'id': target.pk,
+            'external_key': target.external_key,
+            'name': target.name,
+        },
+        'stored_cohort_id': announcement.cohort_id,
+        'recipient_count': recipients,
+        'course_active_enrollment_count': course_active_enrollment_count(
+            announcement.course_id,
+        ),
+        'course_cohort_count': Cohort.objects.filter(
+            course_id=announcement.course_id,
+        ).count(),
+        'email_queued_at': announcement.email_queued_at,
+        'will_email': blocked is None,
+        'blocked_reason': blocked,
+    }
 
 
 def publish_confirm_message(cohort=None) -> str:

@@ -7,6 +7,8 @@ the rest of the sync run (see `_sync_module_units`'s per-file exception
 handling, which every case here relies on).
 """
 
+import datetime
+
 from django.test import TestCase
 
 from content.models import Cohort, Course, Unit
@@ -30,9 +32,13 @@ class HomeworkSyncTestBase(TestCase):
         # synced.
         sync_repo(self.source, self.repo)
         self.course = Course.objects.get(slug='buildcamp-hw-1683')
+        # The no-deadline cases resolve the cohort by today's date, so the
+        # window is relative to today (a fixed 2026-11-22 end date expired).
+        today = datetime.date.today()
         self.cohort = Cohort.objects.create(
             course=self.course, name='Cohort 4',
-            start_date='2026-09-21', end_date='2026-11-22',
+            start_date=today - datetime.timedelta(days=60),
+            end_date=today + datetime.timedelta(days=60),
         )
 
     def _write_homework_unit(self, questions, *, due_date="'2026-09-27T21:59:00Z'", extra=''):

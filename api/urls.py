@@ -95,6 +95,7 @@ from api.views.course_access import (
 )
 from api.views.course_announcements import (
     course_announcement_detail,
+    course_announcement_recipients,
     course_announcements_collection,
 )
 from api.views.course_certificates import (
@@ -165,6 +166,7 @@ from api.views.interview_notes import (
     plan_interview_notes,
     user_interview_notes,
 )
+from api.views.learning_history import course_learning_history
 from api.views.mail_deliveries import mail_delivery_diagnostics
 from api.views.marketing_pages import (
     marketing_page_detail,
@@ -321,6 +323,7 @@ from api.views.workshop_previews import (
 # Framework URLconf: retain this existing central route table to preserve ordered
 # dispatch and OpenAPI discovery; splitting all API routes is outside this repair.
 urlpatterns = [
+    path("courses/<slug:slug>/learning-activity", course_learning_history, name="api_course_learning_activity"),
     # ---- API documentation (issue #722) -------------------------------
     # Staff-only Swagger UI page + raw OpenAPI JSON. These two routes
     # are deliberately EXCLUDED from the generated spec itself (see
@@ -1077,6 +1080,11 @@ urlpatterns = [
         "courses/<slug:slug>/announcements/<int:announcement_id>",
         course_announcement_detail,
         name="api_course_announcement_detail",
+    ),
+    path(
+        "courses/<slug:slug>/announcements/<int:announcement_id>/recipients",
+        course_announcement_recipients,
+        name="api_course_announcement_recipients",
     ),
     path(
         "courses/<slug:slug>/cohorts",

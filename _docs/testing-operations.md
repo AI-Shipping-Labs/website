@@ -1181,16 +1181,18 @@ bind the same one. Setting it together with `-n > 0` is rejected in
 `pytest_configure` with a `UsageError` rather than left as a footgun: pin the
 port only for a serial (`PLAYWRIGHT_XDIST_WORKERS=0`) debugging run.
 
-CI is deliberately left serial:
+Each CI runner executes its assigned browser-test files serially:
 
 - `deploy-dev.yml`'s `playwright-core` job is already a 4-way file-shard matrix,
   one `ubuntu-latest` runner per shard. GitHub-hosted runners are 2-4 vCPU, so
   intra-job `-n` on top of the shard matrix would oversubscribe each runner
   rather than speed it up.
-- `ci.yml`'s `playwright-tests` job (its 4-way shard matrix is the Django `test`
-  job, not this one) is a single unsharded runner. It is still left serial for
-  the same 2-4 vCPU reason, and it only triggers on `pull_request` — this repo
-  merges locally and does not use PRs, so that job effectively never runs.
+- `ci.yml`'s PR `playwright-tests` job uses four separate runners with the
+  existing measured file planner and `.github/playwright-full-shard-weights.json`.
+  The file assignments form an exact partition of the current Playwright
+  inventory. The PR marker expression stays `not manual_visual and not
+  visual_regression`, including `slow_platform`; all `asl_cli/` tests run once
+  on shard 0. Each shard has a 120-minute timeout and no intra-job `-n`.
 
 `-n` is a local-dev lever only.
 

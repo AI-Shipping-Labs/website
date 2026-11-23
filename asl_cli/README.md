@@ -2,6 +2,13 @@
 
 Command-line client for the AI Shipping Labs production API. Admin/operator tool wrapping the full `/api` surface with typed subcommands.
 
+Stored course lesson-opening history is available through
+`asl analytics course-activity ai-buildcamp --cohort 4 --all` (JSON) or
+`--all -f csv` (CSV). This retrieves every retained cursor page sequentially;
+it does not measure video playback. See the
+[learning analytics contract](../_docs/integrations/learning-analytics.md)
+for filters, retention and interpretation limits.
+
 ## Install
 
 ```bash

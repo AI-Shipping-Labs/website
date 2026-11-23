@@ -52,6 +52,9 @@ event's member, unit, module, current bonus flags and recorded URL.
   These are current classifications, not a historical syllabus snapshot.
 - Deleted units remain visible through their recorded course URL with `unit:
   null`; their old module/bonus classification cannot be inferred reliably.
+- A nonempty recorded course URL determines event attribution even if a unit
+  later moves to another course. Only legacy rows with an empty URL fall back
+  to current unit membership. Module/unit filters use current membership.
 - This endpoint is read-only and does not record an operator's export as a
   student's learning event. Account deletion and retention can remove rows
   between pages; cursor pagination is not a permanent data snapshot.

@@ -43,6 +43,9 @@ def _flat_row(event):
 
 
 def _output(data, fmt):
+    # Redirected Windows stdout can otherwise corrupt international names.
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
     if fmt in ('csv', 'table'):
         rows = list(map(_flat_row, data['activities']))
         if fmt == 'table':

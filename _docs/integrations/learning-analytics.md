@@ -30,7 +30,8 @@ insertion id descending. The first page fixes the maximum id; subsequent writes
 cannot introduce duplicate or skipped rows in that traversal. `occurred_at` is
 the event timestamp and can differ from insertion order for backfilled events.
 `--all` follows pages sequentially, respecting the normal API client rate-limit
-handling. JSON keeps measurement and retention metadata. CSV/table flatten the
+handling. Output uses UTF-8, including redirected Windows output. JSON keeps
+measurement and retention metadata. CSV/table flatten the
 event's member, unit, module, current bonus flags and recorded URL.
 
 ## What is stored and what is measured

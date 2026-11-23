@@ -334,21 +334,21 @@ jobs:
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
         # --keepdb can reuse the cached test_db*.sqlite3 files.
         # Issue #888: TEST_SHARD_COUNT/TEST_SHARD_INDEX (job-level env) make the
-        # runner keep only this shard's deterministic subset. `--parallel 4`
-        # matches the GitHub-hosted ubuntu-latest 4-vCPU runner — do NOT raise
+        # runner keep only this shard's deterministic subset. `--parallel 2`
+        # matches the Contabo runner's 2 CPUs and 4 GiB RAM — do NOT raise
         # it above the runner's vCPU count (oversubscription thrashes); the
         # sharding matrix is the lever for scaling, not intra-job parallelism.
         # Issue #1512: wrap the same sharded invocation with Coverage.py so the
         # dedicated `coverage` job can combine artifacts and fail-under 85.
         # `--parallel-mode` writes per-process data files; `--concurrency=
-        # multiprocessing` measures Django's intra-job `--parallel 4` workers.
+        # multiprocessing` measures Django's intra-job `--parallel 2` workers.
         env:
           DJANGO_TEST_DB_NAME: test_db.sqlite3
         run: |
           set -o pipefail
           start=$(date +%s)
           set +e
-          uv run coverage run --parallel-mode --concurrency=multiprocessing manage.py test --parallel 4 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
+          uv run coverage run --parallel-mode --concurrency=multiprocessing manage.py test --parallel 2 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)

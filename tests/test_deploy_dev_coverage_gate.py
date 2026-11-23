@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, tag
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_DEV_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml"
+CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 WATCH_CI_PATH = REPO_ROOT / "scripts" / "watch-ci.py"
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
 
@@ -48,7 +49,7 @@ class DeployDevCoverageGateWorkflowTest(SimpleTestCase):
         self.assertIn("--parallel-mode", command)
         self.assertIn("--concurrency=multiprocessing", command)
         self.assertIn("manage.py test", command)
-        self.assertIn("--parallel 4", command)
+        self.assertIn("--parallel 2", command)
         for flag in TEST_EXCLUSIONS:
             self.assertIn(flag, command)
         self.assertIn("--keepdb", command)
@@ -74,6 +75,20 @@ class DeployDevCoverageGateWorkflowTest(SimpleTestCase):
         self.assertNotIn("sed 's/^\\.//'", stage_step["run"])
         self.assertNotIn("continue-on-error", stage_step)
         self.assertFalse(stage_step.get("continue-on-error", False))
+
+    def test_both_unit_workflows_match_two_cpu_runner_without_dropping_shards(self):
+        for path, job_name in ((CI_WORKFLOW_PATH, "unit-tests"), (DEPLOY_DEV_WORKFLOW_PATH, "test")):
+            with self.subTest(workflow=path.name):
+                job = _load_yaml(path)["jobs"][job_name]
+                command = _step(job, "Run unit and integration tests")["run"]
+                self.assertEqual(job["strategy"]["matrix"]["shard"], SHARD_INDEXES)
+                self.assertEqual(job["env"]["TEST_SHARD_COUNT"], "4")
+                self.assertEqual(job["env"]["TEST_SHARD_INDEX"], "${{ matrix.shard }}")
+                self.assertRegex(command, r"manage\.py test --parallel 2(?:\s|$)")
+                self.assertNotIn("--parallel 4", command)
+                for flag in TEST_EXCLUSIONS:
+                    self.assertIn(flag, command)
+                self.assertIn("--keepdb", command)
 
     def test_coverage_job_combines_shard_artifacts_and_fails_under_85(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)

@@ -360,14 +360,31 @@ jobs:
         run: uv run python manage.py test --tag=postgresql --verbosity 2
 
   playwright-tests:
-    name: Playwright E2E Tests
+    name: Playwright E2E Tests (${{ matrix.shard_name }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     # #888: gate on every test shard plus the checks job. A `needs` entry for a
     # matrix job only succeeds when all its shards succeed.
     needs: [checks, unit-tests]
     env:
       DEBUG: "1"
       SECRET_KEY: ci-django-only-not-a-real-secret
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard_name: shard 1/4
+            shard_index: 0
+            shard_total: 4
+          - shard_name: shard 2/4
+            shard_index: 1
+            shard_total: 4
+          - shard_name: shard 3/4
+            shard_index: 2
+            shard_total: 4
+          - shard_name: shard 4/4
+            shard_index: 3
+            shard_total: 4
 
     steps:
       - name: Checkout code
@@ -396,9 +413,28 @@ jobs:
       - name: Install Playwright browsers
         run: uv run playwright install --with-deps chromium
 
-      - name: Run Playwright tests
-        # asl_cli/ holds offline pytest unit tests for the `asl` CLI (no
-        # network, no prod token, no browser). This is the repo's only pytest
-        # shard, so the CLI tests ride along here rather than in a separate
-        # opt-in job (issue #1125).
-        run: uv run pytest -m "not manual_visual and not visual_regression" playwright_tests/ asl_cli/ -v
+      - name: Select Playwright shard files
+        shell: bash
+        run: |
+          python scripts/playwright_shard_plan.py \
+            --weights .github/playwright-full-shard-weights.json \
+            --inventory playwright_tests \
+            --shards "${{ matrix.shard_total }}" \
+            --shard-index "${{ matrix.shard_index }}" \
+            --output .playwright-shard-files
+
+      - name: Run Playwright shard and CLI tests
+        # Keep the existing PR marker selection, including slow_platform.
+        # Each runner stays serial; offline CLI tests run once on shard 0.
+        shell: bash
+        run: |
+          mapfile -t files < .playwright-shard-files
+          if [ "${{ matrix.shard_index }}" -eq 0 ]; then
+            files+=(asl_cli/)
+          fi
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No tests selected for ${{ matrix.shard_name }}."
+            exit 0
+          fi
+
+          uv run pytest -m "not manual_visual and not visual_regression" "${files[@]}" -v --durations=25

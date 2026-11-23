@@ -15,7 +15,8 @@ jobs:
   # gated on both this job and every test shard via `needs:`.
   checks:
     name: Lint & Static Checks
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 15
     env:
       DEBUG: "0"
@@ -122,7 +123,8 @@ jobs:
 
   unit-tests:
     name: Unit & Integration Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     # Sharded test matrix (#888) — same fix applied to deploy-dev.yml. This PR
     # job ran the entire ~9908-test / ~1760s suite in one process under a 30m
     # cap, so it was the next job to hit the wall as the suite grows. We fan it
@@ -321,7 +323,8 @@ jobs:
 
   postgres-verification:
     name: PostgreSQL 16 Verification
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 10
     services:
       postgres:
@@ -330,20 +333,24 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: aisl_postgres_test
+        # Publish on a random host port: the self-hosted CI box is shared, so a
+        # fixed 5432 would collide with other repositories' Postgres services.
         ports:
-          - 5432:5432
+          - 5432
         options: >-
           --health-cmd "pg_isready -U postgres -d aisl_postgres_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_postgres_test
       DEBUG: "1"
       SECRET_KEY: ci-django-only-not-a-real-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Point DATABASE_URL at the Postgres service port
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/aisl_postgres_test" >> "$GITHUB_ENV"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -361,7 +368,8 @@ jobs:
 
   playwright-tests:
     name: Playwright E2E Tests
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     # #888: gate on every test shard plus the checks job. A `needs` entry for a
     # matrix job only succeeds when all its shards succeed.
     needs: [checks, unit-tests]
@@ -394,7 +402,7 @@ jobs:
         run: make css-build
 
       - name: Install Playwright browsers
-        run: uv run playwright install --with-deps chromium
+        run: uv run playwright install chromium
 
       - name: Run Playwright tests
         # asl_cli/ holds offline pytest unit tests for the `asl` CLI (no

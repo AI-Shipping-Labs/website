@@ -23,7 +23,7 @@ concurrency:
 jobs:
   deploy:
     name: Verify production promotion
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 10
     environment: coolify-staging
     permissions:

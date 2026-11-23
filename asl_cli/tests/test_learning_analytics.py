@@ -4,6 +4,7 @@ import csv
 import io
 import json
 
+import pytest
 from asl_cli.cli import cli
 from asl_cli.commands import learning_analytics
 from click.testing import CliRunner
@@ -86,3 +87,20 @@ def test_csv_neutralizes_formulas_without_changing_json_values():
         assert safe['id'] == 7
         assert safe['url'] == '/courses/a/b'
         assert row['name'] == text
+
+
+@pytest.mark.parametrize('fmt', ['json', 'csv'])
+def test_export_uses_utf8_even_with_a_legacy_windows_stdout(monkeypatch, fmt):
+    class UnicodeClient:
+        def get(self, path, params):
+            row = event(1)
+            row['user']['name'] = 'Jos\u00e9 \u5f20'
+            return {'activities': [row], 'next_cursor': None, 'has_more': False,
+                    'total_count': 1}
+
+    monkeypatch.setattr(learning_analytics, 'get_client', lambda: UnicodeClient())
+    result = CliRunner(charset='cp1252').invoke(
+        cli, ['analytics', 'course-activity', 'buildcamp', '-f', fmt],
+    )
+    assert result.exit_code == 0, repr(result.exception)
+    assert 'Jos\u00e9 \u5f20' in result.stdout_bytes.decode('utf-8')

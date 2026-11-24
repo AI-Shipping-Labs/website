@@ -12,7 +12,7 @@ permissions:
 jobs:
   request-deploy-dev:
     name: Request authoritative Deploy Dev workflow
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     steps:
       - name: Dispatch Deploy Dev on main
         env:

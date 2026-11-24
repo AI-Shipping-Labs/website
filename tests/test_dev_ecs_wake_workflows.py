@@ -72,7 +72,7 @@ class ScheduledPlaywrightDevReadinessWorkflowTest(SimpleTestCase):
             ["shard 1/4", "shard 2/4", "shard 3/4", "shard 4/4"],
         )
         workflow_text = SCHEDULED_WORKFLOW_PATH.read_text()
-        self.assertIn("uv run playwright install --with-deps chromium", workflow_text)
+        self.assertIn("uv run playwright install chromium", workflow_text)
         self.assertIn(
             'uv run pytest -m "${PLAYWRIGHT_DEFAULT_MARKERS}" '
             '"${files[@]}" -v --durations=25',
@@ -146,7 +146,7 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         )
         self.assertEqual(
             browser_step["run"],
-            "uv run playwright install --with-deps chromium",
+            "uv run playwright install chromium",
         )
         run_step = next(
             step
@@ -215,7 +215,14 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         workflow = _load_yaml(CI_WORKFLOW_PATH)
         postgres_job = workflow["jobs"]["postgres-verification"]
 
-        self.assertNotIn("if", postgres_job)
+        # The job must never be skipped for same-repo PRs. The only condition
+        # allowed is the fork-PR guard that keeps untrusted code off the
+        # self-hosted Contabo runner.
+        self.assertEqual(
+            postgres_job.get("if"),
+            "github.event_name != 'pull_request' || "
+            "github.event.pull_request.head.repo.full_name == github.repository",
+        )
         self.assertFalse(postgres_job.get("continue-on-error", False))
         self.assertEqual(postgres_job["name"], "PostgreSQL 16 Verification")
         self.assertEqual(postgres_job["services"]["postgres"]["image"], "postgres:16")

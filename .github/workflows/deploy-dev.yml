@@ -17,7 +17,7 @@ jobs:
   # deploy because the `deploy` job `needs:` this job.
   checks:
     name: Deploy Gates (migrations / OpenAPI / system check / static)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 15
     env:
       DEBUG: "0"
@@ -172,7 +172,7 @@ jobs:
 
   test:
     name: Unit & Integration Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     # Sharded test matrix (#888). The Django suite grew to ~9908 tests / ~1760s
     # (~29m) in a single job and was creeping toward the timeout — run
     # 27158919559 passed ("Ran 9908 tests ... OK") then got cancelled at the
@@ -198,7 +198,7 @@ jobs:
     # no headroom and cancelled it on 88d78a117 (#1953). 30m keeps the
     # django-q-hang blast radius far below the old ~1h40m worst case; the
     # imbalance itself is tracked separately.
-    timeout-minutes: 30
+    timeout-minutes: 60
     concurrency:
       group: deploy-dev-validation-${{ github.ref }}-test-${{ matrix.shard }}
       cancel-in-progress: true
@@ -334,21 +334,21 @@ jobs:
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
         # --keepdb can reuse the cached test_db*.sqlite3 files.
         # Issue #888: TEST_SHARD_COUNT/TEST_SHARD_INDEX (job-level env) make the
-        # runner keep only this shard's deterministic subset. `--parallel 4`
-        # matches the GitHub-hosted ubuntu-latest 4-vCPU runner — do NOT raise
+        # runner keep only this shard's deterministic subset. `--parallel 2`
+        # matches the Contabo runner's 2 CPUs and 4 GiB RAM — do NOT raise
         # it above the runner's vCPU count (oversubscription thrashes); the
         # sharding matrix is the lever for scaling, not intra-job parallelism.
         # Issue #1512: wrap the same sharded invocation with Coverage.py so the
         # dedicated `coverage` job can combine artifacts and fail-under 85.
         # `--parallel-mode` writes per-process data files; `--concurrency=
-        # multiprocessing` measures Django's intra-job `--parallel 4` workers.
+        # multiprocessing` measures Django's intra-job `--parallel 2` workers.
         env:
           DJANGO_TEST_DB_NAME: test_db.sqlite3
         run: |
           set -o pipefail
           start=$(date +%s)
           set +e
-          uv run coverage run --parallel-mode --concurrency=multiprocessing manage.py test --parallel 4 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
+          uv run coverage run --parallel-mode --concurrency=multiprocessing manage.py test --parallel 2 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)
@@ -404,7 +404,7 @@ jobs:
   # (85). This job must not re-run the Django suite.
   coverage:
     name: Combined coverage (fail-under 85)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     needs: [test]
     timeout-minutes: 10
     concurrency:
@@ -441,7 +441,7 @@ jobs:
 
   postgres-verification:
     name: PostgreSQL 16 Verification
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 20
     concurrency:
       group: deploy-dev-validation-${{ github.ref }}-postgres-verification
@@ -453,20 +453,24 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: aisl_r1_test
+        # Publish on a random host port: the self-hosted CI box is shared, so a
+        # fixed 5432 would collide with other repositories' Postgres services.
         ports:
-          - 5432:5432
+          - 5432
         options: >-
           --health-cmd "pg_isready -U postgres -d aisl_r1_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_r1_test
       DEBUG: "1"
       SECRET_KEY: ci-django-only-not-a-real-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Point DATABASE_URL at the Postgres service port
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/aisl_r1_test" >> "$GITHUB_ENV"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -487,7 +491,7 @@ jobs:
 
   playwright-core:
     name: Playwright Core E2E (${{ matrix.shard_name }})
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, contabo]
     # The core partition is the deploy-critical Playwright smoke set. Shard
     # the sorted file inventory with the same proven round-robin selector as
     # scheduled-playwright.yml. Every test_*.py file belongs to exactly one
@@ -542,7 +546,7 @@ jobs:
         run: make css-build
 
       - name: Install Playwright browsers
-        run: uv run playwright install --with-deps chromium
+        run: uv run playwright install chromium
 
       - name: Select Playwright core shard files
         id: shard
@@ -572,7 +576,7 @@ jobs:
 
   deploy:
     name: Deploy to Dev
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 45
     concurrency:
       group: deploy-prod

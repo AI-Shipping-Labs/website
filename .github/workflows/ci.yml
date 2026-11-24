@@ -15,7 +15,8 @@ jobs:
   # gated on both this job and every test shard via `needs:`.
   checks:
     name: Lint & Static Checks
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 15
     env:
       DEBUG: "0"
@@ -122,7 +123,8 @@ jobs:
 
   unit-tests:
     name: Unit & Integration Tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     # Sharded test matrix (#888) — same fix applied to deploy-dev.yml. This PR
     # job ran the entire ~9908-test / ~1760s suite in one process under a 30m
     # cap, so it was the next job to hit the wall as the suite grows. We fan it
@@ -139,10 +141,12 @@ jobs:
       SECRET_KEY: ci-django-only-not-a-real-secret
       TEST_SHARD_COUNT: "4"
       TEST_SHARD_INDEX: ${{ matrix.shard }}
-    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite, so 20m
-    # leaves >40% headroom while keeping the django-q-hang blast radius far
-    # below the historical ~1h40m worst case.
-    timeout-minutes: 20
+    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite. On
+    # GitHub-hosted 4-vCPU runners a shard took 7-13 min; the shared 2-vCPU
+    # contabo-ci box runs the shards back to back on one runner and needs
+    # roughly 2-3x that, so the cap is 60m (still far below the historical
+    # ~1h40m django-q-hang worst case).
+    timeout-minutes: 60
 
     steps:
       - name: Start CI timing profile
@@ -284,8 +288,8 @@ jobs:
         # Issue #532: DJANGO_TEST_DB_NAME makes SQLite tests file-backed so
         # --keepdb can reuse the cached test_db*.sqlite3 files.
         # Issue #888: TEST_SHARD_COUNT/TEST_SHARD_INDEX (job-level env) make the
-        # runner keep only this shard's deterministic subset. `--parallel 4`
-        # matches the GitHub-hosted ubuntu-latest 4-vCPU runner — do NOT raise
+        # runner keep only this shard's deterministic subset. `--parallel 2`
+        # matches the Contabo runner's 2 CPUs and 4 GiB RAM — do NOT raise
         # it above the runner's vCPU count; the sharding matrix is the scaling
         # lever, not intra-job parallelism.
         env:
@@ -299,7 +303,7 @@ jobs:
           # SQLite-safe after the serialized-rollback content-type fix, but its
           # authoritative run is the serial Postgres postgres-verification job
           # in deploy-dev.yml — it is not meaningful under SQLite --parallel.
-          uv run python manage.py test --parallel 4 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
+          uv run python manage.py test --parallel 2 --exclude-tag=visual_regression --exclude-tag=postgres_migration --keepdb 2>&1 | tee test-output.log
           status=${PIPESTATUS[0]}
           set -e
           end=$(date +%s)
@@ -321,7 +325,8 @@ jobs:
 
   postgres-verification:
     name: PostgreSQL 16 Verification
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 10
     services:
       postgres:
@@ -330,20 +335,24 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: aisl_postgres_test
+        # Publish on a random host port: the self-hosted CI box is shared, so a
+        # fixed 5432 would collide with other repositories' Postgres services.
         ports:
-          - 5432:5432
+          - 5432
         options: >-
           --health-cmd "pg_isready -U postgres -d aisl_postgres_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/aisl_postgres_test
       DEBUG: "1"
       SECRET_KEY: ci-django-only-not-a-real-secret
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
+      - name: Point DATABASE_URL at the Postgres service port
+        run: echo "DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/aisl_postgres_test" >> "$GITHUB_ENV"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -361,7 +370,8 @@ jobs:
 
   playwright-tests:
     name: Playwright E2E Tests (${{ matrix.shard_name }})
-    runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, contabo]
     timeout-minutes: 120
     # #888: gate on every test shard plus the checks job. A `needs` entry for a
     # matrix job only succeeds when all its shards succeed.
@@ -411,7 +421,7 @@ jobs:
         run: make css-build
 
       - name: Install Playwright browsers
-        run: uv run playwright install --with-deps chromium
+        run: uv run playwright install chromium
 
       - name: Select Playwright shard files
         shell: bash

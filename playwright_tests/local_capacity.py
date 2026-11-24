@@ -5,6 +5,9 @@ Git directory, while unrelated repositories use different lock directories.
 One controller owns all requested slots or none of them.  The kernel owns the
 actual leases through ``flock``; JSON in the slot files is diagnostic metadata
 only and can never keep a dead process in the queue.
+
+Size exception: keep the existing lease lifecycle and admission API together
+for this focused headroom fix; extracting the coordinator is separate work.
 """
 
 from __future__ import annotations
@@ -64,6 +67,7 @@ class HostHeadroom:
     cpu_pressure: str | None
     memory_pressure: str | None
     memory_full_avg60: float | None
+    total_memory_bytes: int | None = None
 
     def diagnostic(self) -> dict:
         return {key: "unavailable" if value is None else value for key, value in asdict(self).items()}
@@ -80,7 +84,11 @@ class HostHeadroom:
                     f"load1 {self.load_average_1m:.2f} + request {requested_slots} > CPUs {self.logical_cpus}"
                 )
         if self.available_memory_bytes is not None:
-            required = 4 * GIB + requested_slots * GIB
+            reserve = 4 * GIB
+            if self.total_memory_bytes is not None and self.total_memory_bytes > 0:
+                # Leave a quarter of small hosts for the OS and Django server.
+                reserve = min(reserve, self.total_memory_bytes // 4)
+            required = reserve + requested_slots * GIB
             if self.available_memory_bytes < required:
                 failures.append(f"available memory {self.available_memory_bytes} < required {required} bytes")
         if self.memory_full_avg60 is not None and self.memory_full_avg60 > 10.0:
@@ -173,11 +181,11 @@ def _read_pressure(path: Path) -> tuple[str | None, float | None]:
     return rendered, full_avg60
 
 
-def _read_linux_memory(path=Path("/proc/meminfo")) -> tuple[int | None, int | None, int | None]:
+def _read_linux_memory(path=Path("/proc/meminfo")) -> tuple[int | None, int | None, int | None, int | None]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
-        return None, None, None
+        return None, None, None, None
     values = {}
     for line in lines:
         key, separator, remainder = line.partition(":")
@@ -192,8 +200,10 @@ def _read_linux_memory(path=Path("/proc/meminfo")) -> tuple[int | None, int | No
             continue
     total = values.get("SwapTotal")
     free = values.get("SwapFree")
-    used = total - free if total is not None and free is not None else None
-    return values.get("MemAvailable"), total, used
+    used = None
+    if total is not None and free is not None:
+        used = total - free
+    return values.get("MemAvailable"), total, used, values.get("MemTotal")
 
 
 def sample_host_headroom() -> HostHeadroom:
@@ -204,12 +214,11 @@ def sample_host_headroom() -> HostHeadroom:
         load1, load5, load15 = os.getloadavg()
     except (AttributeError, OSError):
         load1 = load5 = load15 = None
-
-    available = swap_total = swap_used = None
+    available = swap_total = swap_used = total_memory = None
     cpu_pressure = memory_pressure = None
     memory_full_avg60 = None
     if system == "Linux":
-        available, swap_total, swap_used = _read_linux_memory()
+        available, swap_total, swap_used, total_memory = _read_linux_memory()
         cpu_pressure, _unused = _read_pressure(Path("/proc/pressure/cpu"))
         memory_pressure, memory_full_avg60 = _read_pressure(Path("/proc/pressure/memory"))
 
@@ -225,6 +234,7 @@ def sample_host_headroom() -> HostHeadroom:
         cpu_pressure=cpu_pressure,
         memory_pressure=memory_pressure,
         memory_full_avg60=memory_full_avg60,
+        total_memory_bytes=total_memory,
     )
 
 

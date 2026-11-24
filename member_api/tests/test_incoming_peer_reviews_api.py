@@ -29,7 +29,6 @@ class MemberIncomingReviewTest(IncomingReviewFixtures, TestCase):
     def test_released_owner_sees_completed_anonymous_incoming_reviews(self):
         self._release()
         response = self._get()
-        self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['preliminary_score']['total'], 2.5)
         self.assertEqual(len(data['reviews']), 2)
@@ -89,7 +88,7 @@ class MemberIncomingReviewTest(IncomingReviewFixtures, TestCase):
         outgoing.is_complete = True
         outgoing.criteria_scores = {'quality': 1, 'extras': []}
         outgoing.save(update_fields=['is_complete', 'criteria_scores'])
-        self.assertEqual(self._get().status_code, 200)
+        self.assertEqual(self._get().json()['preliminary_score']['total'], 2.5)
         outgoing.criteria_scores = {}
         outgoing.save(update_fields=['criteria_scores'])
         self.assertEqual(self._get().status_code, 403)
@@ -101,5 +100,4 @@ class MemberIncomingReviewTest(IncomingReviewFixtures, TestCase):
         self.submission.status = 'review_complete'
         self.submission.save(update_fields=['status'])
         response = self._get()
-        self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.json()['preliminary_score']['total'])

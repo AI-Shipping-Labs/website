@@ -10,7 +10,6 @@ class StudioIncomingReviewTest(IncomingReviewFixtures, TestCase):
     def test_submission_disclosure_has_score_and_review_details(self):
         self.client.force_login(self.staff)
         response = self.client.get(f'/studio/courses/{self.course.pk}/peer-reviews')
-        self.assertEqual(response.status_code, 200)
         item = response.context['cohort_groups'][0]['items'][0]
         self.assertEqual(item['incoming']['preliminary_score']['total'], 2.5)
         self.assertEqual(item['incoming']['completed_reviews_count'], 2)

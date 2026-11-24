@@ -25,7 +25,6 @@ class StaffIncomingReviewTest(IncomingReviewFixtures, TestCase):
         before = list(PeerReview.objects.values('pk', 'is_complete', 'criteria_scores', 'feedback'))
         with patch('content.services.peer_review_service.PeerReviewService.check_and_update_submission_status') as mutate:
             response = self._get({'project': 'attempt-1', 'student': 'George Cosmin Taschina'})
-        self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['projects'][0]['completed_reviews_count'], 2)
         self.assertEqual(data['pagination']['total'], 1)

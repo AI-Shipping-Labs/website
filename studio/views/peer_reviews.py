@@ -5,10 +5,12 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
 from content.models import Cohort, Course, CourseProject, ProjectSubmission
 from content.models.peer_review import SUBMISSION_STATUS_CHOICES
+from content.services.incoming_peer_reviews import incoming_breakdown, incoming_reviews
 from content.services.peer_review_service import PeerReviewService
 from content.services.project_state import (
     ProjectStateError,
@@ -34,6 +36,15 @@ def _friendly_status_label(status):
     return FRIENDLY_STATUS_LABELS.get(status, status.replace('_', ' ').capitalize())
 
 
+def _studio_incoming(submission, reviews):
+    data = incoming_breakdown(submission, staff=True, reviews=reviews)
+    for row in data['reviews']:
+        row['assigned_at'] = parse_datetime(row['assigned_at'])
+        if row['completed_at']:
+            row['completed_at'] = parse_datetime(row['completed_at'])
+    return data
+
+
 def _build_submission_item(sub):
     """Bundle a submission with its review counts for template rendering.
 
@@ -41,7 +52,7 @@ def _build_submission_item(sub):
     control can be rendered inline (issue #949). A submission has at most
     one certificate via the ``submission`` FK on :class:`CourseCertificate`.
     """
-    reviews = list(sub.reviews.select_related('reviewer').all())
+    reviews = incoming_reviews(sub)
     total_reviews = len(reviews)
     completed_reviews = sum(1 for r in reviews if r.is_complete)
     # The submission -> certificate FK is nullable and back-creates the
@@ -50,6 +61,7 @@ def _build_submission_item(sub):
     return {
         'submission': sub,
         'reviews': reviews,
+        'incoming': _studio_incoming(sub, reviews),
         'total_reviews': total_reviews,
         'completed_reviews': completed_reviews,
         'status_label': _friendly_status_label(sub.status),

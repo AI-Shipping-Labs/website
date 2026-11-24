@@ -1,0 +1,35 @@
+{% load date_formatting studio_filters %}
+<div class="mt-3 pt-3 border-t border-border" data-testid="incoming-peer-reviews" data-submission-id="{{ incoming.submission_id }}">
+  <h4 class="text-sm font-medium text-foreground mb-2">Incoming reviews and preliminary score</h4>
+  <p class="text-sm text-muted-foreground" data-testid="preliminary-score">
+    {{ incoming.completed_reviews_count }}/{{ incoming.assigned_reviews_count }} reviews complete.
+    {% if incoming.preliminary_score.total != None %}
+    Preliminary total: <span class="text-foreground">{{ incoming.preliminary_score.total }}</span>.
+    {% else %}No preliminary score available yet.{% endif %}
+    Pass threshold: {{ incoming.preliminary_score.passing_score }}{% if not incoming.preliminary_score.passing_score %} (not configured){% endif %}.
+  </p>
+  <p class="text-xs text-muted-foreground mt-2">Median points per criterion, then summed. Pending reviews are excluded. This is not a final pass result.</p>
+  {% if incoming.preliminary_score.criteria %}
+  <dl class="mt-3 space-y-1" data-testid="criterion-medians">
+    {% for criterion in incoming.preliminary_score.criteria %}
+    <div class="text-sm"><dt class="text-muted-foreground">{{ criterion.title }}</dt><dd class="text-foreground">{% if criterion.points != None %}{{ criterion.points }}{% else %}Not scored{% endif %} / {{ criterion.max_points }}</dd></div>
+    {% endfor %}
+  </dl>
+  {% endif %}
+  <div class="mt-3 space-y-3">
+    {% for review in incoming.reviews %}
+    <div class="pt-3 border-t border-border" data-testid="incoming-review">
+      <p class="text-sm text-foreground break-all">{{ review.reviewer.name }} · {{ review.reviewer.email }} · {{ review.status|capfirst }}</p>
+      <p class="text-xs text-muted-foreground">Assigned {{ review.assigned_at|operator_datetime_tz }}{% if review.completed_at %} · Completed {{ review.completed_at|operator_datetime_tz }}{% endif %}</p>
+      <dl class="mt-3 space-y-1">
+        {% for criterion in review.criteria %}
+        <div class="text-sm" data-testid="review-criterion"><dt class="text-muted-foreground">{{ criterion.title }}</dt><dd class="text-foreground">{% if criterion.points != None %}{{ criterion.points }}{% else %}Not answered{% endif %} / {{ criterion.max_points }}{% if criterion.selected_text %} · {{ criterion.selected_text|join:"; " }}{% endif %}</dd><dd class="text-muted-foreground">Criterion feedback: {{ criterion.feedback|default:"Not provided" }}</dd></div>
+        {% endfor %}
+      </dl>
+      <p class="mt-2 text-sm text-foreground whitespace-pre-line" data-testid="review-feedback">{{ review.feedback|default:"No overall feedback yet." }}</p>
+    </div>
+    {% empty %}
+    {% studio_empty_state 'fresh' entity_label='review' entity_label_plural='reviews' %}
+    {% endfor %}
+  </div>
+</div>

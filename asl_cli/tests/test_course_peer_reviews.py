@@ -74,3 +74,18 @@ def test_course_peer_review_assign_help_mentions_emails():
     )
     assert result.exit_code == 0, result.output
     assert "review-assigned emails" in " ".join(result.output.split())
+
+
+def test_course_peer_reviews_passes_incoming_detail_filters(client):
+    result = CliRunner().invoke(cli, [
+        'sprints', 'course-peer-reviews', 'ai-buildcamp',
+        '--project', 'attempt-1', '--student', 'George Cosmin Taschina',
+        '--submission', '42', '--details', '--page', '2',
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [(
+        'GET', '/api/courses/ai-buildcamp/peer-reviews',
+        {'params': {'project': 'attempt-1', 'student': 'George Cosmin Taschina',
+                    'submission': 42, 'details': '1', 'page': 2}},
+    )]
+    assert json.loads(result.output) == RESPONSE

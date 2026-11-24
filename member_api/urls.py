@@ -10,6 +10,7 @@ from member_api.views.books import (
 )
 from member_api.views.docs import docs_page, openapi_json
 from member_api.views.events import event_detail, event_register, events_collection
+from member_api.views.incoming_peer_reviews import incoming_peer_reviews
 from member_api.views.peer_reviews import (
     peer_review_detail,
     peer_reviews_collection,
@@ -33,6 +34,11 @@ from member_api.views.plans import (
 )
 
 urlpatterns = [
+    path(
+        "v1/peer-reviews/submissions/<int:submission_id>/incoming",
+        incoming_peer_reviews,
+        name="member_api_incoming_peer_reviews",
+    ),
     path("openapi.json", openapi_json, name="member_api_openapi_json"),
     path("docs", docs_page, name="member_api_docs"),
     path("v1/plans", plans_collection, name="member_api_plans_collection"),

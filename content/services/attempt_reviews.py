@@ -32,12 +32,17 @@ def _evaluation_rows(assigned, course):
     return rows
 
 
+def reviewer_label(number):
+    """Anonymous incoming reviewer labels shared with the member API."""
+    return f'Reviewer {number}'
+
+
 def peer_feedback_rows(received):
     """Non-empty comments as "Reviewer 1..n" in review order."""
     rows = []
     for number, review in enumerate(received, start=1):
         if review.feedback.strip():
-            rows.append({'label': f'Reviewer {number}', 'feedback': review.feedback})
+            rows.append({'label': reviewer_label(number), 'feedback': review.feedback})
     return rows
 
 

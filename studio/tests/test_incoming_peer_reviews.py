@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from accounts.templatetags.date_formatting import operator_datetime_tz
 from content.tests.incoming_peer_review_fixtures import IncomingReviewFixtures
+from studio.tests.test_user_merge import testid_texts
 
 
 class StudioIncomingReviewTest(IncomingReviewFixtures, TestCase):
@@ -17,8 +18,9 @@ class StudioIncomingReviewTest(IncomingReviewFixtures, TestCase):
         self.assertContains(response, operator_datetime_tz(self.first_review.assigned_at))
         self.assertContains(response, operator_datetime_tz(self.first_review.completed_at))
         self.assertTemplateUsed(response, 'studio/courses/_incoming_peer_reviews.html')
-        self.assertContains(response, '<dd class="text-foreground">1.5 / 3</dd>', html=True)
-        self.assertContains(response, '<p class="mt-2 text-sm text-foreground whitespace-pre-line" data-testid="review-feedback">First useful feedback</p>', html=True)
+        source = response.content.decode()
+        self.assertIn('1.5 / 3', testid_texts(source, 'criterion-medians')[0])
+        self.assertIn('First useful feedback', testid_texts(source, 'review-feedback'))
 
     def test_no_reviews_has_explicit_empty_state(self):
         self.submission.reviews.all().delete()

@@ -59,7 +59,7 @@ def _details_response(queryset, page_number, data):
     return JsonResponse(data)
 
 
-def add_incoming_details(request, course, cohort, project, data):
+def _add_incoming_details(request, course, cohort, project, data):
     """Keep existing counts-only clients unchanged; opt in with detail filters."""
     raw_id = (request.GET.get('submission') or '').strip()
     student = (request.GET.get('student') or '').strip()

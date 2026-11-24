@@ -18,7 +18,7 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import require_methods
-from api.views.course_peer_review_incoming import add_incoming_details
+from api.views.course_peer_review_incoming import _add_incoming_details
 from content.models import Course, CourseProject, ProjectSubmission
 from content.models.peer_review import SUBMISSION_STATUS_CHOICES
 from content.services.course_cohorts import get_course_cohort_by_key
@@ -217,4 +217,4 @@ def course_peer_reviews(request, slug):
         "projects": [_serialize_project(course, p) for p in projects],
         "legacy_submissions_count": legacy_count,
     }
-    return add_incoming_details(request, course, cohort, project, data)
+    return _add_incoming_details(request, course, cohort, project, data)

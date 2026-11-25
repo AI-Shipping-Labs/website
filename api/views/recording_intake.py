@@ -34,9 +34,7 @@ def _validated(data):
     start = _timestamp(data.get('start_time'))
     available = _timestamp(data.get('available_at'))
     if available is None:
-        if data.get('available_at') is not None:
-            raise ValueError('available_at must be a timezone-aware timestamp')
-        available = timezone.now()
+        raise ValueError('available_at must be a provider-supplied timezone-aware timestamp')
     if start is None or available > timezone.now():
         raise ValueError('start_time and available_at must be valid timezone-aware timestamps')
     if not data.get('meeting_id') or not isinstance(data.get('recording_uuid'), str):
@@ -51,7 +49,28 @@ def _validated(data):
 @require_methods('POST')
 @openapi_spec(
     tag='Events', summary='Receive a Zoom recording lifecycle notification',
-    methods={'POST': {'summary': 'Receive a Zoom recording lifecycle notification'}},
+    methods={'POST': {
+        'summary': 'Receive a Zoom recording lifecycle notification',
+        'request_body': {
+            'required': ['event', 'meeting_id', 'recording_uuid', 'start_time', 'available_at'],
+            'properties': {
+                'event': {'type': 'string', 'enum': sorted(PHASES)},
+                'meeting_id': {'oneOf': [{'type': 'string'}, {'type': 'integer'}]},
+                'recording_uuid': {'type': 'string'},
+                'start_time': {'type': 'string', 'format': 'date-time'},
+                'available_at': {
+                    'type': 'string', 'format': 'date-time',
+                    'description': 'Original provider readiness timestamp, never local queue receipt time.',
+                },
+            },
+        },
+        'responses': {
+            202: {'description': 'Matched occurrence receipt durably queued.'},
+            200: {'description': 'Non-AISL meeting; no action performed.'},
+            409: {'description': 'Ambiguous occurrence or conflicting recording UUID.'},
+            422: {'description': 'Invalid payload or missing, malformed, or future provider timestamp.'},
+        },
+    }},
 )
 def recording_intake(request):
     data, error = parse_json_body(request)

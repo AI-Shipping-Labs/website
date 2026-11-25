@@ -739,3 +739,10 @@ job. The request carries the Zoom recording UUID and occurrence start time, so a
 recurring meeting's unrelated recording cannot be attached by a guessed slug.
 See [S3 recordings](s3_recordings.md#workshop-preparation) for integration settings,
 source/status endpoints, draft-only behavior and both deadline/alert contracts.
+
+`available_at` on recording lifecycle intake is required and must retain Zoom's
+original signed event timestamp. Missing or invalid timestamps are rejected,
+so delayed Dapier processing cannot shift the readiness deadline forward.
+Polling remains a separate recovery observation: Zoom's listing lacks a
+processed/available timestamp, so first local observation is not proof of the
+original provider readiness time.

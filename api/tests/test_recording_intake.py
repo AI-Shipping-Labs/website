@@ -100,3 +100,22 @@ class RecordingIntakeTests(TestCase):
         self.assertEqual(self.post().status_code, 202)
         self.event.refresh_from_db()
         self.assertEqual(self.event.recording_zoom_available_at, self.available)
+
+
+    @patch('jobs.tasks.async_task')
+    def test_missing_provider_timestamp_cannot_start_a_receipt_time_deadline(self, queue):
+        del self.payload['available_at']
+        response = self.post()
+        self.assertEqual(response.status_code, 422)
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.recording_zoom_available_at)
+        queue.assert_not_called()
+
+    @patch('jobs.tasks.async_task')
+    def test_null_malformed_and_future_provider_timestamps_are_rejected(self, queue):
+        future = (timezone.now() + timedelta(days=1)).isoformat()
+        for value in (None, 'invalid-time', future):
+            with self.subTest(available_at=value):
+                self.payload['available_at'] = value
+                self.assertEqual(self.post().status_code, 422)
+        queue.assert_not_called()

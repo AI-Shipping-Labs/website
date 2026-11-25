@@ -233,6 +233,9 @@ before any agent classification. The body includes `event`, `meeting_id`,
 `recording_uuid`, `start_time`, and `available_at`. Supported events are
 `recording.completed` and `recording.transcript_completed`. The website matches
 one event occurrence, rejects ambiguous matches, and ignores non-AISL meetings.
+The producer must supply the original provider readiness timestamp in
+`available_at`; missing, null, malformed, naive and future values return `422`
+without queuing work. Local queue receipt time is never substituted by this API.
 Availability is stored before downstream work is queued. Replays preserve the
 earliest receipt time. A delayed webhook can correct a later poll observation.
 

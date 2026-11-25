@@ -19328,9 +19328,66 @@
     },
     "/api/recording-intake": {
       "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "available_at": {
+                    "description": "Original provider readiness timestamp, never local queue receipt time.",
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "event": {
+                    "enum": [
+                      "recording.completed",
+                      "recording.transcript_completed"
+                    ],
+                    "type": "string"
+                  },
+                  "meeting_id": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "recording_uuid": {
+                    "type": "string"
+                  },
+                  "start_time": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "event",
+                  "meeting_id",
+                  "recording_uuid",
+                  "start_time",
+                  "available_at"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
-            "description": "Success"
+            "description": "Non-AISL meeting; no action performed."
+          },
+          "202": {
+            "description": "Matched occurrence receipt durably queued."
+          },
+          "409": {
+            "description": "Ambiguous occurrence or conflicting recording UUID."
+          },
+          "422": {
+            "description": "Invalid payload or missing, malformed, or future provider timestamp."
           }
         },
         "summary": "Receive a Zoom recording lifecycle notification",

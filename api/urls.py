@@ -13,7 +13,7 @@ to match the contacts endpoints and skip that redirect on every API
 call.
 """
 
-from django.urls import path
+from django.urls import path, register_converter
 
 from api.views.aliases import user_aliases_add, user_aliases_remove
 from api.views.articles import (
@@ -122,6 +122,12 @@ from api.views.crm_calls import crm_calls
 from api.views.crm_export import crm_export, crm_record_markdown_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list
+from api.views.email_templates import (
+    RelayTemplateKeyConverter,
+    email_template_detail,
+    email_template_preview,
+    email_template_publish,
+)
 from api.views.enrollments import (
     sprint_enrollment_detail,
     sprint_enrollments_collection,
@@ -322,7 +328,15 @@ from api.views.workshop_previews import (
 
 # Framework URLconf: retain this existing central route table to preserve ordered
 # dispatch and OpenAPI discovery; splitting all API routes is outside this repair.
+register_converter(RelayTemplateKeyConverter, "relay_template_key")
+
+from api.views.recording_intake import recording_intake
+from api.views.recording_source import recording_preparation_source, recording_preparation_status
+
 urlpatterns = [
+    path("events/<slug:slug>/preparation", recording_preparation_status, name="api_recording_preparation_status"),
+    path("events/<slug:slug>/preparation-source", recording_preparation_source, name="api_recording_preparation_source"),
+    path("recording-intake", recording_intake, name="api_recording_intake"),
     path("courses/<slug:slug>/learning-activity", course_learning_history, name="api_course_learning_activity"),
     # ---- API documentation (issue #722) -------------------------------
     # Staff-only Swagger UI page + raw OpenAPI JSON. These two routes
@@ -351,6 +365,23 @@ urlpatterns = [
         "email-log",
         email_log_list,
         name="api_email_log_list",
+    ),
+    # Relay template catalog (intake 1f596393): same operations as the
+    # Studio editor. Keys mirror Relay's pattern, including dotted keys.
+    path(
+        "email-templates/<relay_template_key:template_key>/publish",
+        email_template_publish,
+        name="api_email_template_publish",
+    ),
+    path(
+        "email-templates/<relay_template_key:template_key>/preview",
+        email_template_preview,
+        name="api_email_template_preview",
+    ),
+    path(
+        "email-templates/<relay_template_key:template_key>",
+        email_template_detail,
+        name="api_email_template_detail",
     ),
     path(
         "diagnostics/mail-deliveries",

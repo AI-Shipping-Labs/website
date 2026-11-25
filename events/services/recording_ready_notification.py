@@ -9,8 +9,9 @@ from types import SimpleNamespace
 
 from django.db import transaction
 from django.db.models import Q
+from django.db.models.functions import Lower
 
-from accounts.services.email_resolution import resolve_user_by_email
+from accounts.services.email_resolution import normalize_email, resolve_user_by_email
 from email_app.relay_transactional import recipient_template_context
 from email_app.services.relay_templates import relay_template_subject
 from events.services.recording_ready_context import build_recording_ready_context
@@ -33,41 +34,44 @@ class RecordingReadyRecipient:
 
 
 def resolve_recording_ready_recipients(event):
-    """Return host/operator recipients in the issue-defined order."""
+    """Return one host/operator recipient per person, in issue-defined order.
+
+    Order: ``event.host_email``, then active Host profile emails by
+    position, then the staff fallback when nobody else is known.
+
+    Dedupe is by person, not by exact address (intake 1f596393): two
+    addresses that resolve to the same ``User`` -- a primary login plus an
+    ``EmailAlias`` row -- count once. Known delivery forwards (for example
+    a Relay inbound forward from an aishippinglabs.com mailbox into a work
+    inbox) are recorded as ``EmailAlias`` rows on the person's account, so
+    the forwarded copy is not sent. The first address seen for a person
+    wins, which keeps the event's own host_email as the delivery address.
+    """
     recipients = []
     seen = set()
-
-    def add(raw_email, source):
-        email = (raw_email or "").strip()
-        if not email:
-            return
-        key = email.lower()
-        if key in seen:
-            return
-        seen.add(key)
-        recipients.append(
-            RecordingReadyRecipient(
-                email=email,
-                source=source,
-                user=resolve_user_by_email(email),
-            ),
-        )
-
-    add(getattr(event, "host_email", ""), "event.host_email")
-    host_links = (
-        event.event_host_links.select_related("host")
-        .filter(host__is_active=True)
-        .order_by("position")
-    )
-    for link in host_links:
-        add(link.host.email, "event.hosts")
-
-    if recipients:
-        return recipients
-
-    fallback = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
-    add(fallback, "staff_fallback")
+    _add_recipient(recipients, seen, getattr(event, "host_email", ""), "event.host_email")
+    links = event.event_host_links.select_related("host").filter(host__is_active=True).order_by("position")
+    for link in links:
+        _add_recipient(recipients, seen, link.host.email, "event.hosts")
+    if not recipients:
+        fallback = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
+        _add_recipient(recipients, seen, fallback, "staff_fallback")
     return recipients
+
+
+def _add_recipient(recipients, seen, raw_email, source):
+    email = (raw_email or "").strip()
+    if not email:
+        return
+    email_key = f"email:{normalize_email(email)}"
+    user = resolve_user_by_email(email)
+    person_key = email_key
+    if user is not None:
+        person_key = f"user:{user.pk}"
+    if email_key in seen or person_key in seen:
+        return
+    seen.update({email_key, person_key})
+    recipients.append(RecordingReadyRecipient(email=email, source=source, user=user))
 
 
 def notify_recording_ready(event):
@@ -183,7 +187,7 @@ def _record_sent(event, recipient, subject, external_key):
             ses_message_id=external_key,
             dedupe_key=dedupe_key,
         )
-    logger.info('Sent %s to %s for event "%s" (EmailLog %s, Relay %s)', EMAIL_TYPE, recipient.email, event.title, email_log.pk, external_key)
+    logger.info('Submitted %s for event %s (EmailLog %s, Relay %s)', EMAIL_TYPE, event.pk, email_log.pk, external_key)
     return {"email": recipient.email, "source": recipient.source, "status": "sent", "email_log_id": email_log.pk}
 
 
@@ -209,8 +213,14 @@ def _existing_log(event, recipient, *, for_update=False):
 
     query = Q(recipient_email__iexact=recipient.email)
     if recipient.user is not None:
-        query |= Q(user=recipient.user)
-    queryset = EmailLog.objects.filter(event=event, email_type=EMAIL_TYPE)
+        from accounts.models import EmailAlias
+
+        aliases = EmailAlias.objects.filter(user=recipient.user).values('email')
+        query |= Q(user=recipient.user) | Q(_normalized_email__in=aliases)
+        query |= Q(_normalized_email=normalize_email(recipient.user.email))
+    queryset = EmailLog.objects.filter(event=event, email_type=EMAIL_TYPE).annotate(
+        _normalized_email=Lower("recipient_email"),
+    )
     if for_update:
         queryset = queryset.select_for_update()
     return queryset.filter(query).first()

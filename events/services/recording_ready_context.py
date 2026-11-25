@@ -44,6 +44,13 @@ def _resolve_watch_url(event):
 
 
 def _publish_copy(event, is_available_to_watch):
+    """Return (publish_state, publish_copy) for the host email.
+
+    ``publish_copy`` is the only next-step line in the Relay
+    ``event_recording_ready`` template, so each state states its own next
+    step and never asks the host to publish an event that is already
+    published (intake 1f596393).
+    """
     if is_available_to_watch:
         return (
             "Published and available to watch",
@@ -53,11 +60,15 @@ def _publish_copy(event, is_available_to_watch):
     if event.published:
         return (
             "Uploaded and currently published",
-            "The event is currently published. Review the uploaded recording "
-            "in Studio and confirm the member-facing page is still correct.",
+            "The event page is published; the recording is uploaded but a published "
+            "workshop video page is not yet available to members. "
+            "Next step: review the uploaded recording in Studio, confirm the "
+            "member-facing page is still correct, and send the attendee "
+            "follow-up separately when the recap and notes are ready.",
         )
     return (
         "Ready for review/publishing",
-        "The event is not public yet. Review the upload, then publish and send "
-        "the attendee follow-up when ready.",
+        "The event is not public yet. Next step: review the upload in Studio, "
+        "publish the event when it is ready for members, and send the "
+        "attendee follow-up separately when the recap and notes are ready.",
     )

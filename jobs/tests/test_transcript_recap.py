@@ -145,6 +145,9 @@ class ParseVttToTextTest(TestCase):
 
 class TranscribeRecordingTest(TestCase):
     def setUp(self):
+        hub = patch('events.services.recording_preparation.dispatch_preparation', return_value='draft-delivery')
+        self.hub_dispatch = hub.start()
+        self.addCleanup(hub.stop)
         clear_config_cache()
         self.addCleanup(clear_config_cache)
         archive_patcher = patch(
@@ -199,7 +202,7 @@ class TranscribeRecordingTest(TestCase):
         # LLM disabled: transcript stored, recap skipped with reason.
         self.assertEqual(
             result['recap'],
-            {'status': 'skipped', 'reason': 'llm_not_configured'},
+            {'status': 'hub_draft_queued', 'delivery_id': 'draft-delivery'},
         )
 
     @override_settings()
@@ -222,16 +225,10 @@ class TranscribeRecordingTest(TestCase):
         mock_q_async.return_value = 'recap-task-1'
         result = transcribe_recording(self.event.id)
 
-        self.assertEqual(result['recap']['status'], 'queued')
-        self.assertEqual(result['recap']['forced'], False)
-        queued_funcs = [call[0][0] for call in mock_q_async.call_args_list]
-        self.assertIn('jobs.tasks.recap_draft.draft_event_recap', queued_funcs)
-        recap_call = next(
-            call for call in mock_q_async.call_args_list
-            if call[0][0] == 'jobs.tasks.recap_draft.draft_event_recap'
-        )
-        self.assertEqual(recap_call[0][1], self.event.id)
-        self.assertEqual(recap_call[0][2], False)
+        self.assertEqual(result['recap']['status'], 'hub_draft_queued')
+        self.hub_dispatch.assert_called_once_with(self.event.pk)
+        mock_q_async.assert_not_called()
+        mock_complete.assert_not_called()
 
     @patch('integrations.services.llm.is_enabled', return_value=True)
     @patch('jobs.tasks.helpers.q_async_task')
@@ -249,7 +246,7 @@ class TranscribeRecordingTest(TestCase):
 
         self.assertEqual(
             result['recap'],
-            {'status': 'skipped', 'reason': 'recap_auto_draft_disabled'},
+            {'status': 'hub_draft_queued', 'delivery_id': 'draft-delivery'},
         )
         mock_q_async.assert_not_called()
 

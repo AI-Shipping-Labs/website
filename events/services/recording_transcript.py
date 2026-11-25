@@ -163,79 +163,62 @@ def attach_transcript_vtt(event, raw_vtt):
     }
 
 
-def refresh_transcript_from_zoom(event):
-    """Re-list the meeting's recordings via the Zoom API (issue #1597).
-
-    Picks up a transcript VTT — and the MP4 download URL — that the
-    automatic intake has not stored yet, for events that completed with
-    an idle recording pipeline. Writes:
-
-    - ``transcript_url``: the ``audio_transcript`` download URL, refreshed
-      whenever Zoom reports one and text or its raw archive is missing
-      (freshly signed URLs beat stale ones). A URL arriving for an event marked
-      unavailable also clears that marker and the attempt counter.
-    - ``recording_zoom_download_url`` + upload enqueue: only when the event
-      has no S3 recording and no stored download URL, mirroring the
-      webhook's duplicate-upload guard.
-
-    Returns a dict describing what was refreshed. Raises ``ZoomAPIError``
-    when the Zoom listing fails; callers decide whether that is fatal.
-    """
-    from django.utils import timezone
-
-    from events.services.recording_upload import (
-        enqueue_recording_upload_task,
-        recording_upload_lease_is_active,
-    )
+def refresh_transcript_from_zoom(event, *, source='Transcript sync', data=None):
+    """Store independent Zoom assets and claim the MP4 upload immediately."""
     from integrations.services.zoom import get_meeting_recordings
 
     if not event.zoom_meeting_id:
         return {'refreshed': False, 'reason': 'no_meeting_id'}
+    if data is None:
+        data = get_meeting_recordings(event)
+    files = data.get('recording_files', [])
+    transcript_changed = _store_transcript_url(event, _extract_transcript_url(files))
+    video_changed, queued = _store_video_url(
+        event, _extract_video_download_url(files), source,
+    )
+    return {
+        'refreshed': True, 'transcript_url': transcript_changed,
+        'recording_download_url': video_changed, 'upload_queued': queued,
+    }
 
-    data = get_meeting_recordings(event)
-    recording_files = data.get('recording_files', [])
-    transcript_url = _extract_transcript_url(recording_files)
-    download_url = _extract_video_download_url(recording_files)
 
-    update_fields = []
-    refreshed = {'refreshed': True, 'transcript_url': False,
-                 'recording_download_url': False, 'upload_queued': False}
+def _store_transcript_url(event, url):
+    if not url or (event.transcript_text and event.transcript_s3_url):
+        return False
+    changed = url != event.transcript_url
+    event.transcript_url = url
+    event.transcript_unavailable_at = None
+    event.transcript_fetch_attempts = 0
+    event.save(update_fields=[
+        'transcript_url', 'transcript_unavailable_at',
+        'transcript_fetch_attempts', 'updated_at',
+    ])
+    return changed
 
-    # Text-only rows from #1597 still need the source URL so the raw VTT can
-    # be archived without replacing their durable parsed text.
-    if transcript_url and (
-        not event.transcript_text or not event.transcript_s3_url
-    ):
-        if transcript_url != event.transcript_url:
-            event.transcript_url = transcript_url
-            update_fields.append('transcript_url')
-            refreshed['transcript_url'] = True
-        if event.transcript_unavailable_at is not None:
-            event.transcript_unavailable_at = None
-            event.transcript_fetch_attempts = 0
-            update_fields.extend([
-                'transcript_unavailable_at',
-                'transcript_fetch_attempts',
-            ])
 
-    if (
-        download_url
-        and not event.recording_s3_url
-        and not event.recording_zoom_download_url
-    ):
-        event.recording_zoom_download_url = download_url
-        update_fields.append('recording_zoom_download_url')
-        refreshed['recording_download_url'] = True
-        if not recording_upload_lease_is_active(event):
-            enqueue_recording_upload_task(event, download_url, source='Transcript sync')
-            event.recording_upload_enqueued_at = timezone.now()
-            update_fields.append('recording_upload_enqueued_at')
-            refreshed['upload_queued'] = True
+def _store_video_url(event, url, source):
+    from django.db import transaction
+    from django.utils import timezone
 
-    if update_fields:
-        update_fields.append('updated_at')
-        event.save(update_fields=update_fields)
-    return refreshed
+    from events.models import Event
+    from events.services.recording_upload import claim_and_enqueue_recording_upload
+
+    if not url or event.recording_s3_url:
+        return False, False
+    with transaction.atomic():
+        locked = Event.objects.select_for_update().get(pk=event.pk)
+        changed = not locked.recording_zoom_download_url
+        locked.recording_zoom_download_url = url
+        if locked.recording_zoom_available_at is None:
+            locked.recording_zoom_available_at = timezone.now()
+        locked.save(update_fields=[
+            'recording_zoom_download_url', 'recording_zoom_available_at', 'updated_at',
+        ])
+        claimed, result = claim_and_enqueue_recording_upload(event.pk, source=source)
+    event.recording_zoom_download_url = url
+    event.recording_zoom_available_at = locked.recording_zoom_available_at
+    event.recording_upload_enqueued_at = claimed.recording_upload_enqueued_at
+    return changed, result == 'queued'
 
 
 def _extract_transcript_url(recording_files):
@@ -247,11 +230,7 @@ def _extract_transcript_url(recording_files):
 
 
 def _extract_video_download_url(recording_files):
-    """Return a usable MP4 download URL, preferring canonical view types.
-
-    Same preference order as the webhook's video selection so a re-list
-    picks the same file the webhook would have.
-    """
+    """Prefer canonical views, then accept any completed MP4 layout."""
     preferred = (
         'shared_screen_with_speaker_view',
         'shared_screen',
@@ -261,7 +240,28 @@ def _extract_video_download_url(recording_files):
         for rec_file in recording_files:
             if rec_file.get('recording_type') != recording_type:
                 continue
+            if not _recording_file_finished(rec_file):
+                continue
             download_url = (rec_file.get('download_url') or '').strip()
             if download_url:
                 return download_url
+    for rec_file in recording_files:
+        if str(rec_file.get('file_type') or '').upper() != 'MP4':
+            continue
+        if not _recording_file_finished(rec_file):
+            continue
+        download_url = (rec_file.get('download_url') or '').strip()
+        if download_url:
+            return download_url
     return ''
+
+
+def _recording_file_finished(rec_file):
+    """True unless Zoom reports the file as still processing.
+
+    Zoom lists a file with ``status`` ``completed`` once it can be
+    downloaded. Older payloads (and test fixtures) omit the field, so a
+    missing status counts as finished.
+    """
+    status = str(rec_file.get('status') or '').strip().lower()
+    return status in ('', 'completed')

@@ -475,7 +475,10 @@ Keys to set in Studio:
 | `ZOOM_ACCOUNT_ID` | secret | Zoom account ID (visible on the app's app credentials page). |
 
 Under **Features/Access → Event Subscriptions**, point the Event Notification
-Endpoint at the dapier hook URL and subscribe only to `recording.completed`.
+Endpoint at the dapier hook URL and subscribe to `recording.completed` and
+`recording.transcript_completed`. The platform also polls Zoom for finished
+MP4s every 5 minutes (`recording-pipeline-watch`), so the video upload and
+host email do not wait for the transcript.
 Dapier owns post-recording intake (issue #1913) and drives this platform's
 `sync-transcript` / `retry-recording-upload` API; the subscription's Secret
 Token is imported into dapier, not stored in this application. See

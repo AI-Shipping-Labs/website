@@ -78,15 +78,27 @@ at the dapier hook URL; this platform does not expose a Zoom webhook endpoint.
 2. In the same app, open **Features/Access → Event Subscriptions**, enable
    event subscriptions, and add a webhook subscription for all users in this
    account.
-3. Set the endpoint to the dapier hook URL with no trailing slash, add only
-   **Cloud Recording → All Recordings have completed** (`recording.completed`),
-   then save and click **Validate**. Dapier answers Zoom's one-time
-   `endpoint.url_validation` challenge.
-4. On each delivery dapier starts its recording agent, which drives this
-   platform's staff API: `POST /api/events/<slug>/sync-transcript` stores the
-   transcript VTT and the Zoom MP4 download URL and enqueues the S3 upload;
+3. Set the endpoint to the dapier hook URL with no trailing slash, add
+   **Cloud Recording → All Recordings have completed** (`recording.completed`)
+   and **Cloud Recording → Recording transcript files have completed**
+   (`recording.transcript_completed`), then save and click **Validate**.
+   Dapier answers Zoom's one-time `endpoint.url_validation` challenge.
+4. On each delivery the dapier `aisl-recording-agent` workflow starts its
+   recording agent, which drives this platform's staff API:
+   `POST /api/events/<slug>/sync-transcript` stores the transcript VTT and
+   the Zoom MP4 download URL and enqueues the S3 upload;
    `POST /api/events/<slug>/retry-recording-upload` re-enqueues a missing
-   upload.
+   upload. `recording.completed` starts the video upload and host email
+   without waiting for the transcript. `recording.transcript_completed`
+   picks up the transcript.
+
+The platform does not depend on that delivery for the video. The
+`recording-pipeline-watch` schedule polls Zoom every minute for events
+that started in the last 3 days and have no MP4 stored yet. It starts the
+upload as soon as Zoom lists a finished MP4. The host "Recording ready for
+review" email is due within 60 minutes of that moment, and staff get a
+Slack alert when it is late. See
+[Recording-ready bound](s3_recordings.md#recording-ready-bound).
 
 Zoom delivers webhooks to a single URL. Once the endpoint points at dapier,
 deliveries never reach this
@@ -413,7 +425,8 @@ Staff-token endpoint and the explicit recovery path for the whole chain.
 It re-lists the meeting's recordings via the Zoom API to pick up a
 transcript VTT (and the MP4 download URL) the automatic intake has not
 stored yet, then re-enqueues the transcript task. This is the endpoint the
-dapier recording agent drives on every `recording.completed` delivery. Optional body:
+dapier recording agent drives on every `recording.completed` and
+`recording.transcript_completed` delivery. Optional body:
 
 ```json
 {"redraft": true}
@@ -715,3 +728,21 @@ Then:
 - [Webhook event scopes](https://developers.zoom.us/docs/api/webhooks/)
 - [Zoom API role privileges](https://developers.zoom.us/docs/api/references/privileges/)
 - [Cloud recording account, license, and host prerequisites](https://support.zoom.com/hc/en/article?id=zm_kb&sysparm_article=KB0063923)
+
+### Recording phase intake
+
+The `aisl-recording-agent` workflow posts recording lifecycle events directly to
+`POST /api/recording-intake` before agent classification. `recording.completed`
+starts the MP4 upload and host-review notice independently of transcript readiness.
+`recording.transcript_completed` requests one idempotent Hub workshop-preparation
+job. The request carries the Zoom recording UUID and occurrence start time, so a
+recurring meeting's unrelated recording cannot be attached by a guessed slug.
+See [S3 recordings](s3_recordings.md#workshop-preparation) for integration settings,
+source/status endpoints, draft-only behavior and both deadline/alert contracts.
+
+`available_at` on recording lifecycle intake is required and must retain Zoom's
+original signed event timestamp. Missing or invalid timestamps are rejected,
+so delayed Dapier processing cannot shift the readiness deadline forward.
+Polling remains a separate recovery observation: Zoom's listing lacks a
+processed/available timestamp, so first local observation is not proof of the
+original provider readiness time.

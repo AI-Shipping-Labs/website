@@ -126,6 +126,12 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(cleanup.cron, '5 3 * * *')
         self.assertIn('retry-calendly-webhooks (every 5 min)', out.getvalue())
 
+    def test_recording_deadline_watch_runs_each_minute(self):
+        call_command('setup_schedules', stdout=StringIO())
+        watchdog = Schedule.objects.get(name='recording-pipeline-watch')
+        self.assertEqual(watchdog.cron, '* * * * *')
+        self.assertEqual(watchdog.func, 'jobs.tasks.recording_pipeline.watch_recording_pipeline')
+
     def test_creates_stuck_recording_upload_schedule(self):
         out = StringIO()
         call_command('setup_schedules', stdout=out)
@@ -331,6 +337,7 @@ class SetupSchedulesCommandTest(TestCase):
             'redact-maven-enrollment-pii',
             'retry-maven-enrollment-steps',
             'retry-stuck-recording-uploads',
+            'recording-pipeline-watch',
             'purge-user-activity',
             'purge-plan-sprints-raw-text',
             'event-reminders',

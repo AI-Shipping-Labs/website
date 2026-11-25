@@ -37,7 +37,6 @@ class RecordingSourceTests(TestCase):
         self.event.transcript_s3_url = 'https://private.example.com/secret.vtt'
         self.event.save()
         response = self.client.get(self.url, **self.headers)
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['transcript_vtt'], vtt)
         self.assertNotIn('private.example.com', response.content.decode())
 

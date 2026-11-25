@@ -85,7 +85,9 @@ class ZoomRecordingPollTest(TestCase):
         self.assertIsNotNone(event.recording_zoom_available_at)
         self.assertIsNotNone(event.recording_upload_enqueued_at)
         self.assertEqual(event.transcript_url, '')
-        mock_enqueue.assert_called_once()
+        mock_enqueue.assert_called_once_with(
+            event, 'https://zoom.us/rec/download/mp4-file', source=RECORDING_POLL_SOURCE,
+        )
         self.assertEqual(mock_enqueue.call_args.kwargs['source'], RECORDING_POLL_SOURCE)
 
     def test_transcript_url_is_stored_when_zoom_already_has_it(self, mock_enqueue):
@@ -98,7 +100,9 @@ class ZoomRecordingPollTest(TestCase):
 
         event.refresh_from_db()
         self.assertEqual(event.transcript_url, 'https://zoom.us/rec/download/vtt-file')
-        mock_enqueue.assert_called_once()
+        mock_enqueue.assert_called_once_with(
+            event, 'https://zoom.us/rec/download/mp4-file', source=RECORDING_POLL_SOURCE,
+        )
 
     def test_gallery_only_completed_mp4_starts_upload(self, mock_enqueue):
         event = make_event()
@@ -107,7 +111,9 @@ class ZoomRecordingPollTest(TestCase):
         with patch('integrations.services.zoom.get_meeting_recordings', return_value=listing):
             result = poll_zoom_recordings()
         self.assertEqual(result['queued'], 1)
-        mock_enqueue.assert_called_once()
+        mock_enqueue.assert_called_once_with(
+            event, 'https://zoom.us/rec/download/mp4-file', source=RECORDING_POLL_SOURCE,
+        )
 
     def test_processing_mp4_is_not_used(self, mock_enqueue):
         event = make_event()
@@ -183,7 +189,9 @@ class ZoomRecordingPollTest(TestCase):
 
         self.assertEqual(second['examined'], 1)
         self.assertEqual(mock_list.call_count, 2)
-        mock_enqueue.assert_called_once()
+        mock_enqueue.assert_called_once_with(
+            event, 'https://zoom.us/rec/download/mp4-file', source=RECORDING_POLL_SOURCE,
+        )
 
 
 class RecordingMatchesEventTest(TestCase):

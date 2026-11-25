@@ -1,7 +1,7 @@
 """Hub workshop preparation receipts, deadlines, retries, and draft-only inputs."""
 
 from datetime import timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -36,7 +36,11 @@ class RecordingPreparationTests(TestCase):
         post.return_value.json.return_value = {'delivery_id': 'delivery-one', 'status': 'pending'}
         self.assertEqual(dispatch_preparation(self.event.pk), 'delivery-one')
         self.assertEqual(dispatch_preparation(self.event.pk), 'delivery-one')
-        post.assert_called_once()
+        post.assert_called_once_with(
+            'https://hub.example.com/webhooks/route',
+            headers={'X-Webhook-Token': 'test', 'X-Delivery-Id': f'aisl-recording-preparation-{self.event.pk}'},
+            json=ANY, timeout=15, allow_redirects=False,
+        )
         request = post.call_args.kwargs
         self.assertTrue(request['json']['draft_only'])
         self.assertEqual(request['json']['outputs'], ['video_chapters', 'workshops_raw_summary'])
@@ -102,7 +106,9 @@ class RecordingPreparationTests(TestCase):
         self.preparation.delivery_id = 'delivery-one'
         self.preparation.save()
         reconcile_preparations()
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Recording workshop preparation stalled (event {self.event.pk})', ANY,
+        )
 
     @patch(ALERT, return_value=True)
     @patch(f'{SERVICE}.refresh_preparation')
@@ -134,7 +140,9 @@ class RecordingPreparationTests(TestCase):
             )
         reconcile_preparations()
         dispatch.assert_called_once_with(self.event.pk)
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Recording workshop preparation stalled (event {self.event.pk})', ANY,
+        )
 
     @patch('events.services.recap_draft.enqueue_recap_draft_task')
     @patch(f'{SERVICE}.dispatch_preparation', return_value='new-delivery')
@@ -160,7 +168,9 @@ class RecordingPreparationTests(TestCase):
                 start_alerted_at=self.ready, finish_alerted_at=self.ready, alerted_at=self.ready,
             )
         check_preparation_deadlines(timezone.now())
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Recording workshop preparation stalled (event {self.event.pk})', ANY,
+        )
         self.assertEqual(alert.call_args.args[0].pk, self.event.pk)
 
     @patch(ALERT, return_value=True)
@@ -174,4 +184,6 @@ class RecordingPreparationTests(TestCase):
         self.preparation.started_at = self.preparation.ready_at + timedelta(minutes=6)
         self.preparation.save()
         check_preparation_deadlines(timezone.now())
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Recording workshop preparation stalled (event {self.event.pk})', ANY,
+        )

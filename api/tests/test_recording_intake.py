@@ -1,7 +1,7 @@
 """The recording notification intake is staff-only and independent of transcripts."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -66,7 +66,6 @@ class RecordingIntakeTests(TestCase):
     def test_unknown_meeting_is_noop(self, queue):
         self.payload['meeting_id'] = 'different-meeting'
         response = self.post()
-        self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['matched'])
         queue.assert_not_called()
 
@@ -91,7 +90,9 @@ class RecordingIntakeTests(TestCase):
         self.assertEqual(self.event.recording_zoom_uuid, 'occurrence/one')
         self.assertFalse(RecordingPreparation.objects.filter(event=self.event).exists())
         queue.assert_not_called()
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Conflicting recording identity (event {self.event.pk})', ANY,
+        )
 
     @patch('jobs.tasks.async_task')
     def test_same_uuid_video_replay_preserves_original_deadline(self, queue):

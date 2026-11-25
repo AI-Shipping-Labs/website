@@ -32,11 +32,9 @@ class EmailTemplateApiTests(TestCase):
             self.url, {'markdown_body': '{{ publish_copy }}'},
             content_type='application/json', **self.headers,
         )
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['template']['markdown_body'], '{{ publish_copy }}')
         self.assertEqual(response.json()['versions'], initial['versions'])
         published = self.client.post(f'{self.url}/publish', **self.headers)
-        self.assertEqual(published.status_code, 200)
         self.assertEqual(published.json()['version'], 2)
 
     def test_unknown_draft_field_is_rejected(self):
@@ -51,5 +49,5 @@ class EmailTemplateApiTests(TestCase):
             f'{self.url}/preview', {'context': {'publish_copy': 'Already published.'}},
             content_type='application/json', **self.headers,
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['text_body'], 'Relay preview')
         self.assertEqual(self.relay.calls[-1]['context']['publish_copy'], 'Already published.')

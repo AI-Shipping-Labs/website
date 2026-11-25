@@ -1,7 +1,7 @@
 """A local submission log is never mistaken for Relay send completion."""
 
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -47,7 +47,10 @@ class RecordingDeliveryConfirmationTests(TestCase):
         refresh_host_notice(self.event.pk)
         result = check_recording_pipeline_stalls()
         self.assertEqual(result['alerted'], 1)
-        alert.assert_called_once()
+        alert.assert_called_once_with(
+            self.event, f'Recording pipeline stalled: {self.event.title} (event {self.event.pk})', ANY,
+        )
+        self.assertIn('not confirmed complete within the bound', alert.call_args.args[2])
 
     @patch('events.services.recording_pipeline_alerts.deliver_pipeline_alert', return_value=True)
     def test_healthy_old_rows_cannot_starve_later_stall(self, alert):

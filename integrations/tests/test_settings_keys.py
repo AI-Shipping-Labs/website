@@ -69,8 +69,26 @@ def _project_email_cleanup(groups):
     for group in groups:
         if group["name"] == "relay":
             _project_relay_group(group)
+        if group["name"] == "s3_recordings":
+            _project_recording_preparation(group)
         _project_email_descriptions(group)
     return groups
+
+
+def _project_recording_preparation(group):
+    """Issue #2137 adds the Hub producer route without changing the donor."""
+    group['keys'].extend([
+        {
+            'key': 'RECORDING_PREPARATION_HUB_URL', 'is_secret': False,
+            'optional': True, 'docs_url': '_docs/integrations/s3_recordings.md#workshop-preparation',
+            'description': 'HTTPS Hub inbound job route called when a recording transcript is ready. Results are review drafts only.',
+        },
+        {
+            'key': 'RECORDING_PREPARATION_HUB_TOKEN', 'is_secret': True,
+            'optional': True, 'docs_url': '_docs/integrations/s3_recordings.md#workshop-preparation',
+            'description': 'Producer secret for the Hub recording workshop-preparation webhook and its delivery status endpoint.',
+        },
+    ])
 
 
 def _project_relay_group(group):
@@ -184,7 +202,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 21)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 178)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 180)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

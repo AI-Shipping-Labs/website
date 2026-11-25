@@ -9,15 +9,68 @@ The recordings bucket is the durable, private home for Zoom cloud
 recordings. Members watch them through the access-controlled in-app
 player, which redirects to a short-lived presigned S3 URL. The flow is:
 
-1. Zoom posts `recording.completed` to dapier, which owns post-recording
-   intake and drives `POST /api/events/<slug>/sync-transcript` on this
-   platform (issue #1913).
+1. The platform finds out that Zoom has a finished MP4 in one of two ways,
+   whichever happens first:
+   - the `recording-pipeline-watch` schedule (every minute) lists the
+     Zoom recordings of every event that started between 10 minutes and 3
+     days ago and has no stored MP4 yet
+     (`events/services/recording_pipeline_watch.py`);
+   - Zoom posts `recording.completed` or `recording.transcript_completed`
+     to dapier (the platform has no Zoom webhook, issue #1913). The
+     `aisl-recording-agent` workflow drives
+     `POST /api/recording-intake`.
+   Both paths call `refresh_transcript_from_zoom`, which stores the MP4
+   download URL, stamps `Event.recording_zoom_available_at`, and enqueues
+   the upload. Neither waits for the transcript.
 2. `jobs/tasks/recording_upload.py` downloads the MP4 from Zoom.
 3. `jobs/tasks/recordings_s3.py` uploads it to this bucket and stores
    the S3 URL on the event.
-4. The authenticated serving endpoint mints a presigned `GetObject`
+4. Right after the upload, the host "Recording ready for review" email
+   goes out (`events/services/recording_ready_notification.py`) and the
+   transcript task is chained.
+5. The authenticated serving endpoint mints a presigned `GetObject`
    URL (`build_recording_presigned_url` in
    `jobs/tasks/recordings_s3.py`) and redirects the in-app player to it.
+
+## Recording-ready bound
+
+The MP4 upload and host email must be confirmed complete within 60 minutes
+of Zoom's `recording.completed` availability timestamp. The Dapier producer
+passes this timestamp to the website; retries preserve it. The one-minute
+reconciler is a recovery path, not evidence of Zoom's original availability:
+when a webhook is missing, first poll observation is recorded explicitly.
+A later webhook replaces it only when its timestamp is earlier.
+
+A local `EmailLog` proves campaign submission only. The watchdog requires
+Relay aggregate `sent_count` to cover every deduplicated person and no pending
+recipients, then stores `recording_ready_completed_at`. It reports unconfirmed
+or first-confirmed-late delivery as a deadline breach rather than claiming a
+healthy send from a queued campaign. Confirmation polling runs every minute. Unknown state has four minutes of
+observation grace plus at most one minute of scheduler delay (five minutes total). S3 upload errors and missing host email
+submission are retried through the existing upload lease/reclaim and the
+per-event notice reconciliation task.
+
+Before intake 1f596393 the dapier workflow only ran on
+`recording.transcript_completed`, and the upload and host email waited on
+the transcript. For event 69 (Evals in CI) the email arrived about 19 hours
+after the recording ended.
+
+If the S3 upload or the host email has not finished within the bound,
+`recording-pipeline-watch` posts a stall alert to the staff Slack alert
+channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to
+`STAFF_SIGNUP_NOTIFY_CHANNEL_ID`). If Slack is unavailable, it emails the
+dev mailbox instead. It alerts once per event
+(`Event.recording_stall_alerted_at`). When no route accepts the alert, it
+retries on every pass instead of dropping it. The alert names the stalled
+step and links to Studio. It never includes the S3 or Zoom URLs.
+
+Recipients of the host email are deduplicated by person, not by exact
+address. `event.host_email` comes first, then active Host profile emails.
+Addresses that resolve to the same account through a primary login or an
+`EmailAlias` count once. Record known delivery forwards (for example a
+Relay inbound forward from an `@aishippinglabs.com` mailbox into a work
+inbox) as an `EmailAlias` on the person's account with
+`POST /api/users/<email>/aliases`. Then the forwarded copy is not sent.
 
 The bucket is private — there is no public listing or CDN fronting it,
 and objects are accessed only via the platform's IAM user or short-lived
@@ -165,3 +218,63 @@ Prereqs: The Zoom -> S3 recording upload pipeline must be wired.
 Rotation: Safe to flip at any time; it affects the next upload.
 
 Test vs live: Configure independently in each deployment.
+
+## Workshop preparation
+
+`RECORDING_PREPARATION_HUB_URL` is the existing Hub inbound webhook job
+route (`https://hub.dtcdev.click/webhooks/<route UUID>`).
+`RECORDING_PREPARATION_HUB_TOKEN` is its producer secret, stored as a secret
+integration setting. Both are editable through Studio settings or the staff
+integration settings API without redeployment. A missing configuration raises
+an operational alert; it does not silently disable required preparation.
+
+Dapier calls staff-authenticated `POST /api/recording-intake` deterministically
+before any agent classification. The body includes `event`, `meeting_id`,
+`recording_uuid`, `start_time`, and `available_at`. Supported events are
+`recording.completed` and `recording.transcript_completed`. The website matches
+one event occurrence, rejects ambiguous matches, and ignores non-AISL meetings.
+Availability is stored before downstream work is queued. Replays preserve the
+earliest receipt time. A delayed webhook can correct a later poll observation.
+
+The transcript phase creates one durable `RecordingPreparation` per event.
+The website sends `X-Delivery-Id: aisl-recording-preparation-<event ID>` to Hub;
+retries, including ambiguous HTTP timeouts, use that same key. Hub receives only
+an authenticated source reference, not a private storage URL. Its Hetzner job
+reads timestamped VTT from `/api/events/<slug>/preparation-source`, generates
+video chapters and a workshop summary using `workshop-followup-materials` and
+the `AI-Shipping-Labs/workshops-raw` format, and returns review artifacts.
+A source response of `409` means capture is still running and must be retried.
+
+Automatic transcript processing always uses this draft job. The legacy recap
+publishing path is reserved for explicit operator `redraft=True` requests.
+No attendee email or content publication is part of preparation.
+
+Hub must report running within 5 minutes of transcript readiness, and finished
+with artifact proof within 60 minutes. A queued HTTP receipt is not completion.
+The status endpoint `/api/events/<slug>/preparation` exposes the durable delivery
+identity, ready/start/finish timestamps, artifact references and safe error code.
+Missing start, missing finish and failed jobs alert the existing staff Slack
+channel with the dev mailbox fallback. Start and finish breaches have independent
+markers, so a start alert cannot hide a later finish failure. Failed alert delivery
+is retried. A late successful job still alerts about its missed deadline.
+
+The watchdog runs every minute. Unknown completion state has four minutes
+of observation grace plus at most one minute of scheduler delay (five minutes total). It checks durable deadline
+state before queuing independent per-event provider tasks. A slow Zoom or Hub
+request cannot prevent the next local deadline check. Provider reconciliation is
+bounded and rotates by update time so old pending jobs cannot monopolize the queue.
+
+`Event.recording_zoom_uuid` binds the canonical Zoom occurrence on first receipt.
+Same-UUID notifications and MP4 segments are replays of one recording. A different
+UUID for the same event returns `409 conflicting_recording_identity`, alerts staff,
+and cannot overwrite availability, transcript, delivery identity or completed proof.
+A legitimate replacement occurrence requires operator mapping review; ingestion
+never silently resets a completed recording's identity.
+
+An unconfirmed Hub start/finish alert becomes eligible after four minutes
+of observation grace (ready + 9 minutes / ready + 64 minutes respectively),
+then runs within the next one-minute tick (ready + 10 / ready + 65 at latest),
+so the first scheduled status refresh can establish an on-time job start before
+an alarm. Explicit provider timestamps proving a late start or finish still raise
+the relevant deadline alert. Alert copy states that completion was not confirmed;
+it does not invent a provider start timestamp from a queued receipt.

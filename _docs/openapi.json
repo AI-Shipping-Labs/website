@@ -8076,6 +8076,287 @@
         ]
       }
     },
+    "/api/email-templates/{template_key}": {
+      "get": {
+        "description": "Returns the Relay draft, its immutable published versions, and the version website transactional sends are pinned to.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "active_send_version": 2,
+                  "template": {
+                    "key": "event_recording_ready",
+                    "markdown_body": "Hi {{ user_name }}, ...",
+                    "subject": "Recording ready for review: {{ event_title }}"
+                  },
+                  "versions": [
+                    {
+                      "version": 3
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Template detail."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "relay_error",
+                  "error": "Relay template operation failed (relay_http_404)"
+                }
+              }
+            },
+            "description": "Unknown or unmanageable template."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "relay_error",
+                  "error": "Relay template operation failed (relay_unavailable)"
+                }
+              }
+            },
+            "description": "Relay unavailable or misconfigured."
+          }
+        },
+        "summary": "Read a Relay template draft and its published versions",
+        "tags": [
+          "Email templates"
+        ]
+      },
+      "put": {
+        "description": "Merges the given fields into the current draft and saves it. Publishing is a separate call. Unknown fields return 422.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "markdown_body": "Hi {{ user_name }}, ..."
+              },
+              "schema": {
+                "properties": {
+                  "category": {
+                    "type": "string"
+                  },
+                  "default_sender_id": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "html_body": {
+                    "type": "string"
+                  },
+                  "is_active": {
+                    "type": "boolean"
+                  },
+                  "markdown_body": {
+                    "type": "string"
+                  },
+                  "markdown_layout_context": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "text_body": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "active_send_version": 2,
+                  "template": {
+                    "key": "event_recording_ready",
+                    "markdown_body": "Hi {{ user_name }}, ...",
+                    "subject": "Recording ready for review: {{ event_title }}"
+                  },
+                  "versions": [
+                    {
+                      "version": 3
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Saved draft and versions."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_field",
+                  "error": "Unknown field: key"
+                }
+              }
+            },
+            "description": "Unknown or mistyped field."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "relay_error",
+                  "error": "Relay template operation failed (relay_http_400)"
+                }
+              }
+            },
+            "description": "Relay rejected the draft."
+          }
+        },
+        "summary": "Save a Relay template draft (nothing goes live)",
+        "tags": [
+          "Email templates"
+        ]
+      }
+    },
+    "/api/email-templates/{template_key}/preview": {
+      "post": {
+        "description": "Renders through Relay with the Studio sample context for the template, overlaid with ``context``. ``version`` renders that published version; without it the saved draft is rendered. Nothing is sent.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "context": {
+                  "publish_state": "Uploaded and currently published"
+                },
+                "version": 3
+              },
+              "schema": {
+                "properties": {
+                  "context": {
+                    "type": "object"
+                  },
+                  "version": {
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "html_body": "...",
+                  "subject": "Recording ready for review: Sample",
+                  "text_body": "..."
+                }
+              }
+            },
+            "description": "Rendered subject and bodies."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_type",
+                  "error": "version must be a positive integer"
+                }
+              }
+            },
+            "description": "Bad version or context."
+          }
+        },
+        "summary": "Render the draft or a published version",
+        "tags": [
+          "Email templates"
+        ]
+      }
+    },
+    "/api/email-templates/{template_key}/publish": {
+      "post": {
+        "description": "Relay campaigns without an explicit version (native event notices) render the newest published version from now on. Website transactional sends stay pinned to ``active_send_version`` until a release changes the pin.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "active_send_version": 2,
+                  "template_key": "event_recording_ready",
+                  "version": 3
+                }
+              }
+            },
+            "description": "Published version number."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "relay_error",
+                  "error": "Relay template operation failed (relay_http_409)"
+                }
+              }
+            },
+            "description": "Relay rejected the publish."
+          }
+        },
+        "summary": "Publish the saved draft as a new immutable version",
+        "tags": [
+          "Email templates"
+        ]
+      }
+    },
     "/api/event-series": {
       "delete": {
         "description": "DELETE returns 405 with a structured error -- deletion is not exposed through the API. Hide the series with ``PATCH is_active=false``.",
@@ -10763,6 +11044,52 @@
           }
         },
         "summary": "Send workshop-ready broadcast",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/{slug}/preparation": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Read the Hub draft preparation receipt and progress",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
+    "/api/events/{slug}/preparation-source": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Read timestamped transcript for a draft workshop job",
         "tags": [
           "Events"
         ]
@@ -18996,6 +19323,19 @@
         "summary": "Review or reopen a submitted response",
         "tags": [
           "Questionnaire responses"
+        ]
+      }
+    },
+    "/api/recording-intake": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        },
+        "summary": "Receive a Zoom recording lifecycle notification",
+        "tags": [
+          "Events"
         ]
       }
     },

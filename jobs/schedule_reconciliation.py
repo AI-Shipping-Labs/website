@@ -119,6 +119,12 @@ SCHEDULE_DEFINITIONS = (
         description="every 5 min",
     ),
     ScheduleDefinition(
+        "recording-pipeline-watch",
+        "jobs.tasks.recording_pipeline.watch_recording_pipeline",
+        "* * * * *",
+        description="every minute: check recording phase deadlines and queue provider reconciliation",
+    ),
+    ScheduleDefinition(
         "purge-user-activity", "analytics.tasks.purge_old_user_activity", "30 3 * * *", description="daily at 03:30 UTC"
     ),
     ScheduleDefinition(

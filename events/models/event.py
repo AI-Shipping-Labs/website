@@ -301,6 +301,36 @@ class Event(
             'Presence of recording_s3_url is what stops further uploads.'
         ),
     )
+    # Recording-ready bound: the moment the platform first saw a finished Zoom
+    # MP4 for this event. The S3 upload and the host "Recording ready for
+    # review" email must complete within RECORDING_READY_BOUND of this time,
+    # otherwise the pipeline watch posts a stall alert to the staff channel.
+    recording_zoom_uuid = models.CharField(
+        max_length=255, blank=True, default='', editable=False,
+        help_text='Canonical Zoom recording occurrence identity; conflicting identities require operator review.',
+    )
+    recording_zoom_available_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            'When the platform first saw a finished Zoom MP4 for this event. '
+            'Starts the recording-ready bound.'
+        ),
+    )
+    recording_ready_completed_at = models.DateTimeField(
+        null=True, blank=True, editable=False,
+        help_text='When Relay confirmed all recording-ready recipients were sent.',
+    )
+    recording_stall_alerted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            'When staff were alerted that the S3 upload or host email did not '
+            'finish within the recording-ready bound.'
+        ),
+    )
     recording_embed_url = models.URLField(
         max_length=500, blank=True, default='',
         help_text='Legacy Google Drive embed URL.',

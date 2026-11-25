@@ -43,6 +43,8 @@ def retry_stuck_recording_uploads(limit=None):
     return reclaim(limit=limit)
 
 
+# Cohesion exception: the established upload state transition retains one
+# temporary-file cleanup boundary around download, S3 commit and follow-up.
 def upload_recording_to_s3(event_id, download_url):
     """Download a recording from Zoom and upload it to S3.
 
@@ -76,6 +78,7 @@ def upload_recording_to_s3(event_id, download_url):
     if not download_url:
         logger.error('No Zoom download URL for event %s, skipping upload', event_id)
         return {'status': 'error', 'message': 'No Zoom download URL'}
+    _mark_upload_started(event)
 
     s3_config = get_recordings_s3_config()
 
@@ -262,3 +265,12 @@ def _download_from_zoom(url, dest_path):
     finally:
         if response is not None:
             response.close()
+
+
+def _mark_upload_started(event):
+    from django.utils import timezone
+
+    if event.recording_zoom_available_at is not None:
+        return
+    event.recording_zoom_available_at = event.recording_upload_enqueued_at or timezone.now()
+    event.save(update_fields=['recording_zoom_available_at', 'updated_at'])

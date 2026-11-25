@@ -1,35 +1,14 @@
-"""
-Background task for downloading and parsing Zoom transcripts (issue #1597).
+"""Archive Zoom transcripts; automatic completions prepare draft materials in Hub.
 
-Flow:
-1. Ensure a transcript URL: if none is stored, re-list the meeting's
-   recordings via the Zoom API to pick up a VTT the webhook missed.
-2. Download the VTT from Zoom using the same access-token authentication
-   as the MP4 upload, and parse cue text into readable plain text (strip
-   the WEBVTT header, cue numbers, timestamps and inline tags; collapse
-   the consecutive duplicate caption lines Zoom's rolling captions
-   produce).
-3. Archive the exact VTT bytes and parsed text in the private recordings
-   bucket and store ``Event.transcript_text`` and
-   ``Event.transcript_s3_url``.
-4. Chain the recap auto-draft when its gates allow (issue #1597).
-
-Retry model: Zoom can deliver ``recording.completed`` before the VTT is
-processed. A missing URL, a 404/empty download, or a parse that yields
-nothing counts as a not-ready attempt (recorded on
-``Event.transcript_fetch_attempts``) and raises ``TranscriptNotReady`` so
-django-q2 retries with backoff. When ``TRANSCRIPT_MAX_ATTEMPTS`` is
-reached the event is marked unavailable instead — the terminal
-no-transcript state — and recap drafting is skipped. The task is
-idempotent: a transcript with both durable forms short-circuits straight
-to the recap step, so webhook replays and django-q2 retries are safe.
+Provider-not-ready attempts use the existing bounded django-q retry policy.
+Explicit operator redraft requests retain their legacy recap behavior.
 """
 
 import logging
-import re
 
 import requests
 
+from jobs.tasks.recording_vtt import parse_vtt_to_text as parse_vtt_to_text
 from jobs.tasks.recordings_s3 import (
     build_transcript_s3_key,
     build_transcript_text_s3_key,
@@ -59,56 +38,6 @@ class TranscriptArchiveNotReady(Exception):
 
 class TranscriptArchiveError(Exception):
     """Raised with a bounded message when private transcript archival fails."""
-
-
-def parse_vtt_to_text(raw):
-    """Parse a WebVTT document into readable plain text.
-
-    Strips the ``WEBVTT`` header, ``NOTE``/``STYLE``/``REGION`` blocks, cue
-    numbering and timestamp lines, and inline tags (``<v Speaker>``,
-    ``<c.class>``, inline ``<00:00:01.000>`` timestamps). Consecutive
-    duplicate caption lines — Zoom's rolling captions repeat the current
-    line until it changes — are collapsed to the last occurrence, keeping
-    first-seen order otherwise. Blank lines and cue boundaries vanish, so
-    the result is one caption line per line of text.
-    """
-    if isinstance(raw, bytes):
-        raw = raw.decode('utf-8-sig', errors='replace')
-    else:
-        raw = raw.removeprefix('\ufeff')
-
-    lines = []
-    in_note = False
-    for raw_line in raw.splitlines():
-        line = raw_line.strip()
-        if in_note:
-            # NOTE/STYLE/REGION blocks run until the next blank line.
-            if not line:
-                in_note = False
-            continue
-        if not line:
-            continue
-        header = line.split(' ', 1)[0] if ' ' in line else line
-        if header in ('WEBVTT', 'NOTE', 'STYLE', 'REGION'):
-            # WEBVTT header may carry metadata on the same line; block
-            # keywords (NOTE/STYLE/REGION) continue until a blank line.
-            if header != 'WEBVTT':
-                in_note = True
-            continue
-        if '-->' in line:
-            # Cue timing line, e.g. "00:00:15.240 --> 00:00:18.660".
-            continue
-        if re.fullmatch(r'\d+', line):
-            # Bare cue-number line.
-            continue
-        text = re.sub(r'<[^>]+>', '', line).strip()
-        if not text:
-            continue
-        if lines and lines[-1] == text:
-            # Rolling-caption repeat of the line we just kept.
-            continue
-        lines.append(text)
-    return '\n'.join(lines)
 
 
 def _build_authenticated_download_url(download_url):
@@ -207,120 +136,88 @@ def _handle_not_ready(event, reason):
 
 
 def transcribe_recording(event_id, redraft=False):
-    """Download, parse, and store the Zoom transcript; chain recap draft.
-
-    Args:
-        event_id: ID of the Event model instance.
-        redraft: When True, regenerate the recap draft even if
-            ``recap_notes`` is non-empty (explicit operator opt-in via the
-            sync-transcript surfaces).
-
-    Returns:
-        dict with ``status`` (``ok`` / ``already_stored`` / ``unavailable``
-        / ``skipped``) and detail keys. Only unexpected errors raise, so
-        django-q2 retries them; the not-ready path manages its own retry
-        budget and terminal state.
-    """
+    """Archive a transcript, then prepare review drafts through Hub."""
     from events.models import Event
-    from events.services.recording_transcript import (
-        refresh_transcript_from_zoom,
-    )
-    from integrations.services.zoom import ZoomAPIError
 
     try:
         event = Event.objects.get(id=event_id)
     except Event.DoesNotExist:
-        logger.error('Event %s not found, skipping transcript capture', event_id)
         return {'status': 'error', 'message': f'Event {event_id} not found'}
-
     if event.transcript_text and event.transcript_s3_url:
-        logger.info(
-            'Transcript already stored for event "%s" (id=%s)',
-            event.title, event.id,
-        )
-        recap_result = _draft_recap(event, redraft)
         return {
-            'status': 'already_stored',
-            'event_id': event_id,
-            'recap': recap_result,
+            'status': 'already_stored', 'event_id': event_id,
+            'recap': _after_transcript(event, redraft),
         }
+    _refresh_transcript_source(event)
+    raw_vtt, parsed, terminal = _capture_transcript(event)
+    if terminal is not None:
+        return terminal
+    transcript_text = event.transcript_text or parsed
+    _store_transcript_text(event, transcript_text)
+    _archive_captured_transcript(event, raw_vtt, transcript_text)
+    return {
+        'status': 'ok', 'event_id': event_id,
+        'characters': len(transcript_text),
+        'recap': _after_transcript(event, redraft),
+    }
 
-    # Step 1: make sure we have a transcript URL to fetch.
+
+def _refresh_transcript_source(event):
+    from events.services.recording_transcript import refresh_transcript_from_zoom
+    from integrations.services.zoom import ZoomAPIError
+
+    if event.transcript_url:
+        return
+    try:
+        refresh_transcript_from_zoom(event)
+    except ZoomAPIError:
+        logger.warning('Zoom transcript source not ready for event %s', event.pk)
+
+
+def _unavailable_capture(event, reason):
+    if event.transcript_text:
+        raise TranscriptArchiveNotReady(f'VTT archive source not ready for event {event.id}')
+    return None, None, _handle_not_ready(event, reason)
+
+
+def _capture_transcript(event):
     if not event.transcript_url:
-        try:
-            refresh_transcript_from_zoom(event)
-        except ZoomAPIError as exc:
-            logger.warning(
-                'Zoom recordings re-list failed for event "%s" (id=%s): %s',
-                event.title, event.id, exc,
-            )
-
-    # Step 2: fetch + parse, or run the retry/terminal machinery.
-    if not event.transcript_url:
-        if event.transcript_text:
-            raise TranscriptArchiveNotReady(
-                f'VTT archive source not ready for event {event.id}',
-            )
-        return _handle_not_ready(event, 'no_transcript_url')
-
+        return _unavailable_capture(event, 'no_transcript_url')
     try:
         raw_vtt = _download_vtt(event.transcript_url)
     except requests.RequestException as exc:
-        if event.transcript_text:
-            raise TranscriptArchiveNotReady(
-                f'VTT archive source not ready for event {event.id}',
-            ) from None
+        reason = 'download_failed'
         status_code = getattr(exc.response, 'status_code', None)
-        reason = (
-            f'download_failed_{status_code}'
-            if status_code is not None
-            else 'download_failed'
-        )
-        return _handle_not_ready(event, reason)
+        if status_code is not None:
+            reason = f'download_failed_{status_code}'
+        return _unavailable_capture(event, reason)
+    parsed = parse_vtt_to_text(raw_vtt)
+    if not parsed:
+        return _unavailable_capture(event, 'empty_parse')
+    return raw_vtt, parsed, None
 
-    parsed_vtt_text = parse_vtt_to_text(raw_vtt)
-    if not parsed_vtt_text:
-        if event.transcript_text:
-            raise TranscriptArchiveNotReady(
-                f'VTT archive source not ready for event {event.id}',
-            )
-        # A parse that yields nothing cannot be fixed by storing it; count
-        # it as a not-ready attempt so the retry budget still applies.
-        return _handle_not_ready(event, 'empty_parse')
-    transcript_text = event.transcript_text or parsed_vtt_text
 
-    # Keep #1597's parsed text durable even if the new archive write fails.
-    # A retry then fills only the missing archive without replacing the text.
-    text_update_fields = []
+def _store_transcript_text(event, text):
+    # Preserve parsed text even when private archival needs a retry.
+    fields = []
     if not event.transcript_text:
-        event.transcript_text = transcript_text
-        text_update_fields.append('transcript_text')
+        event.transcript_text = text
+        fields.append('transcript_text')
     if event.transcript_fetch_attempts:
         event.transcript_fetch_attempts = 0
-        text_update_fields.append('transcript_fetch_attempts')
-    if text_update_fields:
-        text_update_fields.append('updated_at')
-        event.save(update_fields=text_update_fields)
+        fields.append('transcript_fetch_attempts')
+    if fields:
+        event.save(update_fields=[*fields, 'updated_at'])
 
+
+def _archive_captured_transcript(event, raw_vtt, text):
     transcript_s3_url = event.transcript_s3_url
     if not transcript_s3_url:
         transcript_s3_url = _archive_vtt(event, raw_vtt)
-    _archive_transcript_text(event, transcript_text)
+    _archive_transcript_text(event, text)
     if not event.transcript_s3_url:
         event.transcript_s3_url = transcript_s3_url
         event.save(update_fields=['transcript_s3_url', 'updated_at'])
-    logger.info(
-        'Stored %d characters of transcript text for event "%s" (id=%s)',
-        len(transcript_text), event.title, event.id,
-    )
-
-    recap_result = _draft_recap(event, redraft)
-    return {
-        'status': 'ok',
-        'event_id': event_id,
-        'characters': len(transcript_text),
-        'recap': recap_result,
-    }
 
 
 def _draft_recap(event, redraft):
@@ -347,3 +244,18 @@ def _draft_recap(event, redraft):
         event, source='Transcript capture', force=redraft,
     )
     return {'status': 'queued', 'task_id': task_id, 'forced': redraft}
+
+
+def _after_transcript(event, redraft):
+    from django.utils import timezone
+
+    from events.models import RecordingPreparation
+    from events.services.recording_preparation import dispatch_preparation
+
+    if redraft:
+        return _draft_recap(event, redraft)
+    RecordingPreparation.objects.get_or_create(
+        event=event, defaults={'ready_at': timezone.now()},
+    )
+    delivery_id = dispatch_preparation(event.pk)
+    return {'status': 'hub_draft_queued', 'delivery_id': delivery_id}

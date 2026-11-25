@@ -164,6 +164,7 @@ _KEY_ORDER = {
         "RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD",
         "RECORDING_TRANSCRIPT_INGEST_ENABLED",
         "RECORDING_RECAP_AUTO_DRAFT_ENABLED",
+        "RECORDING_PREPARATION_HUB_URL", "RECORDING_PREPARATION_HUB_TOKEN",
     ),
     "ses": ("SES_WEBHOOK_VALIDATION_ENABLED", "SES_WEBHOOK_SHARED_SECRET"),
     "relay": (
@@ -2333,4 +2334,18 @@ CRM_CALL_CAPTURE_ENABLED = declare(
     default="true",
     secret=False,
     docs_url="_docs/configuration.md#crm",
+)
+
+# Draft preparation uses Hub's existing authenticated inbound webhook path.
+RECORDING_PREPARATION_HUB_URL = declare(
+    key="RECORDING_PREPARATION_HUB_URL", group="s3_recordings",
+    label="Hub workshop preparation webhook", value_type="str", default="",
+    description="HTTPS Hub inbound job route called when a recording transcript is ready. Results are review drafts only.",
+    secret=False, optional=True, docs_url="_docs/integrations/s3_recordings.md#workshop-preparation",
+)
+RECORDING_PREPARATION_HUB_TOKEN = declare(
+    key="RECORDING_PREPARATION_HUB_TOKEN", group="s3_recordings",
+    label="Hub workshop preparation token", value_type="str", default="",
+    description="Producer secret for the Hub recording workshop-preparation webhook and its delivery status endpoint.",
+    secret=True, optional=True, docs_url="_docs/integrations/s3_recordings.md#workshop-preparation",
 )

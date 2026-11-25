@@ -6937,7 +6937,7 @@
     },
     "/api/courses/{slug}/peer-reviews": {
       "get": {
-        "description": "Return peer-review state, submission counts, assignment counts, completed review counts, and deadline for the course's project attempts. Filter with optional ``cohort`` (cohort external key) and ``project`` (project attempt slug) query parameters.",
+        "description": "Return peer-review state, submission counts, assignment counts, completed review counts, and deadline for the course's project attempts. Filter with optional ``cohort`` (cohort external key) and ``project`` (project attempt slug) query parameters. Opt in to incoming submission breakdowns with details=1, student, or submission. Each review includes staff reviewer identity, status, criterion points/max, selected text, null criterion feedback (not stored), and overall feedback. preliminary_score sums exact criterion medians of valid completed reviews; pending drafts are excluded and no completed reviews yields total=null. Includes passing_score and a provisional threshold comparison, not a final pass.",
         "parameters": [
           {
             "in": "path",
@@ -6945,6 +6945,60 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "description": "Cohort external key (e.g. 4).",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "description": "Project attempt slug (e.g. attempt-1).",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "details",
+            "required": false,
+            "schema": {
+              "description": "Set to 1 for paginated incoming submission details.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "student",
+            "required": false,
+            "schema": {
+              "description": "Student email/full-name substring; includes incoming details.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "submission",
+            "required": false,
+            "schema": {
+              "description": "Submission ID within course/project/cohort scope; includes details.",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "description": "Incoming submissions page (20 submissions per page).",
+              "type": "integer"
             }
           }
         ],

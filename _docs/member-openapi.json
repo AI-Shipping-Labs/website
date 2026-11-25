@@ -1588,6 +1588,36 @@
         ]
       }
     },
+    "/member-api/v1/peer-reviews/submissions/{submission_id}/incoming": {
+      "get": {
+        "description": "Requires peer_reviews:read and course access. Another owner or unreleased feedback returns 403. Dated attempts release at Completed; self-paced attempts release in the existing feedback phase. Only completed reviews are exposed, with anonymous Reviewer N labels and exact preliminary criterion medians; criterion feedback is null when not stored.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incoming reviews and preliminary score breakdown."
+          },
+          "403": {
+            "description": "Not your submission or feedback not released."
+          },
+          "404": {
+            "description": "Submission not found."
+          }
+        },
+        "summary": "Read released incoming reviews on your own submission",
+        "tags": [
+          "Peer Reviews"
+        ]
+      }
+    },
     "/member-api/v1/peer-reviews/{review_id}": {
       "get": {
         "parameters": [

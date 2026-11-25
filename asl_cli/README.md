@@ -567,3 +567,25 @@ uv run asl raw POST /api/v1/settings/import --data '{"settings":{"SITE_BASE_URL"
 ## Command groups
 
 `events`, `event-series`, `homework`, `users`, `sprints`, `plans`, `comments`, `contacts`, `content`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`
+
+### Incoming peer review scores (staff)
+
+The existing `GET /api/courses/<course>/peer-reviews` remains counts-only by
+default. Request `--details`, `--student` (email or full-name substring), or
+`--submission` to include incoming reviews. Existing `--project` and `--cohort`
+filters also constrain the submissions. Results contain 20 submissions per page;
+use `--page` and inspect `pagination.total_pages` for additional matches.
+
+```bash
+asl sprints course-peer-reviews ai-buildcamp --project attempt-1 --student 'George Cosmin Taschina' --format json
+# Narrow a returned match to its exact submission ID:
+asl sprints course-peer-reviews ai-buildcamp --project attempt-1 --submission 42 --format json
+```
+
+Each submission includes staff reviewer identities, completion status, criterion
+points/max, selected option text, and overall feedback. Criterion `feedback` is
+`null` because criterion comments are not stored. The `preliminary_score` takes
+exact medians per criterion over valid completed reviews and sums them, without
+rounding. Pending drafts are excluded; no completed reviews or no structured
+criteria gives `total: null`. `passing_score` is the threshold;
+`meets_pass_threshold` is provisional and does not award a pass or certificate.

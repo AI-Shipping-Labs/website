@@ -222,15 +222,23 @@ def sprints_course_certificates(slug, fmt):
 @click.argument("slug")
 @click.option("--cohort", default=None, help="Cohort external key (e.g. 4).")
 @click.option("--project", default=None, help="Project attempt slug (e.g. attempt-1).")
+@click.option("--submission", type=click.IntRange(min=1), default=None, help="Submission ID; include incoming reviews and scores.")
+@click.option("--student", default=None, help="Student email or full-name substring; include incoming reviews and scores.")
+@click.option("--details", is_flag=True, help="Include incoming submission breakdowns (20 per page).")
+@click.option("--page", type=click.IntRange(min=1), default=None, help="Incoming submissions page.")
 @format_option
-def sprints_course_peer_reviews(slug, cohort, project, fmt):
-    """Read peer-review state, counts, and deadlines for a course (staff-only)."""
+def sprints_course_peer_reviews(slug, cohort, project, submission, student, details, page, fmt):
+    """Read peer-review counts or incoming submission scores (staff-only)."""
     params = {}
-    if cohort:
-        params["cohort"] = cohort
-    if project:
-        params["project"] = project
-    kwargs = {"params": params} if params else {}
+    for key, value in (("cohort", cohort), ("project", project), ("submission", submission),
+                       ("student", student), ("page", page)):
+        if value is not None:
+            params[key] = value
+    if details:
+        params["details"] = "1"
+    kwargs = {}
+    if params:
+        kwargs["params"] = params
     emit(get_client().get(f"{API}/courses/{slug}/peer-reviews", **kwargs), fmt)
 
 

@@ -99,3 +99,26 @@ class StudioEventRecapNotificationTest(TestCase):
         follow_response = self.client.get(response['Location'])
         self.assertContains(follow_response, 'Recap-ready notification complete')
         self.assertContains(follow_response, '1 emailed')
+
+    @patch('studio.views.events.notify_recap_ready')
+    def test_post_action_surfaces_error_message_when_deliveries_fail(
+        self, mock_notify,
+    ):
+        mock_notify.return_value = {
+            'emailed': 0,
+            'notified': 2,
+            'already_sent': 0,
+            'skipped_inactive': 0,
+            'failed': 2,
+            'email_error': 'RelayCampaignApiError: HTTP 404',
+        }
+
+        response = self.client.post(
+            f'/studio/events/{self.event.pk}/notify-recap-ready',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        follow_response = self.client.get(response['Location'])
+        self.assertContains(follow_response, 'Recap-ready notification failed')
+        self.assertContains(follow_response, 'RelayCampaignApiError: HTTP 404')
+        self.assertContains(follow_response, '2 failed')

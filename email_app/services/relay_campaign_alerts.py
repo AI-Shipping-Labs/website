@@ -45,6 +45,14 @@ def _claim_cooldown(campaign, operation):
 
 
 def _send_alert_email(campaign, operation, subject, body):
+    return _send_dev_email(
+        subject,
+        body,
+        f"AISHL campaign Relay {operation} failure campaign={campaign.pk}",
+    )
+
+
+def _send_dev_email(subject, body, context_label):
     try:
         delivered = send_mail(
             subject=subject,
@@ -55,37 +63,29 @@ def _send_alert_email(campaign, operation, subject, body):
         )
     except Exception:
         # Broad on purpose: any backend failure must reach the Slack fallback.
-        logger.exception(
-            "Could not send dev alert for AISHL campaign Relay %s failure campaign=%s",
-            operation,
-            campaign.pk,
-        )
+        logger.exception("Could not send dev alert for %s", context_label)
         return False
     if delivered:
         return True
-    logger.error(
-        "Dev alert for AISHL campaign Relay %s failure was not accepted campaign=%s",
-        operation,
-        campaign.pk,
-    )
+    logger.error("Dev alert for %s was not accepted", context_label)
     return False
 
 
 def _post_alert_to_slack(campaign, operation, subject, body):
+    return _post_slack_alert(
+        subject,
+        body,
+        f"Relay {operation} alert campaign={campaign.pk}",
+    )
+
+
+def _post_slack_alert(subject, body, context_label):
     if not slack_api_enabled():
-        logger.error(
-            "Slack fallback unavailable for Relay %s alert campaign=%s: Slack API disabled",
-            operation,
-            campaign.pk,
-        )
+        logger.error("Slack fallback unavailable for %s: Slack API disabled", context_label)
         return False
     channel_id = staff_alert_channel_id()
     if not channel_id:
-        logger.error(
-            "Slack fallback unavailable for Relay %s alert campaign=%s: no staff channel",
-            operation,
-            campaign.pk,
-        )
+        logger.error("Slack fallback unavailable for %s: no staff channel", context_label)
         return False
     text = f"*{escape_slack_text(subject)}*\n{escape_slack_text(body)}"
     message = message_payload(text, [{"type": "section", "text": mrkdwn(text)}])
@@ -93,12 +93,22 @@ def _post_alert_to_slack(campaign, operation, subject, body):
     if result.ok:
         return True
     logger.error(
-        "Slack fallback rejected Relay %s alert campaign=%s channel=%s: %s",
-        operation,
-        campaign.pk,
+        "Slack fallback rejected %s channel=%s: %s",
+        context_label,
         channel_id,
         result.error or type(result.exception).__name__,
     )
+    return False
+
+
+def _deliver_alert_routes(subject, body, context_label, *, also_email_dev=False):
+    slack_ok = _post_slack_alert(subject, body, context_label)
+    if slack_ok and not also_email_dev:
+        return True
+    email_ok = _send_dev_email(subject, body, context_label)
+    if slack_ok or email_ok:
+        return True
+    logger.error("Every alert route failed for %s", context_label)
     return False
 
 
@@ -109,18 +119,12 @@ def _deliver_alert(campaign, operation, error, relay_key, *, also_email_dev=Fals
         f"Relay key: {relay_key or campaign.relay_campaign_key or '(not assigned)'}\n"
         f"Error: {type(error).__name__}: {error}"
     )
-    slack_ok = _post_alert_to_slack(campaign, operation, subject, body)
-    if slack_ok and not also_email_dev:
-        return True
-    email_ok = _send_alert_email(campaign, operation, subject, body)
-    if slack_ok or email_ok:
-        return True
-    logger.error(
-        "Every alert route failed for AISHL campaign Relay %s failure campaign=%s",
-        operation,
-        campaign.pk,
+    return _deliver_alert_routes(
+        subject,
+        body,
+        f"AISHL campaign Relay {operation} failure campaign={campaign.pk}",
+        also_email_dev=also_email_dev,
     )
-    return False
 
 
 def alert_relay_campaign_failure(
@@ -154,6 +158,33 @@ def alert_relay_campaign_failure(
         logger.exception(
             "Relay campaign alert failed unexpectedly campaign=%s operation=%s",
             getattr(campaign, "pk", None),
+            operation,
+        )
+        return False
+
+
+def alert_event_notice_failure(
+    event, operation, error, *, external_key=None, recipient_count=0,
+):
+    """Alert operators on staff Slack (with email fallback) for event notice failures."""
+    try:
+        subject = f"AISHL event {event.pk} {operation} failed"
+        body = (
+            f"AISHL event {event.pk} ({event.slug}) {operation} failed.\n"
+            f"Recipients: {recipient_count}\n"
+            f"Relay key: {external_key or '(not assigned)'}\n"
+            f"Error: {type(error).__name__}: {error}"
+        )
+        return _deliver_alert_routes(
+            subject,
+            body,
+            f"AISHL event {event.pk} {operation} failure",
+        )
+    except Exception:
+        # Broad on purpose: an alert failure must never mask the original error.
+        logger.exception(
+            "Event notice alert failed unexpectedly event=%s operation=%s",
+            getattr(event, "pk", None),
             operation,
         )
         return False

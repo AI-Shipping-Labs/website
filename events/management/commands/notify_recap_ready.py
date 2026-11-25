@@ -80,4 +80,9 @@ class Command(BaseCommand):
             f"by_reason={result['by_reason']}"
         )
         if result["failed"]:
+            detail = result.get("email_error") or result.get("in_app_error")
+            if detail:
+                raise CommandError(
+                    f"{result['failed']} recipient(s) failed ({detail}); re-run to retry."
+                )
             raise CommandError(f"{result['failed']} recipient(s) failed; re-run to retry.")

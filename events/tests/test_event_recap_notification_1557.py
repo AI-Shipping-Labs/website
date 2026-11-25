@@ -326,6 +326,9 @@ class EventRecapNotificationServiceTest(TestCase):
                 SUBMIT_PATCH,
                 side_effect=RuntimeError('Relay unavailable'),
             ),
+            patch(
+                'events.services.event_recap_notification.alert_event_notice_failure',
+            ) as mock_alert,
             patch(STATUSES_PATCH, return_value=[]),
         ):
             result = notify_recap_ready(self.event)
@@ -334,9 +337,21 @@ class EventRecapNotificationServiceTest(TestCase):
         self.assertEqual(result['failed'], 2)
         self.assertEqual(result['emailed'], 0)
         self.assertEqual(result['notified'], 2)
+        self.assertEqual(result['email_error'], 'RuntimeError: Relay unavailable')
         self.assertEqual(by_user[self.member.pk]['email_status'], 'failed')
+        self.assertEqual(
+            by_user[self.member.pk]['email_error'],
+            'RuntimeError: Relay unavailable',
+        )
         self.assertEqual(by_user[self.member.pk]['in_app_status'], 'sent')
         self.assertEqual(by_user[self.unsubscribed.pk]['email_status'], 'failed')
+        self.assertEqual(mock_alert.call_count, 1)
+        self.assertEqual(mock_alert.call_args.kwargs['recipient_count'], 2)
+        self.assertTrue(
+            mock_alert.call_args.kwargs['external_key'].startswith(
+                f'event-recap-ready-{self.event.pk}-',
+            ),
+        )
         self.assertEqual(
             EmailLog.objects.filter(
                 event=self.event, email_type='event_recap_ready',

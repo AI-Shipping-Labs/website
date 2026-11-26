@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 
 from content.models import Cohort, Course, CourseProject, ProjectSubmission
 from content.models.peer_review import SUBMISSION_STATUS_CHOICES
+from content.services.attempt_certificates import preview_attempt_certificates
 from content.services.incoming_peer_reviews import incoming_breakdown, incoming_reviews
 from content.services.peer_review_service import PeerReviewService
 from content.services.project_state import (
@@ -162,6 +163,12 @@ def peer_review_management(request, course_id):
     course_projects = list(course.course_projects.select_related('cohort', 'course'))
     for project in course_projects:
         project.results_preview = preview_project_results_notifications(project)
+        if project.is_completed():
+            project.certificate_preview = preview_attempt_certificates(
+                course, project,
+            )
+        else:
+            project.certificate_preview = None
 
     context = {
         'course': course,

@@ -101,6 +101,7 @@ the course edit page in one click.
       </span>
       {% endif %}
     </div>
+    {% if project.certificate_preview %}{% include "studio/courses/_attempt_certificate_controls.html" with course=course project=project preview=project.certificate_preview only %}{% endif %}
     {% endfor %}
   </div>
 </section>

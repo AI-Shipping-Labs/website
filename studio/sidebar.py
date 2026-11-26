@@ -174,6 +174,8 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_peer_review_results_notifications',
         'studio_peer_review_results_notifications_send',
         'studio_peer_review_results_notifications_retry',
+        'studio_peer_review_generate_certificates',
+        'studio_peer_review_preview_certificate',
         # Issue #1683: read-only homework/submissions visibility, same
         # course-scoped nesting as peer reviews above.
         'studio_homework_list',

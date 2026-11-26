@@ -109,7 +109,6 @@ class AISLProjectResultsNotificationTests(TestCase):
         # Staff preview is read-only and shows exact eligible count (2).
         self.client.force_login(self.staff)
         resp = self.client.get(preview_url)
-        self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'data-testid="eligible-count">2<')
         self.assertEqual(EmailDelivery.objects.count(), 0)
 

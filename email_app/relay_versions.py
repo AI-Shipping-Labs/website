@@ -8,6 +8,7 @@ RELAY_TEMPLATE_KEYS = frozenset(
         "cancellation", "checkout_payment_failed", "cofounder_welcome",
         "community_invite", "content_comment", "course_announcement",
         "course_unenroll_notification", "coursework.pool_ready",
+        "coursework.project_results",
         "coursework.review_assigned", "coursework.review_received",
         "coursework.review_window_expired", "download_delivery",
         "email_verification_signup", "email_verification_signup_reminder",

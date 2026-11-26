@@ -186,3 +186,16 @@ def review_path(project, review=None, **kwargs):
         'course_project_review_form',
         kwargs={**route_kwargs, 'submission_id': review.id},
     )
+
+
+def project_results_path(project, submission=None, user=None, **kwargs):
+    """``COURSEWORK_PROJECT_RESULTS_URL_BUILDER``: AISL results path for an attempt."""
+    del submission, user, kwargs
+    course = getattr(project, 'course', None) or project.cohort.course
+    return reverse(
+        'course_project_reviews',
+        kwargs={
+            'slug': course.slug,
+            'attempt_slug': project.slug,
+        },
+    )

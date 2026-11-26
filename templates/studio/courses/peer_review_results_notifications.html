@@ -1,0 +1,124 @@
+{% extends "studio/base.html" %}
+
+{% block studio_title %}Results emails - {{ project.title }}{% endblock %}
+
+{% block studio_content %}
+<div class="mb-4">
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground mb-3">
+    <a href="{% url 'studio_course_list' %}" class="hover:text-foreground">Courses</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_course_edit' course_id=course.pk %}" class="hover:text-foreground">{{ course.title }}</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <a href="{% url 'studio_peer_review_management' course_id=course.pk %}" class="hover:text-foreground">Peer Reviews</a>
+    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+    <span class="text-foreground">Results emails: {{ project.title }}</span>
+  </div>
+</div>
+
+<section class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
+  <h1 class="text-xl sm:text-2xl font-semibold text-foreground mb-2">
+    Results emails: {{ project.title }}
+  </h1>
+  <p class="text-sm text-muted-foreground mb-4">
+    Course: {{ preview.course_title }} ({{ preview.course_slug }})
+    {% if preview.cohort_slug %}· Cohort: {{ preview.cohort_slug }}{% endif %}
+    · Attempt: {{ preview.project_slug }}
+    · State: {{ project.get_state_display }}
+  </p>
+
+  <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-4 text-sm">
+    <div class="rounded-lg border border-border bg-secondary/40 p-3">
+      <div class="text-muted-foreground text-xs">Eligible submitters</div>
+      <div class="text-lg font-semibold text-foreground" data-testid="eligible-count">{{ preview.eligible_count }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-secondary/40 p-3">
+      <div class="text-muted-foreground text-xs">Total submissions</div>
+      <div class="text-lg font-semibold text-foreground">{{ preview.total_submissions }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-secondary/40 p-3">
+      <div class="text-muted-foreground text-xs">Excluded (duplicates / no email)</div>
+      <div class="text-lg font-semibold text-foreground">{{ preview.excluded_duplicate_count }} / {{ preview.excluded_no_email_count }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-secondary/40 p-3">
+      <div class="text-muted-foreground text-xs">Results path</div>
+      <div class="text-xs font-mono text-foreground break-all">{{ preview.results_url_sample|default:"Not configured" }}</div>
+    </div>
+  </div>
+
+  {% if preview.can_send %}
+  <form method="post"
+        action="{% url 'studio_peer_review_results_notifications_send' course_id=course.pk project_id=project.pk %}"
+        onsubmit="return confirm('Send project results emails to {{ preview.eligible_count }} eligible submitter(s) for {{ project.title|escapejs }}?');">
+    {% csrf_token %}
+    <button type="submit"
+            data-testid="send-results-emails"
+            class="inline-flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+      Send results emails ({{ preview.eligible_count }})
+    </button>
+  </form>
+  {% elif preview.blocked_reason %}
+  <p class="text-sm text-muted-foreground" data-testid="blocked-reason">{{ preview.blocked_reason }}</p>
+  {% endif %}
+</section>
+
+{% if preview.status %}
+<section class="bg-card border border-border rounded-lg p-4 sm:p-6">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <h2 class="text-base font-semibold text-foreground">Delivery status</h2>
+    {% if preview.status.has_retryable_failures %}
+    <form method="post"
+          action="{% url 'studio_peer_review_results_notifications_retry' course_id=course.pk project_id=project.pk %}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="retry-failed-results-emails"
+              class="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted">
+        Retry failed deliveries ({{ preview.status.dead_count }})
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
+    <div class="rounded border border-border p-2">Enqueued: <strong>{{ preview.status.enqueued_count }}</strong></div>
+    <div class="rounded border border-border p-2">Accepted / delivered: <strong>{{ preview.status.accepted_or_delivered_count }}</strong></div>
+    <div class="rounded border border-border p-2">Pending: <strong>{{ preview.status.pending_count }}</strong></div>
+    <div class="rounded border border-border p-2">Dead (failed): <strong>{{ preview.status.dead_count }}</strong></div>
+    <div class="rounded border border-border p-2">Retryable: <strong>{{ preview.status.retryable_count }}</strong></div>
+    <div class="rounded border border-border p-2">Ambiguous: <strong>{{ preview.status.ambiguous_count }}</strong></div>
+    <div class="rounded border border-border p-2">Suppressed: <strong>{{ preview.status.suppressed_count }}</strong></div>
+    <div class="rounded border border-border p-2">Bounced / complained: <strong>{{ preview.status.bounced_or_complained_count }}</strong></div>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm text-left">
+      <thead class="text-xs text-muted-foreground border-b border-border">
+        <tr>
+          <th class="py-2 pr-4">Recipient</th>
+          <th class="py-2 pr-4">State</th>
+          <th class="py-2 pr-4">Reason</th>
+          <th class="py-2 pr-4">Job</th>
+          <th class="py-2 pr-4">Attempts</th>
+          <th class="py-2 pr-4">Retries</th>
+          <th class="py-2">Last error</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-border">
+        {% for row in preview.status.recipients %}
+        <tr>
+          <td class="py-2 pr-4 font-mono text-xs">{{ row.masked_email }}</td>
+          <td class="py-2 pr-4">{{ row.state_label }}</td>
+          <td class="py-2 pr-4 text-xs text-muted-foreground">{{ row.reason_code|default:"-" }}</td>
+          <td class="py-2 pr-4 text-xs text-muted-foreground">{{ row.job_status|default:"-" }}</td>
+          <td class="py-2 pr-4 text-xs">{{ row.job_attempts }}/{{ row.job_max_attempts }}</td>
+          <td class="py-2 pr-4 text-xs">{{ row.retry_count }}</td>
+          <td class="py-2 text-xs text-muted-foreground">{{ row.last_error|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="py-4 text-center text-muted-foreground">No recipient deliveries recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

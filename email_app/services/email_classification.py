@@ -115,6 +115,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # course mail for an enrolled learner about their own project and the
     # reviews they owe, so an unsubscribed learner still receives it.
     "coursework.pool_ready",
+    "coursework.project_results",
     "coursework.review_assigned",
     "coursework.review_received",
     "coursework.review_window_expired",

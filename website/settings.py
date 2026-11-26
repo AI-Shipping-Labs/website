@@ -1050,6 +1050,7 @@ COMMUNITY_BASE = {
     # returns site-relative paths; email_app.hooks.resolve_auth_mail_context
     # makes them absolute in the worker, so no link is stored (#1613).
     'COURSEWORK_REVIEW_URL_BUILDER': 'content.services.coursework_bridge.review_path',
+    'COURSEWORK_PROJECT_RESULTS_URL_BUILDER': 'content.services.coursework_bridge.project_results_path',
     # A7.2a: append, never replace. Package list already has fenced_code,
     # tables, sane_lists and the mermaid/embed fences. codehilite plus the
     # three AISL extensions are what synced content still needs from this site.

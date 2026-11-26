@@ -159,6 +159,16 @@ PREVIEW_CONTEXTS = {
             'https://aishippinglabs.com/courses/ai-buildcamp/home/projects'
         ),
     },
+    'coursework.project_results': {
+        'course_title': 'AI Buildcamp',
+        'project_title': 'Attempt 1',
+        'results_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp/projects/attempt-1/reviews'
+        ),
+        'project_results_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp/projects/attempt-1/reviews'
+        ),
+    },
     'course_unenroll_notification': {
         'user_id': '42',
         'name': 'Ada Lovelace',

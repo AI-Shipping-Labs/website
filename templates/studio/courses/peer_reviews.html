@@ -93,6 +93,11 @@ the course edit page in one click.
         {% if project.state == 'CO' or project.state == 'PR' %}
         <form method="post" action="{% url 'studio_peer_review_set_state' course_id=course.pk project_id=project.pk %}" onsubmit="return confirm('{% if project.state == 'CO' %}Reopen peer review for {{ project.title|escapejs }}? Results and feedback are hidden again and learners can submit reviews.{% else %}Reopen submissions for {{ project.title|escapejs }}?{% endif %}');">{% csrf_token %}<input type="hidden" name="state" value="{% if project.state == 'CO' %}PR{% else %}CS{% endif %}"><button type="submit" data-testid="project-reopen" class="rounded-lg border border-border bg-secondary px-3 py-1 text-xs text-foreground hover:bg-muted">{% if project.state == 'CO' %}Reopen peer review{% else %}Reopen submissions{% endif %}</button></form>
         {% endif %}
+        <a href="{% url 'studio_peer_review_results_notifications' course_id=course.pk project_id=project.pk %}"
+           data-testid="project-results-email"
+           class="rounded-lg border border-border bg-secondary px-3 py-1 text-xs text-foreground hover:bg-muted">
+          Results emails ({{ project.results_preview.eligible_count }}{% if project.results_preview.already_sent %} · sent{% endif %})
+        </a>
       </span>
       {% endif %}
     </div>

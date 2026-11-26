@@ -1048,6 +1048,7 @@ def _resolve_welcome_imported_context(delivery, context):
 # ``coursework.notifications``), not through ``send_package_mail``.
 _COURSEWORK_PURPOSES = frozenset({
     "coursework.pool_ready",
+    "coursework.project_results",
     "coursework.review_assigned",
     "coursework.review_received",
     "coursework.review_window_expired",
@@ -1093,6 +1094,9 @@ def _resolve_coursework_context(delivery, context):
             kwargs={"slug": course_slug, "attempt_slug": project_slug},
         )
         context["review_list_url"] = absolute(review_list)
+    for link_key in ("results_url", "project_results_url"):
+        if context.get(link_key):
+            context[link_key] = absolute(context[link_key])
     if course_slug:
         context["projects_url"] = absolute(
             reverse("course_projects", kwargs={"slug": course_slug}),

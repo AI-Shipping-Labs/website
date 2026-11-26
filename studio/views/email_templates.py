@@ -69,6 +69,7 @@ TEMPLATE_SENT_WHEN = {
     'campaign-broadcast': 'Sent by staff-created campaigns and explicit campaign test sends.',
     'cofounder_welcome': 'Sent when a cofounder membership signup is completed.',
     'coursework.pool_ready': 'Sent to each member of a self-paced peer-review group when the group forms, with links to the projects they review.',
+    'coursework.project_results': 'Sent to unique eligible submitters of a completed project attempt when staff triggers results notifications.',
     'coursework.review_assigned': 'Sent to each learner in a dated cohort when staff assigns the peer reviews for a project.',
     'coursework.review_received': 'Sent to a learner when a peer submits a review of their project.',
     'coursework.review_window_expired': 'Sent to a learner when a self-paced review window closes before they submitted a review they owed.',

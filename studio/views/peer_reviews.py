@@ -3,6 +3,12 @@
 import logging
 from datetime import timedelta
 
+from community_base.coursework.project_results_notifications import (
+    ProjectResultsNotificationError,
+    preview_project_results_notifications,
+    retry_failed_project_results_notifications,
+    send_project_results_notifications,
+)
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.dateparse import parse_datetime
@@ -153,9 +159,13 @@ def peer_review_management(request, course_id):
 
     cohorts, cohort_groups = _submission_groups(course, submissions_qs)
 
+    course_projects = list(course.course_projects.select_related('cohort', 'course'))
+    for project in course_projects:
+        project.results_preview = preview_project_results_notifications(project)
+
     context = {
         'course': course,
-        'course_projects': list(course.course_projects.select_related('cohort')),
+        'course_projects': course_projects,
         'cohort_groups': cohort_groups,
         'has_any_cohorts': bool(cohorts),
         'status_filter': status_filter,
@@ -250,3 +260,86 @@ def peer_review_extend_deadline(request, course_id):
         messages.info(request, 'No in-review submissions to extend.')
 
     return redirect('studio_peer_review_management', course_id=course.pk)
+
+
+@staff_required
+def peer_review_results_notifications(request, course_id, project_id):
+    """Preview and manage results emails for one dated CourseProject attempt."""
+    course = get_object_or_404(Course, pk=course_id)
+    project = get_object_or_404(
+        CourseProject.objects.select_related('course', 'cohort'),
+        pk=project_id,
+        course=course,
+    )
+    preview = preview_project_results_notifications(project)
+    return render(
+        request,
+        'studio/courses/peer_review_results_notifications.html',
+        {
+            'course': course,
+            'project': project,
+            'preview': preview,
+        },
+    )
+
+
+@staff_required
+@require_POST
+def peer_review_results_notifications_send(request, course_id, project_id):
+    """Explicitly queue results emails for one completed CourseProject attempt."""
+    course = get_object_or_404(Course, pk=course_id)
+    project = get_object_or_404(
+        CourseProject.objects.select_related('course', 'cohort'),
+        pk=project_id,
+        course=course,
+    )
+    try:
+        result = send_project_results_notifications(project, actor=request.user)
+    except ProjectResultsNotificationError as error:
+        messages.error(request, error.message)
+    else:
+        if result.created:
+            messages.success(
+                request,
+                f'Queued {result.status.enqueued_count} results email(s) '
+                f'({result.status.suppressed_count} suppressed).',
+            )
+        else:
+            messages.info(
+                request,
+                'Results emails were already queued for this project attempt.',
+            )
+    return redirect(
+        'studio_peer_review_results_notifications',
+        course_id=course.pk,
+        project_id=project.pk,
+    )
+
+
+@staff_required
+@require_POST
+def peer_review_results_notifications_retry(request, course_id, project_id):
+    """Retry terminal dead deliveries for one CourseProject attempt."""
+    course = get_object_or_404(Course, pk=course_id)
+    project = get_object_or_404(
+        CourseProject.objects.select_related('course', 'cohort'),
+        pk=project_id,
+        course=course,
+    )
+    try:
+        result = retry_failed_project_results_notifications(project, actor=request.user)
+    except ProjectResultsNotificationError as error:
+        messages.error(request, error.message)
+    else:
+        if result.retried_count > 0:
+            messages.success(
+                request,
+                f'Retried {result.retried_count} failed results email(s).',
+            )
+        else:
+            messages.info(request, 'No dead deliveries to retry.')
+    return redirect(
+        'studio_peer_review_results_notifications',
+        course_id=course.pk,
+        project_id=project.pk,
+    )

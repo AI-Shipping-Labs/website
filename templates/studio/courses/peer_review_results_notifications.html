@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load studio_filters %}
 
 {% block studio_title %}Results emails - {{ project.title }}{% endblock %}
 
@@ -15,10 +16,10 @@
   </div>
 </div>
 
+{% url 'studio_peer_review_management' course_id=course.pk as peer_reviews_url %}
+{% studio_header_actions title="Results emails" subtitle=project.title back_url=peer_reviews_url back_label="Peer Reviews" %}{% endstudio_header_actions %}
+
 <section class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
-  <h1 class="text-xl sm:text-2xl font-semibold text-foreground mb-2">
-    Results emails: {{ project.title }}
-  </h1>
   <p class="text-sm text-muted-foreground mb-4">
     Course: {{ preview.course_title }} ({{ preview.course_slug }})
     {% if preview.cohort_slug %}· Cohort: {{ preview.cohort_slug }}{% endif %}

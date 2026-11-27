@@ -21,6 +21,10 @@ from studio.views.articles import (
     article_regenerate_preview_token,
 )
 from studio.views.assistant import assistant
+from studio.views.attempt_certificates import (
+    peer_review_generate_certificates,
+    peer_review_preview_certificate,
+)
 from studio.views.auth_settings import settings_save_auth_provider
 from studio.views.banner_regenerate import (
     studio_article_regenerate_banner,
@@ -512,6 +516,8 @@ urlpatterns = [
         peer_review_results_notifications_retry,
         name='studio_peer_review_results_notifications_retry',
     ),
+    path('courses/<int:course_id>/peer-reviews/projects/<int:project_id>/certificates/generate', peer_review_generate_certificates, name='studio_peer_review_generate_certificates'),
+    path('courses/<int:course_id>/peer-reviews/projects/<int:project_id>/certificates/preview', peer_review_preview_certificate, name='studio_peer_review_preview_certificate'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),
     path('courses/<int:course_id>/peer-reviews/extend-deadline', peer_review_extend_deadline, name='studio_peer_review_extend_deadline'),
     # Course certificate soft-revoke controls (issue #949). UUID pk; reached

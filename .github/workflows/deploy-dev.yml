@@ -442,7 +442,10 @@ jobs:
   postgres-verification:
     name: PostgreSQL 16 Verification
     runs-on: [self-hosted, contabo]
-    timeout-minutes: 20
+    # The serial migration matrix alone took 16 min on the last green run, so a
+    # 20 min job cap cancels the job on a slightly slower runner and blocks the
+    # deploy. Raise the cap only; every test still runs.
+    timeout-minutes: 45
     concurrency:
       group: deploy-dev-validation-${{ github.ref }}-postgres-verification
       cancel-in-progress: true

@@ -265,6 +265,11 @@ class TestCourseUnitReaderMobileCompletionPlacement:
                 wait_until="domcontentloaded",
             )
 
+            # Wait for load + fonts so layout and sticky clearance have settled
+            # before scrolling and measuring.
+            page.wait_for_load_state("load")
+            page.evaluate("() => document.fonts ? document.fonts.ready : Promise.resolve()")
+
             # Exactly one completion control exists and is visible.
             toggles = page.locator("button[data-completion-toggle]")
             assert toggles.count() == 1
@@ -272,15 +277,38 @@ class TestCourseUnitReaderMobileCompletionPlacement:
                 '[data-testid="reader-bottom-completion"]',
             )
             completion_wrap.wait_for(state="visible")
-
-            # The completion row must sit above the Previous / Next bar
-            # so the action is not stranded between prev/next.
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            comp_box = completion_wrap.bounding_box()
             prev_link = page.locator(
                 '[data-testid="bottom-prev-btn"]',
             )
-            prev_box = prev_link.bounding_box()
+            prev_link.wait_for(state="visible")
+
+            # The completion row must sit above the Previous / Next bar
+            # so the action is not stranded between prev/next. Measure both
+            # elements in a single layout frame after scrolling to the bottom
+            # so no async scroll or layout shift can occur between reads.
+            boxes = page.evaluate(
+                """
+                () => new Promise(resolve => {
+                  window.scrollTo(0, document.body.scrollHeight);
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      const comp = document.querySelector(
+                        '[data-testid="reader-bottom-completion"]'
+                      );
+                      const prev = document.querySelector(
+                        '[data-testid="bottom-prev-btn"]'
+                      );
+                      resolve({
+                        comp: comp ? comp.getBoundingClientRect() : null,
+                        prev: prev ? prev.getBoundingClientRect() : null,
+                      });
+                    });
+                  });
+                })
+                """
+            )
+            comp_box = boxes["comp"]
+            prev_box = boxes["prev"]
             assert comp_box is not None
             assert prev_box is not None
             assert comp_box["y"] < prev_box["y"], (

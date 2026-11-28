@@ -14,8 +14,9 @@ jobs:
     name: Request authoritative Deploy Dev workflow
     runs-on: [self-hosted, contabo]
     steps:
-      - name: Ensure gh CLI
-        shell: bash
+      - name: Dispatch Deploy Dev on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export PATH="${HOME}/.local/bin:${PATH}"
           if ! command -v gh >/dev/null 2>&1; then
@@ -33,9 +34,4 @@ jobs:
             install -m 0755 "${tmpdir}/gh_${gh_version}_linux_${gh_arch}/bin/gh" "${HOME}/.local/bin/gh"
             rm -rf "${tmpdir}"
           fi
-          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Dispatch Deploy Dev on main
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run deploy-dev.yml --repo "${GITHUB_REPOSITORY}" --ref main
+          gh workflow run deploy-dev.yml --repo "${GITHUB_REPOSITORY}" --ref main

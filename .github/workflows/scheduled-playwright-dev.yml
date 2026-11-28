@@ -184,6 +184,27 @@ jobs:
       issues: write
 
     steps:
+      - name: Ensure gh CLI
+        shell: bash
+        run: |
+          export PATH="${HOME}/.local/bin:${PATH}"
+          if ! command -v gh >/dev/null 2>&1; then
+            arch="$(uname -m)"
+            case "${arch}" in
+              x86_64|amd64) gh_arch="amd64" ;;
+              aarch64|arm64) gh_arch="arm64" ;;
+              *) echo "Unsupported arch: ${arch}" >&2; exit 1 ;;
+            esac
+            gh_version="2.63.2"
+            mkdir -p "${HOME}/.local/bin"
+            tmpdir="$(mktemp -d)"
+            curl -fsSL "https://github.com/cli/cli/releases/download/v${gh_version}/gh_${gh_version}_linux_${gh_arch}.tar.gz" \
+              | tar -xz -C "${tmpdir}"
+            install -m 0755 "${tmpdir}/gh_${gh_version}_linux_${gh_arch}/bin/gh" "${HOME}/.local/bin/gh"
+            rm -rf "${tmpdir}"
+          fi
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+
       - name: Open or update failure issue
         if: contains(toJSON(needs.*.result), 'failure')
         env:
